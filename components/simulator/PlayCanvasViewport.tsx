@@ -789,7 +789,9 @@ function buildScene(
       powerPreference: 'high-performance',
     },
   });
-  app.graphicsDevice.maxPixelRatio = Math.min(window.devicePixelRatio, 2);
+  const maxRenderPixelRatio = 2;
+  app.graphicsDevice.maxPixelRatio = maxRenderPixelRatio;
+  app.setCanvasResolution(pc.RESOLUTION_AUTO);
   app.scene.ambientLight = new pc.Color(0.31, 0.31, 0.3);
   app.scene.exposure = 1.12;
 
@@ -1074,13 +1076,20 @@ function buildScene(
   canvas.addEventListener('pointercancel', onPointerUp);
   canvas.addEventListener('wheel', onWheel, { passive: false });
 
+  const resizeTarget = canvas.parentElement ?? canvas;
+  const resizeRenderer = (width: number, height: number) => {
+    if (width < 1 || height < 1) return;
+    app.graphicsDevice.resizeCanvas(Math.round(width), Math.round(height));
+    if (activePreset === 'overhead') fitOverheadCamera();
+  };
   const resizeObserver = new ResizeObserver((entries) => {
     const rect = entries[0]?.contentRect;
-    if (!rect || rect.width < 1 || rect.height < 1) return;
-    app.resizeCanvas(Math.round(rect.width), Math.round(rect.height));
-    if (activePreset === 'overhead') fitOverheadCamera();
+    if (!rect) return;
+    resizeRenderer(rect.width, rect.height);
   });
-  resizeObserver.observe(canvas.parentElement ?? canvas);
+  resizeObserver.observe(resizeTarget);
+  const initialRect = resizeTarget.getBoundingClientRect();
+  resizeRenderer(initialRect.width, initialRect.height);
 
   app.start();
   updateOrbit();
