@@ -1,12 +1,14 @@
 # RCJ Soccer Lab
 
-Interactive 3D rule explanations and referee practice for RoboCupJunior Soccer
-2026. The application is designed to work as a full training tool and as a
+Interactive 3D rule explanations and referee practice for RoboCupJunior Soccer 2026. The application is designed to work as a full training tool and as a
 small iframe embedded directly beside a rule.
 
 ## What is included
 
-- A PlayCanvas 3D field generated from the official 2026 dimensions.
+- A PlayCanvas 3D field generated from one auditable 2026 specification file.
+- Rules-correct continuous carpet, inward boundary stripes, rounded penalty
+  areas, neutral spots, matte walls/goals, and ball-return wedges with flat goal
+  pockets.
 - Six deterministic, frame-scrubbable rule situations.
 - Explore, Learn, and Referee modes.
 - Multiple camera presets plus free orbit/zoom.
@@ -20,11 +22,28 @@ The dribbler constants are a reduced-order teaching calibration. They are not a
 certificate that a physical robot complies with the rules. Physics observations
 and referee judgments intentionally remain separate.
 
-## Run and validate
+## Run on localhost
+
+On Windows, double-click `Start-RCJ-Soccer-Lab.cmd`. It starts the simulator,
+opens <http://localhost:3000/>, and keeps the server running until Enter is
+pressed in the launcher window.
+
+For a normal development terminal:
 
 ```bash
 pnpm install
 pnpm dev
+```
+
+The local embed form also works, for example:
+
+```text
+http://localhost:3000/?embed=legal-dribbler-backspin
+```
+
+Validation commands:
+
+```bash
 pnpm typecheck
 pnpm lint
 pnpm build
@@ -59,3 +78,9 @@ Primary specifications:
 - [RoboCupJunior Soccer Rules 2026](https://robocup-junior.github.io/soccer-rules/master/rules.html)
 - [2026 field specification](https://robocup-junior.github.io/soccer-rules/master/field_specification.html)
 - [Open-source 42 mm infrared ball](https://github.com/robocup-junior/ir-golf-ball)
+
+The field constants and derived reference planes are in
+`lib/simulator/field-spec.ts`. Normative values follow the written field
+specification dated 2026-06-03. Dimensions not fixed by the rules, such as wall
+board thickness, follow the accompanying `SoccerField_202605.step` construction
+model and are explicitly labelled as construction values.

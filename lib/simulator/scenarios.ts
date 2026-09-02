@@ -1,3 +1,4 @@
+import { RCJ_FIELD_DERIVED, RCJ_FIELD_SPEC_2026 } from './field-spec';
 import type {
   ActorDefinition,
   FrameMetric,
@@ -540,7 +541,15 @@ export const SCENARIOS: ScenarioDefinition[] = [
         pose(0.2, -0.88, 0.2),
         entering,
       );
-      const blue2 = mixPose(blue2Inside, pose(0.4, -0.645, PI), relocation);
+      const blue2 = mixPose(
+        blue2Inside,
+        pose(
+          RCJ_FIELD_DERIVED.neutralSpotX,
+          -RCJ_FIELD_DERIVED.neutralSpotZ,
+          PI,
+        ),
+        relocation,
+      );
       const yellow = pose(0.18, -0.55 + 0.025 * Math.sin(time * 0.8), PI);
       const ballPose = pose(-0.14, -0.77 + 0.012 * Math.sin(time), time * 0.4);
       const twoInside = time >= 2.4 && relocation < 0.65;
@@ -830,13 +839,19 @@ export const SCENARIOS: ScenarioDefinition[] = [
       const rebound = smoothProgress(time, 7, 8.4);
       const blue = pose(-0.08, 0.38 + 0.08 * smoothProgress(time, 0.5, 1.2), 0);
       const yellow = pose(0.28 - 0.09 * smoothProgress(time, 2.5, 5), 0.92, PI);
-      const forwardZ = mix(0.5, 1.245, shot);
+      const forwardZ = mix(
+        0.5,
+        RCJ_FIELD_DERIVED.goalBackContactBallCenterZ,
+        shot,
+      );
       const ballPose = pose(
         -0.08 + 0.035 * Math.sin(shot * PI),
         forwardZ - 0.14 * rebound,
         time * 4.2,
       );
-      const crossedPlane = forwardZ >= 1.095;
+      const crossedPlane =
+        forwardZ >=
+        RCJ_FIELD_DERIVED.goalMouthZ + RCJ_FIELD_SPEC_2026.ball.diameter / 2;
       const hitBackWall = time >= 6.9;
       const phaseLabel =
         time < 1.2

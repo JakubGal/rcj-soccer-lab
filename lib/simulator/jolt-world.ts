@@ -1,5 +1,7 @@
 import initJolt from 'jolt-physics/wasm-compat';
 
+import { RCJ_FIELD_SPEC_2026 } from './field-spec';
+
 type JoltApi = Awaited<ReturnType<typeof initJolt>>;
 type BodyId = InstanceType<JoltApi['BodyID']>;
 type Shape = InstanceType<JoltApi['Shape']>;
@@ -79,16 +81,16 @@ const MAX_FRAME_DELTA = 0.1;
 const MAX_CATCH_UP_STEPS = 12;
 
 // Metres, kilograms, seconds. X is field width, Y is up, Z is field length.
-const FIELD_WIDTH = 1.82;
-const FIELD_LENGTH = 2.43;
-const FLOOR_THICKNESS = 0.04;
-const WALL_THICKNESS = 0.025;
-const WALL_HEIGHT = 0.22;
+const FIELD_WIDTH = RCJ_FIELD_SPEC_2026.floor.width;
+const FIELD_LENGTH = RCJ_FIELD_SPEC_2026.floor.length;
+const FLOOR_THICKNESS = RCJ_FIELD_SPEC_2026.floor.constructionThickness;
+const WALL_THICKNESS = RCJ_FIELD_SPEC_2026.wall.constructionThickness;
+const WALL_HEIGHT = RCJ_FIELD_SPEC_2026.wall.height;
 
 // 2026 Soccer Vision profile: the passive orange ball is 42 mm and 46 g.
 // Soccer Infrared also moves to 42 mm in the main 2026 rules, but its finished
 // open-hardware mass must be measured before adding a separate calibrated profile.
-const BALL_RADIUS = 0.021;
+const BALL_RADIUS = RCJ_FIELD_SPEC_2026.ball.diameter / 2;
 const BALL_MASS = 0.046;
 const ROBOT_RADIUS = 0.075;
 const ROBOT_HALF_HEIGHT = 0.045;

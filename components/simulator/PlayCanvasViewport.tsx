@@ -3,6 +3,10 @@
 import { useEffect, useRef, useState } from 'react';
 import type * as PC from 'playcanvas';
 
+import {
+  RCJ_FIELD_DERIVED,
+  RCJ_FIELD_SPEC_2026,
+} from '@/lib/simulator/field-spec';
 import type { ActorDefinition, Pose } from '@/lib/simulator/types';
 
 export type CameraPreset =
@@ -119,164 +123,401 @@ function addLine(
     parent,
     'Field marking',
     'box',
-    [length, 0.004, width],
-    [x, 0.008, z],
+    [length, 0.001, width],
+    [x, 0.0007, z],
     material,
   );
   line.setLocalEulerAngles(0, yaw, 0);
   return line;
 }
 
+type SurfacePoint = [x: number, y: number, z: number];
+
+function addIndexedSurface(
+  pc: typeof PC,
+  app: PC.Application,
+  parent: PC.Entity,
+  name: string,
+  positions: number[],
+  sourceIndices: number[],
+  material: PC.StandardMaterial,
+) {
+  const indices = [...sourceIndices];
+  for (let offset = 0; offset < indices.length; offset += 3) {
+    const a = indices[offset] * 3;
+    const b = indices[offset + 1] * 3;
+    const c = indices[offset + 2] * 3;
+    const ux = positions[b] - positions[a];
+    const uz = positions[b + 2] - positions[a + 2];
+    const vx = positions[c] - positions[a];
+    const vz = positions[c + 2] - positions[a + 2];
+    if (uz * vx - ux * vz < 0) {
+      [indices[offset + 1], indices[offset + 2]] = [
+        indices[offset + 2],
+        indices[offset + 1],
+      ];
+    }
+  }
+  const geometry = new pc.Geometry();
+  geometry.positions = positions;
+  geometry.indices = indices;
+  geometry.calculateNormals();
+  const mesh = pc.Mesh.fromGeometry(app.graphicsDevice, geometry);
+  const meshInstance = new pc.MeshInstance(mesh, material);
+  const entity = new pc.Entity(name);
+  entity.addComponent('render', { meshInstances: [meshInstance] });
+  parent.addChild(entity);
+  return entity;
+}
+
+function addSurfacePolygon(
+  pc: typeof PC,
+  app: PC.Application,
+  parent: PC.Entity,
+  name: string,
+  sourcePoints: SurfacePoint[],
+  material: PC.StandardMaterial,
+) {
+  const signedArea = sourcePoints.reduce((area, point, index) => {
+    const next = sourcePoints[(index + 1) % sourcePoints.length];
+    return area + point[0] * next[2] - next[0] * point[2];
+  }, 0);
+  const points = signedArea > 0 ? [...sourcePoints].reverse() : sourcePoints;
+  const center: SurfacePoint = [
+    points.reduce((sum, point) => sum + point[0], 0) / points.length,
+    points.reduce((sum, point) => sum + point[1], 0) / points.length,
+    points.reduce((sum, point) => sum + point[2], 0) / points.length,
+  ];
+  const positions = [center, ...points].flat();
+  const indices: number[] = [];
+  for (let index = 0; index < points.length; index += 1) {
+    indices.push(0, index + 1, ((index + 1) % points.length) + 1);
+  }
+  return addIndexedSurface(pc, app, parent, name, positions, indices, material);
+}
+
+function addRingRibbon(
+  pc: typeof PC,
+  app: PC.Application,
+  parent: PC.Entity,
+  name: string,
+  centerX: number,
+  centerZ: number,
+  outerRadius: number,
+  innerRadius: number,
+  startAngle: number,
+  endAngle: number,
+  segments: number,
+  material: PC.StandardMaterial,
+) {
+  const positions: number[] = [];
+  const indices: number[] = [];
+  for (let index = 0; index <= segments; index += 1) {
+    const angle = startAngle + ((endAngle - startAngle) * index) / segments;
+    const cosine = Math.cos(angle);
+    const sine = Math.sin(angle);
+    positions.push(
+      centerX + cosine * outerRadius,
+      0.0008,
+      centerZ + sine * outerRadius,
+      centerX + cosine * innerRadius,
+      0.0008,
+      centerZ + sine * innerRadius,
+    );
+    if (index < segments) {
+      const outer = index * 2;
+      const inner = outer + 1;
+      const nextOuter = outer + 2;
+      const nextInner = outer + 3;
+      indices.push(outer, inner, nextOuter, nextOuter, inner, nextInner);
+    }
+  }
+  return addIndexedSurface(pc, app, parent, name, positions, indices, material);
+}
+
+function addSegment(
+  pc: typeof PC,
+  parent: PC.Entity,
+  material: PC.StandardMaterial,
+  from: [x: number, z: number],
+  to: [x: number, z: number],
+  width: number,
+) {
+  const dx = to[0] - from[0];
+  const dz = to[1] - from[1];
+  return addLine(
+    pc,
+    parent,
+    material,
+    (from[0] + to[0]) / 2,
+    (from[1] + to[1]) / 2,
+    Math.hypot(dx, dz),
+    width,
+    (Math.atan2(-dz, dx) * 180) / Math.PI,
+  );
+}
+
+function penaltyAreaOutline(end: -1 | 1, arcSegments = 20) {
+  const spec = RCJ_FIELD_SPEC_2026;
+  const derived = RCJ_FIELD_DERIVED;
+  const outerHalfWidth = spec.penaltyArea.width / 2;
+  const radius = spec.penaltyArea.outerCornerRadius;
+  const points: Array<[number, number]> = [
+    [-outerHalfWidth, end * derived.playingHalfLength],
+    [-outerHalfWidth, end * derived.penaltyArcCenterZ],
+  ];
+
+  for (let index = 1; index <= arcSegments; index += 1) {
+    const angle = (index / arcSegments) * (Math.PI / 2);
+    points.push([
+      -derived.penaltyArcCenterX - radius * Math.cos(angle),
+      end * (derived.penaltyArcCenterZ - radius * Math.sin(angle)),
+    ]);
+  }
+  points.push([
+    derived.penaltyArcCenterX,
+    end * (derived.penaltyArcCenterZ - radius),
+  ]);
+  for (let index = arcSegments - 1; index >= 0; index -= 1) {
+    const angle = (index / arcSegments) * (Math.PI / 2);
+    points.push([
+      derived.penaltyArcCenterX + radius * Math.cos(angle),
+      end * (derived.penaltyArcCenterZ - radius * Math.sin(angle)),
+    ]);
+  }
+  points.push([outerHalfWidth, end * derived.playingHalfLength]);
+  return points;
+}
+
 function buildField(pc: typeof PC, app: PC.Application) {
   const root = new pc.Entity('RCJ field');
   app.root.addChild(root);
 
-  const turf = makeMaterial(pc, '#14704a', { gloss: 0.18 });
-  const turfEdge = makeMaterial(pc, '#0e4f36', { gloss: 0.12 });
-  const white = makeMaterial(pc, '#f2f7f5', { gloss: 0.2 });
-  const markerBlack = makeMaterial(pc, '#132018', { gloss: 0.12 });
-  const wall = makeMaterial(pc, '#111820', { metalness: 0.35, gloss: 0.72 });
-  const wallTrim = makeMaterial(pc, '#263746', { metalness: 0.55, gloss: 0.8 });
-  const blueGoal = makeMaterial(pc, '#2388ff', {
-    emissive: '#176fce',
-    opacity: 0.78,
-  });
-  const yellowGoal = makeMaterial(pc, '#ffd43b', {
-    emissive: '#b78c00',
-    opacity: 0.78,
-  });
+  const spec = RCJ_FIELD_SPEC_2026;
+  const derived = RCJ_FIELD_DERIVED;
+  const turf = makeMaterial(pc, '#15794d', { gloss: 0.08 });
+  const white = makeMaterial(pc, '#f4f5ef', { gloss: 0.12 });
+  const markerBlack = makeMaterial(pc, '#050706', { gloss: 0.05 });
+  const wall = makeMaterial(pc, '#080a0b', { gloss: 0.08 });
+  const blueGoal = makeMaterial(pc, '#2774d8', { gloss: 0.1 });
+  const yellowGoal = makeMaterial(pc, '#f0cc26', { gloss: 0.1 });
 
   addPrimitive(
     pc,
     root,
-    'Field base',
+    'Continuous green carpet and base',
     'box',
-    [1.82, 0.035, 2.43],
-    [0, -0.026, 0],
-    turfEdge,
-  );
-  addPrimitive(
-    pc,
-    root,
-    'Playing surface',
-    'box',
-    [1.58, 0.018, 2.19],
-    [0, -0.004, 0],
+    [spec.floor.width, spec.floor.constructionThickness, spec.floor.length],
+    [0, -spec.floor.constructionThickness / 2, 0],
     turf,
   );
 
-  const halfWidth = 0.79;
-  const halfLength = 1.095;
-  addLine(pc, root, white, 0, -halfLength, 1.58, 0.02);
-  addLine(pc, root, white, 0, halfLength, 1.58, 0.02);
-  addLine(pc, root, white, -halfWidth, 0, 2.19, 0.02, 90);
-  addLine(pc, root, white, halfWidth, 0, 2.19, 0.02, 90);
+  // The white boundary is part of the 1.58 x 2.19 m playing envelope, so the
+  // nominal 20 mm stripe extends inward from its exact outer dimensions.
+  addLine(
+    pc,
+    root,
+    white,
+    0,
+    -derived.boundaryLineCenterZ,
+    spec.playingArea.width,
+    spec.markings.whiteLineWidth,
+  );
+  addLine(
+    pc,
+    root,
+    white,
+    0,
+    derived.boundaryLineCenterZ,
+    spec.playingArea.width,
+    spec.markings.whiteLineWidth,
+  );
+  addLine(
+    pc,
+    root,
+    white,
+    -derived.boundaryLineCenterX,
+    0,
+    spec.playingArea.length,
+    spec.markings.whiteLineWidth,
+    90,
+  );
+  addLine(
+    pc,
+    root,
+    white,
+    derived.boundaryLineCenterX,
+    0,
+    spec.playingArea.length,
+    spec.markings.whiteLineWidth,
+    90,
+  );
 
-  const circleSegments = 40;
-  const circleRadius = 0.3;
-  const segmentLength = (Math.PI * 2 * circleRadius) / circleSegments + 0.004;
-  for (let index = 0; index < circleSegments; index += 1) {
-    const angle = (index / circleSegments) * Math.PI * 2;
-    addLine(
-      pc,
-      root,
-      markerBlack,
-      Math.cos(angle) * circleRadius,
-      Math.sin(angle) * circleRadius,
-      segmentLength,
-      0.007,
-      90 - (angle * 180) / Math.PI,
-    );
-  }
+  const centerCircleOuterRadius = spec.markings.centerCircleDiameter / 2;
+  addRingRibbon(
+    pc,
+    app,
+    root,
+    '600 mm center circle',
+    0,
+    0,
+    centerCircleOuterRadius,
+    centerCircleOuterRadius - spec.markings.centerCircleStroke,
+    0,
+    Math.PI * 2,
+    128,
+    markerBlack,
+  );
   addPrimitive(
     pc,
     root,
     'Center neutral spot',
     'cylinder',
-    [0.01, 0.004, 0.01],
-    [0, 0.009, 0],
+    [
+      spec.markings.neutralSpotDiameter,
+      0.001,
+      spec.markings.neutralSpotDiameter,
+    ],
+    [0, 0.0008, 0],
     markerBlack,
   );
 
-  const penaltyWidth = 0.8;
-  const penaltyDepth = 0.25;
-  const cornerRadius = 0.15;
-  for (const end of [-1, 1]) {
-    const frontZ = end * (halfLength - penaltyDepth);
-    addLine(pc, root, white, 0, frontZ, penaltyWidth - cornerRadius * 2, 0.02);
-    addLine(
+  for (const end of [-1, 1] as const) {
+    addSegment(
       pc,
       root,
       white,
-      -penaltyWidth / 2,
-      end * (halfLength - (penaltyDepth - cornerRadius) / 2),
-      penaltyDepth - cornerRadius,
-      0.02,
-      90,
+      [-derived.penaltyArcCenterX, end * derived.penaltyFrontCenterZ],
+      [derived.penaltyArcCenterX, end * derived.penaltyFrontCenterZ],
+      spec.markings.whiteLineWidth,
     );
-    addLine(
-      pc,
-      root,
-      white,
-      penaltyWidth / 2,
-      end * (halfLength - (penaltyDepth - cornerRadius) / 2),
-      penaltyDepth - cornerRadius,
-      0.02,
-      90,
-    );
-
-    const arcSegments = 9;
-    for (const side of [-1, 1]) {
-      for (let index = 0; index < arcSegments; index += 1) {
-        const startAngle = side < 0 ? Math.PI : Math.PI * 1.5;
-        const angle = startAngle + (index / arcSegments) * (Math.PI / 2);
-        const nextAngle =
-          startAngle + ((index + 1) / arcSegments) * (Math.PI / 2);
-        const centerX = side * (penaltyWidth / 2 - cornerRadius);
-        const centerZ = end * (halfLength - penaltyDepth + cornerRadius);
-        const x1 = centerX + Math.cos(angle) * cornerRadius;
-        const x2 = centerX + Math.cos(nextAngle) * cornerRadius;
-        const zSign = end < 0 ? 1 : -1;
-        const z1 = centerZ + Math.sin(angle) * cornerRadius * zSign;
-        const z2 = centerZ + Math.sin(nextAngle) * cornerRadius * zSign;
-        const dx = x2 - x1;
-        const dz = z2 - z1;
-        addLine(
-          pc,
-          root,
-          white,
-          (x1 + x2) / 2,
-          (z1 + z2) / 2,
-          Math.hypot(dx, dz) + 0.003,
-          0.02,
-          (Math.atan2(-dz, dx) * 180) / Math.PI,
-        );
-      }
+    for (const side of [-1, 1] as const) {
+      addSegment(
+        pc,
+        root,
+        white,
+        [side * derived.penaltySideCenterX, end * derived.penaltyBackEdgeZ],
+        [side * derived.penaltySideCenterX, end * derived.penaltyArcCenterZ],
+        spec.markings.whiteLineWidth,
+      );
     }
+
+    const arcOuterRadius = spec.penaltyArea.outerCornerRadius;
+    const arcInnerRadius =
+      spec.penaltyArea.outerCornerRadius - spec.markings.whiteLineWidth;
+    addRingRibbon(
+      pc,
+      app,
+      root,
+      `${end < 0 ? 'North' : 'South'} left penalty corner`,
+      -derived.penaltyArcCenterX,
+      end * derived.penaltyArcCenterZ,
+      arcOuterRadius,
+      arcInnerRadius,
+      Math.PI,
+      end > 0 ? Math.PI * 1.5 : Math.PI / 2,
+      32,
+      white,
+    );
+    addRingRibbon(
+      pc,
+      app,
+      root,
+      `${end < 0 ? 'North' : 'South'} right penalty corner`,
+      derived.penaltyArcCenterX,
+      end * derived.penaltyArcCenterZ,
+      arcOuterRadius,
+      arcInnerRadius,
+      end > 0 ? Math.PI * 1.5 : Math.PI / 2,
+      end > 0 ? Math.PI * 2 : 0,
+      32,
+      white,
+    );
   }
 
-  for (const z of [-0.645, 0.645]) {
-    for (const x of [-0.4, 0.4]) {
+  for (const z of [-derived.neutralSpotZ, derived.neutralSpotZ]) {
+    for (const x of [-derived.neutralSpotX, derived.neutralSpotX]) {
       addPrimitive(
         pc,
         root,
         'Neutral spot',
         'cylinder',
-        [0.01, 0.004, 0.01],
-        [x, 0.009, z],
+        [
+          spec.markings.neutralSpotDiameter,
+          0.001,
+          spec.markings.neutralSpotDiameter,
+        ],
+        [x, 0.0008, z],
         markerBlack,
       );
     }
   }
 
-  const wallHeight = 0.22;
+  // Rules-mandated 10 cm / 2 cm ramps. End ramps stop at the outside edges of
+  // the goal pockets, leaving those pockets flat as required.
+  const sideToe = derived.floorHalfWidth - spec.wedge.run;
+  addSurfacePolygon(
+    pc,
+    app,
+    root,
+    'West return wedge',
+    [
+      [-derived.floorHalfWidth, spec.wedge.rise, -derived.floorHalfLength],
+      [-sideToe, 0, -derived.floorHalfLength],
+      [-sideToe, 0, derived.floorHalfLength],
+      [-derived.floorHalfWidth, spec.wedge.rise, derived.floorHalfLength],
+    ],
+    turf,
+  );
+  addSurfacePolygon(
+    pc,
+    app,
+    root,
+    'East return wedge',
+    [
+      [sideToe, 0, -derived.floorHalfLength],
+      [derived.floorHalfWidth, spec.wedge.rise, -derived.floorHalfLength],
+      [derived.floorHalfWidth, spec.wedge.rise, derived.floorHalfLength],
+      [sideToe, 0, derived.floorHalfLength],
+    ],
+    turf,
+  );
+  const endToe = derived.floorHalfLength - spec.wedge.run;
+  const goalOuterHalfWidth =
+    spec.goal.innerWidth / 2 + spec.goal.constructionPanelThickness;
+  for (const end of [-1, 1] as const) {
+    const wallZ = end * derived.floorHalfLength;
+    const toeZ = end * endToe;
+    const wallY = spec.wedge.rise;
+    for (const [xMin, xMax] of [
+      [-sideToe, -goalOuterHalfWidth],
+      [goalOuterHalfWidth, sideToe],
+    ] as const) {
+      addSurfacePolygon(
+        pc,
+        app,
+        root,
+        `${end < 0 ? 'North' : 'South'} return wedge`,
+        [
+          [xMin, wallY, wallZ],
+          [xMax, wallY, wallZ],
+          [xMax, 0, toeZ],
+          [xMin, 0, toeZ],
+        ],
+        turf,
+      );
+    }
+  }
+
+  const wallHeight = spec.wall.height;
+  const wallThickness = spec.wall.constructionThickness;
   addPrimitive(
     pc,
     root,
     'West wall',
     'box',
-    [0.035, wallHeight, 2.43],
-    [-0.91, wallHeight / 2, 0],
+    [wallThickness, wallHeight, spec.floor.length + wallThickness * 2],
+    [-(derived.floorHalfWidth + wallThickness / 2), wallHeight / 2, 0],
     wall,
   );
   addPrimitive(
@@ -284,8 +525,8 @@ function buildField(pc: typeof PC, app: PC.Application) {
     root,
     'East wall',
     'box',
-    [0.035, wallHeight, 2.43],
-    [0.91, wallHeight / 2, 0],
+    [wallThickness, wallHeight, spec.floor.length + wallThickness * 2],
+    [derived.floorHalfWidth + wallThickness / 2, wallHeight / 2, 0],
     wall,
   );
   addPrimitive(
@@ -293,8 +534,8 @@ function buildField(pc: typeof PC, app: PC.Application) {
     root,
     'North wall',
     'box',
-    [1.82, wallHeight, 0.035],
-    [0, wallHeight / 2, -1.215],
+    [spec.floor.width, wallHeight, wallThickness],
+    [0, wallHeight / 2, -(derived.floorHalfLength + wallThickness / 2)],
     wall,
   );
   addPrimitive(
@@ -302,58 +543,100 @@ function buildField(pc: typeof PC, app: PC.Application) {
     root,
     'South wall',
     'box',
-    [1.82, wallHeight, 0.035],
-    [0, wallHeight / 2, 1.215],
+    [spec.floor.width, wallHeight, wallThickness],
+    [0, wallHeight / 2, derived.floorHalfLength + wallThickness / 2],
     wall,
-  );
-  addPrimitive(
-    pc,
-    root,
-    'West trim',
-    'box',
-    [0.042, 0.012, 2.44],
-    [-0.91, wallHeight + 0.004, 0],
-    wallTrim,
-  );
-  addPrimitive(
-    pc,
-    root,
-    'East trim',
-    'box',
-    [0.042, 0.012, 2.44],
-    [0.91, wallHeight + 0.004, 0],
-    wallTrim,
   );
 
   const addGoal = (end: number, material: PC.StandardMaterial) => {
     const goal = new pc.Entity(end < 0 ? 'Blue goal' : 'Yellow goal');
     root.addChild(goal);
-    const z = end * 1.169;
+    const panelThickness = spec.goal.constructionPanelThickness;
+    const sideDepth = spec.goal.innerDepth + panelThickness;
+    const sideCenterZ = end * (derived.goalMouthZ + sideDepth / 2);
+    const backCenterZ = end * (derived.goalBackInnerFaceZ + panelThickness / 2);
     addPrimitive(
       pc,
       goal,
-      'Goal back',
+      'Matte black goal back',
       'box',
-      [0.62, 0.1, 0.02],
-      [0, 0.05, z],
+      [
+        spec.goal.innerWidth + panelThickness * 2,
+        spec.goal.innerHeight,
+        panelThickness,
+      ],
+      [0, spec.goal.innerHeight / 2, backCenterZ],
+      wall,
+    );
+    addPrimitive(
+      pc,
+      goal,
+      'Matte black left goal side',
+      'box',
+      [panelThickness, spec.goal.innerHeight, sideDepth],
+      [
+        -(spec.goal.innerWidth / 2 + panelThickness / 2),
+        spec.goal.innerHeight / 2,
+        sideCenterZ,
+      ],
+      wall,
+    );
+    addPrimitive(
+      pc,
+      goal,
+      'Matte black right goal side',
+      'box',
+      [panelThickness, spec.goal.innerHeight, sideDepth],
+      [
+        spec.goal.innerWidth / 2 + panelThickness / 2,
+        spec.goal.innerHeight / 2,
+        sideCenterZ,
+      ],
+      wall,
+    );
+
+    // Thin colored skins sit inside the black boards, preserving the exact
+    // 600 x 100 x 74 mm clear goal space.
+    const colorSkin = 0.0006;
+    const innerSideCenterZ =
+      end * (derived.goalMouthZ + spec.goal.innerDepth / 2);
+    addPrimitive(
+      pc,
+      goal,
+      'Colored left interior',
+      'box',
+      [colorSkin, spec.goal.innerHeight, spec.goal.innerDepth],
+      [
+        -(spec.goal.innerWidth / 2 + colorSkin / 2),
+        spec.goal.innerHeight / 2,
+        innerSideCenterZ,
+      ],
       material,
     );
     addPrimitive(
       pc,
       goal,
-      'Goal left',
+      'Colored right interior',
       'box',
-      [0.02, 0.1, 0.074],
-      [-0.31, 0.05, end * 1.132],
+      [colorSkin, spec.goal.innerHeight, spec.goal.innerDepth],
+      [
+        spec.goal.innerWidth / 2 + colorSkin / 2,
+        spec.goal.innerHeight / 2,
+        innerSideCenterZ,
+      ],
       material,
     );
     addPrimitive(
       pc,
       goal,
-      'Goal right',
+      'Colored back interior',
       'box',
-      [0.02, 0.1, 0.074],
-      [0.31, 0.05, end * 1.132],
+      [spec.goal.innerWidth, spec.goal.innerHeight, colorSkin],
+      [
+        0,
+        spec.goal.innerHeight / 2,
+        end * (derived.goalBackInnerFaceZ + colorSkin / 2),
+      ],
       material,
     );
   };
@@ -464,8 +747,12 @@ function buildBall(
     root,
     '42 mm ball',
     'sphere',
-    [0.042, 0.042, 0.042],
-    [0, 0.022, 0],
+    [
+      RCJ_FIELD_SPEC_2026.ball.diameter,
+      RCJ_FIELD_SPEC_2026.ball.diameter,
+      RCJ_FIELD_SPEC_2026.ball.diameter,
+    ],
+    [0, RCJ_FIELD_SPEC_2026.ball.diameter / 2 + 0.001, 0],
     materials.ball,
   );
   const spinMarker = addPrimitive(
@@ -503,8 +790,8 @@ function buildScene(
     },
   });
   app.graphicsDevice.maxPixelRatio = Math.min(window.devicePixelRatio, 2);
-  app.scene.ambientLight = new pc.Color(0.24, 0.31, 0.36);
-  app.scene.exposure = 1.18;
+  app.scene.ambientLight = new pc.Color(0.31, 0.31, 0.3);
+  app.scene.exposure = 1.12;
 
   buildField(pc, app);
 
@@ -523,7 +810,7 @@ function buildScene(
       opacity: 0.34,
     }),
     neutral: makeMaterial(pc, '#8b969f', { metalness: 0.48, gloss: 0.64 }),
-    cyan: makeMaterial(pc, '#56d7ff', { emissive: '#38bdf8', gloss: 0.8 }),
+    cyan: makeMaterial(pc, '#e879f9', { emissive: '#9d3bb0', gloss: 0.62 }),
     roller: makeMaterial(pc, '#e6edf2', { metalness: 0.7, gloss: 0.8 }),
     marker: makeMaterial(pc, '#f5f7f8', { gloss: 0.3 }),
     ball: makeMaterial(pc, TEAM_COLORS.neutral, {
@@ -561,24 +848,16 @@ function buildScene(
     [0, 0.052, 0.03],
     overlayBlue,
   );
-  addPrimitive(
-    pc,
-    ruleGeometry,
-    'North penalty volume',
-    'box',
-    [0.8, 0.008, 0.25],
-    [0, 0.012, -0.97],
-    overlayAmber,
-  );
-  addPrimitive(
-    pc,
-    ruleGeometry,
-    'South penalty volume',
-    'box',
-    [0.8, 0.008, 0.25],
-    [0, 0.012, 0.97],
-    overlayAmber,
-  );
+  for (const end of [-1, 1] as const) {
+    addSurfacePolygon(
+      pc,
+      app,
+      ruleGeometry,
+      `${end < 0 ? 'North' : 'South'} rounded penalty area`,
+      penaltyAreaOutline(end).map(([x, z]) => [x, 0.003, z]),
+      overlayAmber,
+    );
+  }
 
   const contactEvidence = new pc.Entity('Contact evidence');
   app.root.addChild(contactEvidence);
@@ -617,8 +896,8 @@ function buildScene(
   const key = new pc.Entity('Key light');
   key.addComponent('light', {
     type: 'directional',
-    color: new pc.Color(0.78, 0.9, 1),
-    intensity: 1.55,
+    color: new pc.Color(1, 0.98, 0.94),
+    intensity: 1.35,
     castShadows: true,
     shadowDistance: 8,
     shadowResolution: 2048,
@@ -629,8 +908,8 @@ function buildScene(
   const fill = new pc.Entity('Fill light');
   fill.addComponent('light', {
     type: 'omni',
-    color: new pc.Color(0.15, 0.55, 0.95),
-    intensity: 0.9,
+    color: new pc.Color(0.78, 0.82, 0.86),
+    intensity: 0.62,
     range: 5,
   });
   fill.setPosition(-1.4, 2.1, 0.8);
@@ -674,19 +953,36 @@ function buildScene(
     return actor ? poses[actor.id] : undefined;
   };
 
+  let activePreset: CameraPreset = 'broadcast';
+  const fitOverheadCamera = () => {
+    const rect = canvas.getBoundingClientRect();
+    const aspect = rect.height > 0 ? rect.width / rect.height : 1;
+    const margin = 0.07;
+    const halfWidth =
+      RCJ_FIELD_DERIVED.floorHalfWidth +
+      RCJ_FIELD_SPEC_2026.wall.constructionThickness +
+      margin;
+    const halfLength =
+      RCJ_FIELD_DERIVED.floorHalfLength +
+      RCJ_FIELD_SPEC_2026.wall.constructionThickness +
+      margin;
+    camera.camera!.orthoHeight = Math.max(halfLength, halfWidth / aspect);
+  };
+
   const setCameraPreset = (
     preset: CameraPreset,
     poses: Record<string, Pose>,
   ) => {
+    activePreset = preset;
     camera.camera!.projection = pc.PROJECTION_PERSPECTIVE;
     camera.camera!.orthoHeight = 1.5;
     orbit.target.set(0, 0.05, 0);
     if (preset === 'overhead') {
       camera.camera!.projection = pc.PROJECTION_ORTHOGRAPHIC;
-      camera.camera!.orthoHeight = 1.36;
       orbit.yaw = 0;
       orbit.pitch = 89.8;
       orbit.distance = 3.3;
+      fitOverheadCamera();
     } else if (preset === 'referee') {
       orbit.yaw = 88;
       orbit.pitch = 24;
@@ -782,6 +1078,7 @@ function buildScene(
     const rect = entries[0]?.contentRect;
     if (!rect || rect.width < 1 || rect.height < 1) return;
     app.resizeCanvas(Math.round(rect.width), Math.round(rect.height));
+    if (activePreset === 'overhead') fitOverheadCamera();
   });
   resizeObserver.observe(canvas.parentElement ?? canvas);
 
