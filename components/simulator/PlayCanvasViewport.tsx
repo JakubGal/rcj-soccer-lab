@@ -552,9 +552,14 @@ function buildField(pc: typeof PC, app: PC.Application) {
     const goal = new pc.Entity(end < 0 ? 'Blue goal' : 'Yellow goal');
     root.addChild(goal);
     const panelThickness = spec.goal.constructionPanelThickness;
+    const colorSkin = 0.0006;
+    const backingThickness = panelThickness - colorSkin;
     const sideDepth = spec.goal.innerDepth + panelThickness;
     const sideCenterZ = end * (derived.goalMouthZ + sideDepth / 2);
-    const backCenterZ = end * (derived.goalBackInnerFaceZ + panelThickness / 2);
+    const sideBackingCenterX =
+      spec.goal.innerWidth / 2 + colorSkin + backingThickness / 2;
+    const backCenterZ =
+      end * (derived.goalBackInnerFaceZ + colorSkin + backingThickness / 2);
     addPrimitive(
       pc,
       goal,
@@ -563,7 +568,7 @@ function buildField(pc: typeof PC, app: PC.Application) {
       [
         spec.goal.innerWidth + panelThickness * 2,
         spec.goal.innerHeight,
-        panelThickness,
+        backingThickness,
       ],
       [0, spec.goal.innerHeight / 2, backCenterZ],
       wall,
@@ -573,12 +578,8 @@ function buildField(pc: typeof PC, app: PC.Application) {
       goal,
       'Matte black left goal side',
       'box',
-      [panelThickness, spec.goal.innerHeight, sideDepth],
-      [
-        -(spec.goal.innerWidth / 2 + panelThickness / 2),
-        spec.goal.innerHeight / 2,
-        sideCenterZ,
-      ],
+      [backingThickness, spec.goal.innerHeight, sideDepth],
+      [-sideBackingCenterX, spec.goal.innerHeight / 2, sideCenterZ],
       wall,
     );
     addPrimitive(
@@ -586,18 +587,15 @@ function buildField(pc: typeof PC, app: PC.Application) {
       goal,
       'Matte black right goal side',
       'box',
-      [panelThickness, spec.goal.innerHeight, sideDepth],
-      [
-        spec.goal.innerWidth / 2 + panelThickness / 2,
-        spec.goal.innerHeight / 2,
-        sideCenterZ,
-      ],
+      [backingThickness, spec.goal.innerHeight, sideDepth],
+      [sideBackingCenterX, spec.goal.innerHeight / 2, sideCenterZ],
       wall,
     );
 
-    // Thin colored skins sit inside the black boards, preserving the exact
-    // 600 x 100 x 74 mm clear goal space.
-    const colorSkin = 0.0006;
+    // The colored coating and black backing occupy adjacent slices of each
+    // board. Keeping their faces out of the same depth plane prevents the
+    // goal colors from flickering while preserving the 600 x 100 x 74 mm
+    // clear goal space and the board's full construction thickness.
     const innerSideCenterZ =
       end * (derived.goalMouthZ + spec.goal.innerDepth / 2);
     addPrimitive(
