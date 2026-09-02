@@ -3,6 +3,8 @@
 Interactive 3D rule explanations and referee practice for RoboCupJunior Soccer 2026. The application is designed to work as a full training tool and as a
 small iframe embedded directly beside a rule.
 
+Live application: <https://jakubgal.github.io/rcj-soccer-lab/>
+
 ## What is included
 
 - A PlayCanvas 3D field generated from one auditable 2026 specification file.
@@ -48,6 +50,10 @@ pnpm typecheck
 pnpm lint
 pnpm build
 ```
+
+Every push to `main` is also type-checked, statically exported, and deployed
+to GitHub Pages by `.github/workflows/deploy-pages.yml`. The normal local and
+Sites/Cloudflare builds remain unchanged.
 
 ## Embed a situation
 

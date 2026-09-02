@@ -2,12 +2,14 @@
   "name": "rcj-soccer-lab",
   "version": "0.1.0",
   "private": true,
+  "packageManager": "pnpm@11.19.0",
   "engines": {
     "node": ">=22.13.0"
   },
   "scripts": {
     "dev": "vinext dev --host 127.0.0.1",
     "build": "vinext build",
+    "finalize:pages": "node scripts/finalize-pages.mjs",
     "typecheck": "tsc --noEmit",
     "start": "wrangler dev --config dist/server/wrangler.json",
     "lint": "oxlint",

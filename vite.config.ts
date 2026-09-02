@@ -11,6 +11,7 @@ const { d1, r2 } = hostingConfig;
 
 // macOS Seatbelt blocks FSEvents, so Codex previews need polling for HMR.
 const isCodexSeatbeltSandbox = process.env.CODEX_SANDBOX === 'seatbelt';
+const isGitHubPagesBuild = process.env.GITHUB_PAGES === 'true';
 
 const localBindingConfig = {
   main: 'vinext/server/fetch-handler',
@@ -35,6 +36,22 @@ const localBindingConfig = {
 };
 
 export default defineConfig(async () => {
+  const baseConfig = {
+    css: { postcss: { plugins: [tailwindcss()] } },
+    server: isCodexSeatbeltSandbox
+      ? { watch: { useFsEvents: false, usePolling: true } }
+      : undefined,
+  };
+
+  // Pages only needs vinext's static client export. The Sites and Cloudflare
+  // plugins remain enabled for local development and Sites deployments.
+  if (isGitHubPagesBuild) {
+    return {
+      ...baseConfig,
+      plugins: [vinext()],
+    };
+  }
+
   // Keep Wrangler and Miniflare state project-local. These are non-secret tool
   // settings; application environment belongs in ignored `.env*` files.
   process.env.WRANGLER_WRITE_LOGS ??= 'false';
@@ -45,10 +62,7 @@ export default defineConfig(async () => {
   const { cloudflare } = await import('@cloudflare/vite-plugin');
 
   return {
-    css: { postcss: { plugins: [tailwindcss()] } },
-    server: isCodexSeatbeltSandbox
-      ? { watch: { useFsEvents: false, usePolling: true } }
-      : undefined,
+    ...baseConfig,
     plugins: [
       vinext(),
       sites(),

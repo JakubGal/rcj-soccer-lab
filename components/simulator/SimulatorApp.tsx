@@ -453,8 +453,9 @@ export function SimulatorApp() {
             </div>
           </div>
           <a
-            href="/"
+            href="./"
             target="_blank"
+            rel="noreferrer"
             className="text-[11px] text-sky-300 hover:text-sky-200"
           >
             Open lab ↗
