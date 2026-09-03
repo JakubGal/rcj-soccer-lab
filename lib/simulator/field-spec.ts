@@ -62,6 +62,9 @@ export const RCJ_FIELD_SPEC_2026 = {
 /** Non-normative visual guides shared by the interactive teaching scenes. */
 export const RCJ_SIMULATOR_GUIDES = {
   robotCapturePlaneForward: 0.102,
+  // A conservative circular footprint that contains every selectable robot
+  // visual, including protruding corners on the imported CAD models.
+  robotCollisionRadius: 0.1,
 } as const;
 
 const spec = RCJ_FIELD_SPEC_2026;

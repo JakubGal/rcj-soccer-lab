@@ -21,6 +21,10 @@ const RULE_2_5_URL = `${RULES_URL}#ball-movement`;
 const RULE_2_6_URL = `${RULES_URL}#inside-the-penalty-area-pushing-and-multiple-defense`;
 
 const PI = Math.PI;
+const ROBOT_CONTACT_CLEARANCE = 0.002;
+const ROBOT_CONTACT_CENTER_DISTANCE =
+  RCJ_SIMULATOR_GUIDES.robotCollisionRadius * 2 + ROBOT_CONTACT_CLEARANCE;
+const OPPONENT_BALL_CHALLENGE_DISTANCE = 0.106;
 
 function clamp(value: number, minimum: number, maximum: number) {
   return Math.min(maximum, Math.max(minimum, value));
@@ -49,6 +53,115 @@ function mixPose(from: Pose, to: Pose, amount: number): Pose {
     z: mix(from.z, to.z, amount),
     yaw: mix(from.yaw, to.yaw, amount),
   };
+}
+
+function distanceBetween(first: Pose, second: Pose) {
+  return Math.hypot(second.x - first.x, second.z - first.z);
+}
+
+/**
+ * Keeps two circular robot footprints tangent without assigning blame to
+ * either robot. This is used by the deliberately ambiguous pushing lesson.
+ */
+function separateRobotPairEqually(
+  first: Pose,
+  second: Pose,
+  minimumDistance = ROBOT_CONTACT_CENTER_DISTANCE,
+): [Pose, Pose] {
+  const deltaX = second.x - first.x;
+  const deltaZ = second.z - first.z;
+  const distance = Math.hypot(deltaX, deltaZ);
+  if (distance >= minimumDistance) return [first, second];
+
+  // A stable axis makes coincident authored poses deterministic when seeking.
+  const normalX = distance > 1e-9 ? deltaX / distance : 1;
+  const normalZ = distance > 1e-9 ? deltaZ / distance : 0;
+  const correction = (minimumDistance - distance) / 2;
+  return [
+    {
+      ...first,
+      x: first.x - normalX * correction,
+      z: first.z - normalZ * correction,
+    },
+    {
+      ...second,
+      x: second.x + normalX * correction,
+      z: second.z + normalZ * correction,
+    },
+  ];
+}
+
+/**
+ * Last-resort invariant for present and future authored scenes. It is pure and
+ * stateless, so scrubbing directly to a time always produces the same frame.
+ */
+function separateRobotActors(actors: Record<string, Pose>) {
+  const robotIds = Object.keys(actors)
+    .filter((id) => id !== 'ball')
+    .sort();
+  if (robotIds.length < 2) return actors;
+
+  const minimumDistance = RCJ_SIMULATOR_GUIDES.robotCollisionRadius * 2;
+  let resolvedActors = actors;
+  let changed = false;
+
+  // Multiple fixed passes resolve the uncommon case of three robots packed
+  // together while preserving deterministic actor ordering.
+  for (let pass = 0; pass < 24; pass += 1) {
+    let changedThisPass = false;
+    for (let firstIndex = 0; firstIndex < robotIds.length; firstIndex += 1) {
+      for (
+        let secondIndex = firstIndex + 1;
+        secondIndex < robotIds.length;
+        secondIndex += 1
+      ) {
+        const firstId = robotIds[firstIndex];
+        const secondId = robotIds[secondIndex];
+        const first = resolvedActors[firstId];
+        const second = resolvedActors[secondId];
+        if (distanceBetween(first, second) >= minimumDistance) continue;
+
+        const [resolvedFirst, resolvedSecond] = separateRobotPairEqually(
+          first,
+          second,
+          minimumDistance,
+        );
+        if (!changed) resolvedActors = { ...actors };
+        resolvedActors[firstId] = resolvedFirst;
+        resolvedActors[secondId] = resolvedSecond;
+        changed = true;
+        changedThisPass = true;
+      }
+    }
+    if (!changedThisPass) break;
+  }
+
+  return resolvedActors;
+}
+
+/**
+ * Places an opponent beside an owner's front-held ball while keeping the two
+ * robot envelopes clear. The opponent faces the ball, preserving the visual
+ * meaning of a genuine challenge.
+ */
+function opponentChallengePose(owner: Pose, ballForwardDistance: number) {
+  const forwardOffset =
+    (ROBOT_CONTACT_CENTER_DISTANCE ** 2 +
+      ballForwardDistance ** 2 -
+      OPPONENT_BALL_CHALLENGE_DISTANCE ** 2) /
+    (2 * ballForwardDistance);
+  const lateralOffset = Math.sqrt(
+    Math.max(0, ROBOT_CONTACT_CENTER_DISTANCE ** 2 - forwardOffset ** 2),
+  );
+  const forwardX = Math.sin(owner.yaw);
+  const forwardZ = Math.cos(owner.yaw);
+  const rightX = Math.cos(owner.yaw);
+  const rightZ = -Math.sin(owner.yaw);
+  const ballX = owner.x + forwardX * ballForwardDistance;
+  const ballZ = owner.z + forwardZ * ballForwardDistance;
+  const targetX = owner.x + rightX * lateralOffset + forwardX * forwardOffset;
+  const targetZ = owner.z + rightZ * lateralOffset + forwardZ * forwardOffset;
+  return pose(targetX, targetZ, Math.atan2(ballX - targetX, ballZ - targetZ));
 }
 
 function robot(
@@ -105,10 +218,10 @@ function frame(
   evidenceDetails: ScenarioEvidence[],
   ballPossession: BallPossession | null = null,
 ): ScenarioFrame {
-  let resolvedActors = actors;
+  let resolvedActors = separateRobotActors(actors);
   if (ballPossession) {
-    const owner = actors[ballPossession.ownerId];
-    const currentBall = actors.ball;
+    const owner = resolvedActors[ballPossession.ownerId];
+    const currentBall = resolvedActors.ball;
     if (!owner || !currentBall) {
       throw new Error(
         `Ball possession requires both ball and owner "${ballPossession.ownerId}" poses.`,
@@ -121,7 +234,7 @@ function frame(
     const rightZ = -Math.sin(owner.yaw);
     const lateralOffset = ballPossession.lateralOffsetM ?? 0;
     resolvedActors = {
-      ...actors,
+      ...resolvedActors,
       ball: {
         ...currentBall,
         x:
@@ -385,16 +498,16 @@ export const SCENARIOS: ScenarioDefinition[] = [
       const travel = smoothProgress(time, 0.8, 7.1);
       const yaw = 0.15 * Math.sin(travel * PI);
       const blue = pose(-0.2 + 0.2 * travel, -0.64 + 0.92 * travel, yaw);
-      const challenge = smoothProgress(time, 5.4, 7.25);
-      const yellow = mixPose(
-        pose(0.5, 0.25, -PI / 2),
-        pose(blue.x + 0.12, blue.z + 0.08, -PI / 2),
-        challenge,
-      );
-      const released = smoothProgress(time, 7.15, 8.7);
       // Keep the visual ball shallow enough that it touches the roller without
       // intersecting deeply with any of the selectable robot meshes.
       const frontDistance = 0.1175;
+      const challenge = smoothProgress(time, 5.4, 7.25);
+      const yellow = mixPose(
+        pose(0.5, 0.25, -PI / 2),
+        opponentChallengePose(blue, frontDistance),
+        challenge,
+      );
+      const released = smoothProgress(time, 7.15, 8.7);
       const captureDepthMm = Math.max(
         0,
         (RCJ_SIMULATOR_GUIDES.robotCapturePlaneForward -
@@ -494,7 +607,7 @@ export const SCENARIOS: ScenarioDefinition[] = [
       const blue = pose(-0.12 + 0.04 * drift, -0.26 + 0.22 * drift, 0.05);
       const challenge = smoothProgress(time, 3, 5.4);
       const withdraw = smoothProgress(time, 7.2, 9.2);
-      const contactPoint = pose(blue.x + 0.12, blue.z + 0.075, -PI / 2);
+      const contactPoint = opponentChallengePose(blue, 0.112);
       const yellowAtChallenge = mixPose(
         pose(0.48, 0, -PI / 2),
         contactPoint,
@@ -576,7 +689,7 @@ export const SCENARIOS: ScenarioDefinition[] = [
     actors: [
       robot('blue-1', 'Blue 1', 'blue', pose(-0.18, -0.96, 0), 1),
       robot('blue-2', 'Blue 2', 'blue', pose(0.2, -0.88, 0.2), 2),
-      robot('yellow-1', 'Yellow 1', 'yellow', pose(0.18, -0.55, PI), 1),
+      robot('yellow-1', 'Yellow 1', 'yellow', pose(0.18, -0.42, PI), 1),
       ball(pose(-0.14, -0.77, 0)),
     ],
     overlays: ['actor-labels', 'penalty-areas', 'neutral-placement', 'timers'],
@@ -601,7 +714,7 @@ export const SCENARIOS: ScenarioDefinition[] = [
         ),
         relocation,
       );
-      const yellow = pose(0.18, -0.55 + 0.025 * Math.sin(time * 0.8), PI);
+      const yellow = pose(0.18, -0.42 + 0.025 * Math.sin(time * 0.8), PI);
       const ballPose = pose(-0.14, -0.77, 0);
       const twoInside = time >= 2.4 && relocation < 0.65;
       const phaseLabel =
@@ -688,23 +801,35 @@ export const SCENARIOS: ScenarioDefinition[] = [
       const approach = smoothProgress(time, 0.8, 3.3);
       const separation = smoothProgress(time, 7.2, 9.2);
       const blueContact = pose(-0.075, -0.91, 0.14);
-      const yellowContact = pose(0.075, -0.78, PI + 0.14);
-      const blue = mixPose(
+      const contactDirectionX = 0.15;
+      const contactDirectionZ = 0.13;
+      const contactDirectionScale =
+        ROBOT_CONTACT_CENTER_DISTANCE /
+        Math.hypot(contactDirectionX, contactDirectionZ);
+      const yellowContact = pose(
+        blueContact.x + contactDirectionX * contactDirectionScale,
+        blueContact.z + contactDirectionZ * contactDirectionScale,
+        PI + 0.14,
+      );
+      const blueRaw = mixPose(
         mixPose(pose(-0.12, -1.02, 0), blueContact, approach),
         pose(-0.2, -0.65, -0.28),
         separation,
       );
-      const yellow = mixPose(
+      const yellowRaw = mixPose(
         mixPose(pose(0.1, -0.56, PI), yellowContact, approach),
         pose(0.22, -0.98, PI - 0.2),
         separation,
       );
+      const [blue, yellow] = separateRobotPairEqually(blueRaw, yellowRaw);
       const ballPose = pose(
         0.015 + 0.11 * separation,
         -0.84 + 0.16 * separation,
         time * 1.8,
       );
-      const sustained = time >= 3.3 && time < 7.2;
+      const sustained =
+        time >= 3.3 &&
+        distanceBetween(blue, yellow) <= ROBOT_CONTACT_CENTER_DISTANCE + 1e-6;
       const phaseLabel =
         time < 3.3
           ? 'Opponents converge'
@@ -780,14 +905,22 @@ export const SCENARIOS: ScenarioDefinition[] = [
       const push = smoothProgress(time, 3.4, 6.3);
       const release = smoothProgress(time, 8.2, 10.3);
       const blue1 = pose(-0.26, -0.98, 0);
-      const blue2 = mixPose(pose(0.22, -0.62, PI), pose(0.2, -0.88, PI), push);
+      const blue2Start = pose(0.22, -0.62, PI);
+      const blue2 = mixPose(blue2Start, pose(0.2, -0.88, PI), push);
       const yellowApproach = mixPose(
         pose(0.24, -0.34, PI),
-        pose(0.22, -0.52, PI),
+        pose(blue2Start.x, blue2Start.z + ROBOT_CONTACT_CENTER_DISTANCE, PI),
         approach,
       );
-      const yellowPressed = mixPose(yellowApproach, pose(0.2, -0.78, PI), push);
-      const yellow = mixPose(yellowPressed, pose(0.42, -0.52, PI), release);
+      const yellowInContact = pose(
+        blue2.x,
+        blue2.z + ROBOT_CONTACT_CENTER_DISTANCE,
+        PI,
+      );
+      const yellow =
+        time < 3.4
+          ? yellowApproach
+          : mixPose(yellowInContact, pose(0.42, -0.52, PI), release);
       const ballPose = pose(
         0.09 + 0.04 * push + 0.05 * release,
         -0.84 - 0.035 * push + 0.14 * release,
