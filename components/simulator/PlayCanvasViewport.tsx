@@ -33,7 +33,20 @@ type ViewportProps = {
   ballTrail: Pose[];
   phaseLabel: string;
   robotVisual: RobotVisualId;
+  editable?: boolean;
+  selectedActorId?: string | null;
+  onActorSelect?: (actorId: string | null) => void;
+  onActorMove?: (actorId: string, position: { x: number; z: number }) => void;
+  onActorMoveEnd?: (actorId: string) => void;
   onReady?: () => void;
+};
+
+type ManualInteraction = {
+  isEnabled: () => boolean;
+  getPoses: () => Record<string, Pose>;
+  selectActor: (actorId: string | null) => void;
+  moveActor: (actorId: string, position: { x: number; z: number }) => void;
+  finishMovingActor: (actorId: string) => void;
 };
 
 type SceneHandles = {
@@ -44,6 +57,9 @@ type SceneHandles = {
   ruleGeometry: PC.Entity;
   capturePlane: PC.Entity;
   contactEvidence: PC.Entity;
+  selectionIndicator: PC.Entity;
+  selectionDisc: PC.Entity;
+  selectionArrow: PC.Entity;
   dispose: () => void;
   setCameraPreset: (preset: CameraPreset, poses: Record<string, Pose>) => void;
   updateCameraTarget: (
@@ -949,6 +965,7 @@ function buildScene(
   pc: typeof PC,
   canvas: HTMLCanvasElement,
   actors: ActorDefinition[],
+  interaction: ManualInteraction,
 ): SceneHandles {
   const app = new pc.Application(canvas, {
     graphicsDeviceOptions: {
@@ -1084,6 +1101,33 @@ function buildScene(
     activeRobotVisual = selection.id;
   };
 
+  const selectionMaterial = makeMaterial(pc, '#67e8f9', {
+    emissive: '#0891b2',
+    opacity: 0.3,
+  });
+  const selectionIndicator = new pc.Entity('Manual actor selection');
+  app.root.addChild(selectionIndicator);
+  const selectionDisc = addPrimitive(
+    pc,
+    selectionIndicator,
+    'Selection disc',
+    'cylinder',
+    [0.23, 0.003, 0.23],
+    [0, 0.006, 0],
+    selectionMaterial,
+  );
+  const selectionArrow = addPrimitive(
+    pc,
+    selectionIndicator,
+    'Selection direction',
+    'cone',
+    [0.035, 0.05, 0.035],
+    [0, 0.009, 0.145],
+    selectionMaterial,
+  );
+  selectionArrow.setLocalEulerAngles(90, 0, 0);
+  selectionIndicator.enabled = false;
+
   const ruleGeometry = new pc.Entity('Rule geometry overlays');
   app.root.addChild(ruleGeometry);
   const overlayBlue = makeMaterial(pc, '#38bdf8', {
@@ -1192,7 +1236,6 @@ function buildScene(
     pitch: 49,
     distance: 3.25,
     target: new pc.Vec3(0, 0.05, 0),
-    dragging: false,
     x: 0,
     y: 0,
   };
@@ -1304,15 +1347,132 @@ function buildScene(
     }
   };
 
+  const screenPoint = (event: PointerEvent) => {
+    const rect = canvas.getBoundingClientRect();
+    return {
+      x: event.clientX - rect.left,
+      y: event.clientY - rect.top,
+    };
+  };
+
+  const screenToGround = (event: PointerEvent) => {
+    const point = screenPoint(event);
+    const cameraComponent = camera.camera!;
+    const near = cameraComponent.screenToWorld(
+      point.x,
+      point.y,
+      cameraComponent.nearClip,
+    );
+    const far = cameraComponent.screenToWorld(
+      point.x,
+      point.y,
+      cameraComponent.farClip,
+    );
+    const directionY = far.y - near.y;
+    if (Math.abs(directionY) < 1e-8) return null;
+    const amount = -near.y / directionY;
+    if (amount < 0 || amount > 1) return null;
+    return {
+      x: near.x + (far.x - near.x) * amount,
+      z: near.z + (far.z - near.z) * amount,
+    };
+  };
+
+  const actorWorldPoint = new pc.Vec3();
+  const actorScreenPoint = new pc.Vec3();
+  const pickActor = (event: PointerEvent) => {
+    const point = screenPoint(event);
+    const poses = interaction.getPoses();
+    let closest: { id: string; score: number } | null = null;
+    for (const actor of actors) {
+      const actorPose = poses[actor.id];
+      if (!actorPose) continue;
+      actorWorldPoint.set(
+        actorPose.x,
+        actor.kind === 'ball' ? BALL_CENTER_HEIGHT : 0.085,
+        actorPose.z,
+      );
+      camera.camera!.worldToScreen(actorWorldPoint, actorScreenPoint);
+      const radius = actor.kind === 'ball' ? 28 : 48;
+      const distance = Math.hypot(
+        point.x - actorScreenPoint.x,
+        point.y - actorScreenPoint.y,
+      );
+      const score = distance / radius;
+      if (score <= 1 && (!closest || score < closest.score)) {
+        closest = { id: actor.id, score };
+      }
+    }
+    return closest?.id ?? null;
+  };
+
+  type PointerGesture =
+    | { kind: 'orbit'; pointerId: number }
+    | {
+        kind: 'actor';
+        pointerId: number;
+        actorId: string;
+        offsetX: number;
+        offsetZ: number;
+      };
+  let gesture: PointerGesture | null = null;
+
+  const updatePointerCursor = (event?: PointerEvent) => {
+    if (gesture) {
+      canvas.style.cursor = 'grabbing';
+    } else if (interaction.isEnabled() && event && pickActor(event)) {
+      canvas.style.cursor = 'move';
+    } else {
+      canvas.style.cursor = 'grab';
+    }
+  };
+
   const onPointerDown = (event: PointerEvent) => {
     if (event.button !== 0) return;
-    orbit.dragging = true;
+    if (interaction.isEnabled()) {
+      const actorId = pickActor(event);
+      const ground = actorId ? screenToGround(event) : null;
+      const actorPose = actorId ? interaction.getPoses()[actorId] : null;
+      if (actorId && ground && actorPose) {
+        gesture = {
+          kind: 'actor',
+          pointerId: event.pointerId,
+          actorId,
+          offsetX: actorPose.x - ground.x,
+          offsetZ: actorPose.z - ground.z,
+        };
+        interaction.selectActor(actorId);
+        canvas.setPointerCapture(event.pointerId);
+        updatePointerCursor();
+        event.preventDefault();
+        return;
+      }
+      interaction.selectActor(null);
+    }
+
+    gesture = { kind: 'orbit', pointerId: event.pointerId };
     orbit.x = event.clientX;
     orbit.y = event.clientY;
     canvas.setPointerCapture(event.pointerId);
+    updatePointerCursor();
   };
   const onPointerMove = (event: PointerEvent) => {
-    if (!orbit.dragging) return;
+    if (!gesture) {
+      updatePointerCursor(event);
+      return;
+    }
+    if (gesture.pointerId !== event.pointerId) return;
+    if (gesture.kind === 'actor') {
+      const ground = screenToGround(event);
+      if (ground) {
+        interaction.moveActor(gesture.actorId, {
+          x: ground.x + gesture.offsetX,
+          z: ground.z + gesture.offsetZ,
+        });
+      }
+      event.preventDefault();
+      return;
+    }
     const dx = event.clientX - orbit.x;
     const dy = event.clientY - orbit.y;
     orbit.x = event.clientX;
@@ -1322,12 +1482,25 @@ function buildScene(
     updateOrbit();
   };
   const onPointerUp = (event: PointerEvent) => {
-    orbit.dragging = false;
+    if (!gesture || gesture.pointerId !== event.pointerId) return;
+    const completedGesture = gesture;
+    gesture = null;
+    if (completedGesture.kind === 'actor') {
+      interaction.finishMovingActor(completedGesture.actorId);
+    }
     if (canvas.hasPointerCapture(event.pointerId))
       canvas.releasePointerCapture(event.pointerId);
+    updatePointerCursor(event);
   };
   const onWheel = (event: WheelEvent) => {
     event.preventDefault();
+    if (activePreset === 'overhead') {
+      camera.camera!.orthoHeight = Math.max(
+        0.42,
+        Math.min(2.2, camera.camera!.orthoHeight * (1 + event.deltaY * 0.001)),
+      );
+      return;
+    }
     orbit.distance = Math.max(
       0.45,
       Math.min(5.2, orbit.distance * (1 + event.deltaY * 0.001)),
@@ -1338,6 +1511,7 @@ function buildScene(
   canvas.addEventListener('pointermove', onPointerMove);
   canvas.addEventListener('pointerup', onPointerUp);
   canvas.addEventListener('pointercancel', onPointerUp);
+  canvas.addEventListener('lostpointercapture', onPointerUp);
   canvas.addEventListener('wheel', onWheel, { passive: false });
 
   const resizeTarget = canvas.parentElement ?? canvas;
@@ -1366,6 +1540,9 @@ function buildScene(
     ruleGeometry,
     capturePlane,
     contactEvidence,
+    selectionIndicator,
+    selectionDisc,
+    selectionArrow,
     setRobotVisual,
     setCameraPreset,
     updateCameraTarget,
@@ -1378,6 +1555,7 @@ function buildScene(
       canvas.removeEventListener('pointermove', onPointerMove);
       canvas.removeEventListener('pointerup', onPointerUp);
       canvas.removeEventListener('pointercancel', onPointerUp);
+      canvas.removeEventListener('lostpointercapture', onPointerUp);
       canvas.removeEventListener('wheel', onWheel);
       app.destroy();
     },
@@ -1394,6 +1572,11 @@ export function PlayCanvasViewport({
   ballTrail,
   phaseLabel,
   robotVisual,
+  editable = false,
+  selectedActorId = null,
+  onActorSelect,
+  onActorMove,
+  onActorMoveEnd,
   onReady,
 }: ViewportProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -1401,12 +1584,24 @@ export function PlayCanvasViewport({
   const posesRef = useRef(poses);
   const cameraPresetRef = useRef(cameraPreset);
   const robotVisualRef = useRef(robotVisual);
+  const editableRef = useRef(editable);
+  const onActorSelectRef = useRef(onActorSelect);
+  const onActorMoveRef = useRef(onActorMove);
+  const onActorMoveEndRef = useRef(onActorMoveEnd);
   const [engineError, setEngineError] = useState<string | null>(null);
   const [robotAssetError, setRobotAssetError] = useState<string | null>(null);
+  const [sceneVersion, setSceneVersion] = useState(0);
 
   useEffect(() => {
     posesRef.current = poses;
   }, [poses]);
+
+  useEffect(() => {
+    editableRef.current = editable;
+    onActorSelectRef.current = onActorSelect;
+    onActorMoveRef.current = onActorMove;
+    onActorMoveEndRef.current = onActorMoveEnd;
+  }, [editable, onActorMove, onActorMoveEnd, onActorSelect]);
 
   useEffect(() => {
     cameraPresetRef.current = cameraPreset;
@@ -1433,8 +1628,16 @@ export function PlayCanvasViewport({
     import('playcanvas')
       .then((pc) => {
         if (cancelled) return;
-        handles = buildScene(pc, canvas, actors);
+        handles = buildScene(pc, canvas, actors, {
+          isEnabled: () => editableRef.current,
+          getPoses: () => posesRef.current,
+          selectActor: (actorId) => onActorSelectRef.current?.(actorId),
+          moveActor: (actorId, position) =>
+            onActorMoveRef.current?.(actorId, position),
+          finishMovingActor: (actorId) => onActorMoveEndRef.current?.(actorId),
+        });
         sceneRef.current = handles;
+        setSceneVersion((version) => version + 1);
         handles.setCameraPreset(cameraPresetRef.current, posesRef.current);
         void handles
           .setRobotVisual(robotVisualRef.current)
@@ -1481,8 +1684,27 @@ export function PlayCanvasViewport({
         entity.setEulerAngles(0, (pose.yaw * 180) / Math.PI, 0);
       }
     }
-    scene.updateCameraTarget(cameraPreset, poses);
-  }, [actors, cameraPreset, poses]);
+    if (!editable) scene.updateCameraTarget(cameraPreset, poses);
+
+    const selectedActor = selectedActorId
+      ? actors.find((actor) => actor.id === selectedActorId)
+      : null;
+    const selectedPose = selectedActor ? poses[selectedActor.id] : null;
+    scene.selectionIndicator.enabled = Boolean(
+      editable && selectedActor && selectedPose,
+    );
+    if (editable && selectedActor && selectedPose) {
+      scene.selectionIndicator.setPosition(selectedPose.x, 0, selectedPose.z);
+      scene.selectionIndicator.setEulerAngles(
+        0,
+        (selectedPose.yaw * 180) / Math.PI,
+        0,
+      );
+      const discDiameter = selectedActor.kind === 'ball' ? 0.075 : 0.23;
+      scene.selectionDisc.setLocalScale(discDiameter, 0.003, discDiameter);
+      scene.selectionArrow.enabled = selectedActor.kind === 'robot';
+    }
+  }, [actors, cameraPreset, editable, poses, sceneVersion, selectedActorId]);
 
   useEffect(() => {
     sceneRef.current?.setCameraPreset(cameraPreset, posesRef.current);
@@ -1533,6 +1755,7 @@ export function PlayCanvasViewport({
     actors,
     ballTrail,
     poses,
+    sceneVersion,
     showBallTrail,
     showContactEvidence,
     showRuleGeometry,
@@ -1543,8 +1766,21 @@ export function PlayCanvasViewport({
       <canvas
         ref={canvasRef}
         className="block size-full touch-none cursor-grab active:cursor-grabbing"
-        aria-label={`Interactive 3D RoboCupJunior soccer field. Current phase: ${phaseLabel}. Drag to orbit and scroll to zoom.`}
+        tabIndex={editable ? 0 : undefined}
+        aria-describedby={editable ? 'manual-viewport-instructions' : undefined}
+        aria-label={
+          editable
+            ? 'Editable 3D RoboCupJunior soccer field'
+            : `Interactive 3D RoboCupJunior soccer field. Current phase: ${phaseLabel}. Drag to orbit and scroll to zoom.`
+        }
       />
+      {editable ? (
+        <p id="manual-viewport-instructions" className="sr-only">
+          Select and drag a robot or the ball to move it. Drag empty field space
+          to orbit the camera. Use the object list and keyboard controls as an
+          alternative.
+        </p>
+      ) : null}
       {engineError ? (
         <div className="absolute inset-0 grid place-items-center bg-[#071016] p-8 text-center">
           <div>

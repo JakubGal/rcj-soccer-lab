@@ -13,9 +13,13 @@ import {
   Gauge,
   GraduationCap,
   Layers3,
+  Move3D,
+  MousePointer2,
   Pause,
   Play,
   RefreshCcw,
+  RotateCcw,
+  RotateCw,
   Scale,
   Sparkles,
   Target,
@@ -43,8 +47,11 @@ import {
   ROBOT_VISUALS,
   type RobotVisualId,
 } from '@/lib/simulator/robot-models';
+import { clonePoses, moveManualActor } from '@/lib/simulator/manual-layout';
 import { getScenario, SCENARIOS } from '@/lib/simulator/scenarios';
 import type {
+  ActorDefinition,
+  Pose,
   RefereeChoice,
   ScenarioDefinition,
   SimulatorMode,
@@ -84,7 +91,22 @@ function normalizeCamera(
 function modeIcon(mode: SimulatorMode) {
   if (mode === 'explore') return Eye;
   if (mode === 'referee') return Scale;
+  if (mode === 'manual') return Move3D;
   return GraduationCap;
+}
+
+function actorColor(actor: ActorDefinition) {
+  if (actor.team === 'blue') return 'bg-sky-400';
+  if (actor.team === 'yellow') return 'bg-amber-300';
+  return 'bg-orange-400';
+}
+
+function formatCoordinate(value: number) {
+  return `${value >= 0 ? '+' : ''}${value.toFixed(3)} m`;
+}
+
+function wrapYaw(yaw: number) {
+  return Math.atan2(Math.sin(yaw), Math.cos(yaw));
 }
 
 function gradePresentation(grade: RefereeChoice['grade']) {
@@ -181,10 +203,37 @@ export function SimulatorApp() {
   const [isEmbed, setIsEmbed] = useState(false);
   const [embedCopied, setEmbedCopied] = useState(false);
   const [rendererReady, setRendererReady] = useState(false);
+  const [manualPoses, setManualPoses] = useState<Record<string, Pose> | null>(
+    null,
+  );
+  const [manualBaseline, setManualBaseline] = useState<Record<
+    string,
+    Pose
+  > | null>(null);
+  const [selectedActorId, setSelectedActorId] = useState<string | null>(null);
+  const [manualAnnouncement, setManualAnnouncement] = useState(
+    'Manual positioning ready.',
+  );
+  const manualPosesRef = useRef<Record<string, Pose> | null>(null);
   const previousFrameRef = useRef<number | null>(null);
 
   const scenario = useMemo(() => getScenario(scenarioId), [scenarioId]);
-  const frame = useMemo(() => scenario.sample(time), [scenario, time]);
+  const scriptedFrame = useMemo(() => scenario.sample(time), [scenario, time]);
+  const frame = useMemo(
+    () =>
+      mode === 'manual' && manualPoses
+        ? {
+            ...scriptedFrame,
+            actors: manualPoses,
+            ballPossession: null,
+            phaseLabel: 'Manual positioning',
+            metrics: {},
+            evidence: [],
+            evidenceDetails: [],
+          }
+        : scriptedFrame,
+    [manualPoses, mode, scriptedFrame],
+  );
   const selectedChoice = useMemo(
     () =>
       scenario.choices.find((choice) => choice.id === answers[scenario.id]) ??
@@ -211,19 +260,162 @@ export function SimulatorApp() {
 
   const reset = useCallback(() => {
     setPlaying(false);
+    if (mode === 'manual' && manualBaseline) {
+      const resetLayout = clonePoses(manualBaseline);
+      manualPosesRef.current = resetLayout;
+      setManualPoses(resetLayout);
+      setManualAnnouncement('Manual layout reset.');
+      previousFrameRef.current = null;
+      return;
+    }
     setTime(0);
     previousFrameRef.current = null;
-  }, []);
+  }, [manualBaseline, mode]);
 
-  const selectScenario = useCallback((id: string) => {
-    const nextScenario = getScenario(id);
-    setScenarioId(id);
-    setPlaying(false);
-    setTime(0);
-    setCameraPreset(normalizeCamera(nextScenario.defaultCamera));
-    setShowContactEvidence(false);
-    previousFrameRef.current = null;
-  }, []);
+  const selectScenario = useCallback(
+    (id: string) => {
+      const nextScenario = getScenario(id);
+      setScenarioId(id);
+      setPlaying(false);
+      setTime(0);
+      setCameraPreset(
+        mode === 'manual'
+          ? 'overhead'
+          : normalizeCamera(nextScenario.defaultCamera),
+      );
+      setShowContactEvidence(false);
+      if (mode === 'manual') {
+        const nextLayout = clonePoses(nextScenario.sample(0).actors);
+        setManualBaseline(nextLayout);
+        const editableLayout = clonePoses(nextLayout);
+        manualPosesRef.current = editableLayout;
+        setManualPoses(editableLayout);
+        setSelectedActorId(nextScenario.actors[0]?.id ?? null);
+        setManualAnnouncement(
+          `${nextScenario.shortTitle} starting layout loaded.`,
+        );
+      }
+      previousFrameRef.current = null;
+    },
+    [mode],
+  );
+
+  const selectMode = useCallback(
+    (nextMode: SimulatorMode) => {
+      if (nextMode === 'manual' && mode !== 'manual') {
+        const nextLayout = clonePoses(scriptedFrame.actors);
+        setPlaying(false);
+        setManualBaseline(nextLayout);
+        const editableLayout = clonePoses(nextLayout);
+        manualPosesRef.current = editableLayout;
+        setManualPoses(editableLayout);
+        setSelectedActorId(scenario.actors[0]?.id ?? null);
+        setCameraPreset('overhead');
+        setManualAnnouncement('Manual positioning ready.');
+      } else if (nextMode !== 'manual' && mode === 'manual') {
+        setSelectedActorId(null);
+        setCameraPreset(normalizeCamera(scenario.defaultCamera));
+      }
+      setMode(nextMode);
+    },
+    [mode, scenario, scriptedFrame.actors],
+  );
+
+  const selectManualActor = useCallback(
+    (actorId: string | null) => {
+      setSelectedActorId(actorId);
+      const actor = actorId
+        ? scenario.actors.find((item) => item.id === actorId)
+        : null;
+      setManualAnnouncement(
+        actor ? `${actor.label} selected.` : 'Selection cleared.',
+      );
+    },
+    [scenario.actors],
+  );
+
+  const updateManualActor = useCallback(
+    (actorId: string, position: { x: number; z: number }) => {
+      const current = manualPosesRef.current;
+      if (!current) return;
+      const nextPose = moveManualActor(
+        scenario.actors,
+        current,
+        actorId,
+        position,
+      );
+      if (!nextPose) return;
+      const nextLayout = { ...current, [actorId]: nextPose };
+      manualPosesRef.current = nextLayout;
+      setManualPoses(nextLayout);
+    },
+    [scenario.actors],
+  );
+
+  const finishMovingManualActor = useCallback(
+    (actorId: string) => {
+      const actor = scenario.actors.find((item) => item.id === actorId);
+      const actorPose = manualPosesRef.current?.[actorId];
+      if (!actor || !actorPose) return;
+      setManualAnnouncement(
+        `${actor.label} placed at X ${formatCoordinate(actorPose.x)}, Z ${formatCoordinate(actorPose.z)}.`,
+      );
+    },
+    [scenario.actors],
+  );
+
+  const rotateSelectedActor = useCallback(
+    (direction: -1 | 1) => {
+      if (!selectedActorId) return;
+      const actor = scenario.actors.find((item) => item.id === selectedActorId);
+      if (!actor || actor.kind !== 'robot') return;
+      const current = manualPosesRef.current;
+      const currentPose = current?.[selectedActorId];
+      if (!current || !currentPose) return;
+      const nextLayout = {
+        ...current,
+        [selectedActorId]: {
+          ...currentPose,
+          yaw: wrapYaw(currentPose.yaw + direction * (Math.PI / 12)),
+        },
+      };
+      manualPosesRef.current = nextLayout;
+      setManualPoses(nextLayout);
+      setManualAnnouncement(
+        `${actor.label} rotated ${direction < 0 ? 'left' : 'right'} 15 degrees.`,
+      );
+    },
+    [scenario.actors, selectedActorId],
+  );
+
+  const nudgeSelectedActor = useCallback(
+    (deltaX: number, deltaZ: number) => {
+      if (!selectedActorId) return;
+      const current = manualPosesRef.current;
+      const currentPose = current?.[selectedActorId];
+      if (!current || !currentPose) return;
+      const nextPose = moveManualActor(
+        scenario.actors,
+        current,
+        selectedActorId,
+        {
+          x: currentPose.x + deltaX,
+          z: currentPose.z + deltaZ,
+        },
+      );
+      if (!nextPose) return;
+      const nextLayout = { ...current, [selectedActorId]: nextPose };
+      manualPosesRef.current = nextLayout;
+      setManualPoses(nextLayout);
+      const actor = scenario.actors.find((item) => item.id === selectedActorId);
+      if (actor) {
+        setManualAnnouncement(
+          `${actor.label} moved to X ${formatCoordinate(nextPose.x)}, Z ${formatCoordinate(nextPose.z)}.`,
+        );
+      }
+    },
+    [scenario.actors, selectedActorId],
+  );
 
   const handleRendererReady = useCallback(() => {
     setRendererReady(true);
@@ -255,13 +447,23 @@ export function SimulatorApp() {
         queryMode === 'referee'
       ) {
         setMode(queryMode);
+      } else if (queryMode === 'manual' && !embeddedScenario) {
+        const initialLayout = clonePoses(SCENARIOS[0].sample(0).actors);
+        setMode('manual');
+        setPlaying(false);
+        setManualBaseline(initialLayout);
+        const editableLayout = clonePoses(initialLayout);
+        manualPosesRef.current = editableLayout;
+        setManualPoses(editableLayout);
+        setSelectedActorId(SCENARIOS[0].actors[0]?.id ?? null);
+        setCameraPreset('overhead');
       }
     });
     return () => window.cancelAnimationFrame(animationFrame);
   }, []);
 
   useEffect(() => {
-    if (!playing) {
+    if (!playing || mode === 'manual') {
       previousFrameRef.current = null;
       return;
     }
@@ -283,27 +485,69 @@ export function SimulatorApp() {
     };
     animationFrame = window.requestAnimationFrame(animate);
     return () => window.cancelAnimationFrame(animationFrame);
-  }, [playing, scenario.duration, speed]);
+  }, [mode, playing, scenario.duration, speed]);
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
       const target = event.target as HTMLElement | null;
-      if (target?.matches('input, select, textarea, button')) return;
+      if (target?.matches('input, select, textarea')) return;
+      const targetIsButton = Boolean(target?.matches('button'));
+      if (/^[1-7]$/.test(event.key)) {
+        setCameraPreset(CAMERA_OPTIONS[Number(event.key) - 1].value);
+        return;
+      }
+      if (mode === 'manual') {
+        if (targetIsButton && (event.code === 'Space' || event.key === 'Enter'))
+          return;
+        const step = event.shiftKey ? 0.05 : 0.01;
+        if (event.key === 'Escape') {
+          setSelectedActorId(null);
+          setManualAnnouncement('Selection cleared.');
+        } else if (event.key.toLowerCase() === 'r') {
+          reset();
+        } else if (event.key.toLowerCase() === 'q') {
+          rotateSelectedActor(-1);
+        } else if (event.key.toLowerCase() === 'e') {
+          rotateSelectedActor(1);
+        } else if (event.key === 'ArrowLeft') {
+          event.preventDefault();
+          nudgeSelectedActor(-step, 0);
+        } else if (event.key === 'ArrowRight') {
+          event.preventDefault();
+          nudgeSelectedActor(step, 0);
+        } else if (event.key === 'ArrowUp') {
+          event.preventDefault();
+          nudgeSelectedActor(0, step);
+        } else if (event.key === 'ArrowDown') {
+          event.preventDefault();
+          nudgeSelectedActor(0, -step);
+        } else if (event.code === 'Space') {
+          event.preventDefault();
+        }
+        return;
+      }
+      if (targetIsButton) return;
       if (event.code === 'Space') {
         event.preventDefault();
         if (time >= scenario.duration) setTime(0);
         setPlaying((value) => !value);
       } else if (event.key.toLowerCase() === 'r') {
         reset();
-      } else if (/^[1-7]$/.test(event.key)) {
-        setCameraPreset(CAMERA_OPTIONS[Number(event.key) - 1].value);
       }
     };
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
-  }, [reset, scenario.duration, time]);
+  }, [
+    mode,
+    nudgeSelectedActor,
+    reset,
+    rotateSelectedActor,
+    scenario.duration,
+    time,
+  ]);
 
   const ballTrail = useMemo(() => {
+    if (mode === 'manual') return [];
     const ball = scenario.actors.find((actor) => actor.kind === 'ball');
     if (!ball) return [];
     const length = Math.min(time, 2.8);
@@ -311,7 +555,7 @@ export function SimulatorApp() {
       const sampleTime = Math.max(0, time - length + (length * index) / 29);
       return scenario.sample(sampleTime).actors[ball.id];
     }).filter(Boolean);
-  }, [scenario, time]);
+  }, [mode, scenario, time]);
 
   useEffect(() => {
     const snapshotWindow = window as SnapshotWindow;
@@ -326,9 +570,11 @@ export function SimulatorApp() {
       camera: cameraPreset,
       robotVisual,
       phase: frame.phaseLabel,
-      physics: 'scripted',
-      motion: 'deterministic-possession',
+      physics: mode === 'manual' ? 'manual-layout' : 'scripted',
+      motion:
+        mode === 'manual' ? 'direct-manipulation' : 'deterministic-possession',
       ballOwner: frame.ballPossession?.ownerId ?? null,
+      selectedActor: mode === 'manual' ? selectedActorId : null,
       actors: frame.actors,
       metrics: frame.metrics,
       answer: selectedChoice
@@ -349,6 +595,7 @@ export function SimulatorApp() {
     playing,
     robotVisual,
     scenario,
+    selectedActorId,
     selectedChoice,
     speed,
     time,
@@ -383,6 +630,12 @@ export function SimulatorApp() {
   const ballStatusLabel = ballOwner
     ? `Ball attached · ${ballOwner.label}`
     : 'Ball · free';
+  const selectedManualActor = selectedActorId
+    ? (scenario.actors.find((actor) => actor.id === selectedActorId) ?? null)
+    : null;
+  const selectedManualPose = selectedManualActor
+    ? frame.actors[selectedManualActor.id]
+    : null;
 
   if (isEmbed) {
     return (
@@ -482,22 +735,25 @@ export function SimulatorApp() {
         </div>
 
         <nav className="mode-switcher" aria-label="Simulator mode">
-          {(['explore', 'learn', 'referee'] as SimulatorMode[]).map((item) => {
-            const Icon = modeIcon(item);
-            return (
-              <Button
-                key={item}
-                size="sm"
-                variant={mode === item ? 'secondary' : 'ghost'}
-                onClick={() => setMode(item)}
-                aria-pressed={mode === item}
-                className="capitalize"
-              >
-                <Icon aria-hidden="true" />
-                <span className="hidden sm:inline">{item}</span>
-              </Button>
-            );
-          })}
+          {(['explore', 'learn', 'manual', 'referee'] as SimulatorMode[]).map(
+            (item) => {
+              const Icon = modeIcon(item);
+              return (
+                <Button
+                  key={item}
+                  size="sm"
+                  variant={mode === item ? 'secondary' : 'ghost'}
+                  onClick={() => selectMode(item)}
+                  aria-pressed={mode === item}
+                  aria-label={`${item[0].toUpperCase()}${item.slice(1)} mode`}
+                  className="capitalize"
+                >
+                  <Icon aria-hidden="true" />
+                  <span className="hidden sm:inline">{item}</span>
+                </Button>
+              );
+            },
+          )}
         </nav>
 
         <div className="flex items-center justify-end gap-2">
@@ -521,8 +777,12 @@ export function SimulatorApp() {
       <div className="workspace-grid">
         <aside className="scenario-rail" aria-label="Situation library">
           <div className="rail-heading">
-            <BookOpen className="size-3.5" aria-hidden="true" />
-            Situation library
+            {mode === 'manual' ? (
+              <Move3D className="size-3.5" aria-hidden="true" />
+            ) : (
+              <BookOpen className="size-3.5" aria-hidden="true" />
+            )}
+            {mode === 'manual' ? 'Starting layouts' : 'Situation library'}
             <span className="ml-auto font-mono text-[10px] text-white/35">
               {SCENARIOS.length}
             </span>
@@ -570,16 +830,25 @@ export function SimulatorApp() {
           </div>
 
           <div className="rail-footer">
-            <div className="flex items-center justify-between text-[10px] text-muted-foreground">
-              <span>Lesson progress</span>
-              <span className="font-mono">
-                {Object.keys(answers).length}/{SCENARIOS.length}
-              </span>
-            </div>
-            <Progress
-              value={(Object.keys(answers).length / SCENARIOS.length) * 100}
-              className="mt-2 h-1"
-            />
+            {mode === 'manual' ? (
+              <p className="text-[10px] leading-4 text-muted-foreground">
+                Choose any situation as a starting arrangement. Your edits stay
+                local to Manual mode.
+              </p>
+            ) : (
+              <>
+                <div className="flex items-center justify-between text-[10px] text-muted-foreground">
+                  <span>Lesson progress</span>
+                  <span className="font-mono">
+                    {Object.keys(answers).length}/{SCENARIOS.length}
+                  </span>
+                </div>
+                <Progress
+                  value={(Object.keys(answers).length / SCENARIOS.length) * 100}
+                  className="mt-2 h-1"
+                />
+              </>
+            )}
           </div>
         </aside>
 
@@ -646,10 +915,15 @@ export function SimulatorApp() {
             cameraPreset={cameraPreset}
             robotVisual={robotVisual}
             showRuleGeometry={showRuleGeometry}
-            showBallTrail={showBallTrail}
-            showContactEvidence={showContactEvidence}
+            showBallTrail={mode !== 'manual' && showBallTrail}
+            showContactEvidence={mode !== 'manual' && showContactEvidence}
             ballTrail={ballTrail}
             phaseLabel={frame.phaseLabel}
+            editable={mode === 'manual'}
+            selectedActorId={selectedActorId}
+            onActorSelect={selectManualActor}
+            onActorMove={updateManualActor}
+            onActorMoveEnd={finishMovingManualActor}
             onReady={handleRendererReady}
           />
 
@@ -658,68 +932,96 @@ export function SimulatorApp() {
             <span>{frame.phaseLabel}</span>
           </div>
           <div className="viewport-help">
-            Drag to orbit · wheel to zoom · keys 1–7 cameras
+            {mode === 'manual'
+              ? 'Drag object · empty space orbits · wheel zooms'
+              : 'Drag to orbit · wheel to zoom · keys 1–7 cameras'}
           </div>
           {!rendererReady ? (
             <div className="renderer-loader">Preparing field…</div>
           ) : null}
 
-          <div className="transport-panel">
-            <div className="flex items-center gap-2">
-              <Button
-                size="icon-sm"
-                variant="ghost"
-                onClick={reset}
-                aria-label="Reset scenario"
-              >
-                <RefreshCcw />
-              </Button>
-              <Button
-                size="icon"
-                onClick={() => {
-                  if (time >= scenario.duration) setTime(0);
-                  setPlaying((value) => !value);
-                }}
-                aria-label={playing ? 'Pause scenario' : 'Play scenario'}
-                className="bg-white text-[#071016] hover:bg-white/90"
-              >
-                {playing ? <Pause /> : <Play className="fill-current" />}
-              </Button>
+          {mode === 'manual' ? (
+            <div className="transport-panel manual-transport">
               <Button
                 size="sm"
-                variant="ghost"
-                onClick={() => {
-                  const index = SPEEDS.indexOf(speed);
-                  setSpeed(SPEEDS[(index + 1) % SPEEDS.length]);
-                }}
-                aria-label={`Playback speed ${speed} times. Activate to change.`}
-                className="w-12 font-mono text-xs"
+                variant="outline"
+                onClick={reset}
+                aria-label="Reset manual layout"
               >
-                {speed}×
+                <RefreshCcw /> Reset layout
               </Button>
-            </div>
-            <div className="min-w-0 flex-1">
-              <Slider
-                value={[time]}
-                min={0}
-                max={scenario.duration}
-                step={0.01}
-                onValueChange={(value) => {
-                  setPlaying(false);
-                  setTime(typeof value === 'number' ? value : (value[0] ?? 0));
-                }}
-                aria-label="Scenario timeline"
-              />
-              <div className="mt-1.5 flex justify-between font-mono text-[9px] text-white/35">
-                <span>OBSERVE</span>
-                <span>CONTACT</span>
-                <span>DECIDE</span>
+              <div className="manual-transport-copy">
+                <MousePointer2 className="size-4 text-cyan-300" />
+                <span>
+                  Select and drag an object. Drag empty turf to move the camera.
+                </span>
               </div>
+              <span className="manual-selection-readout">
+                {selectedManualActor && selectedManualPose
+                  ? `${selectedManualActor.label} · ${formatCoordinate(selectedManualPose.x)}, ${formatCoordinate(selectedManualPose.z)}`
+                  : 'No object selected'}
+              </span>
             </div>
-            <span className="w-[116px] text-right font-mono text-[11px] text-white/55">
-              {formatClock(time)} / {formatClock(scenario.duration)}
-            </span>
-          </div>
+          ) : (
+            <div className="transport-panel">
+              <div className="flex items-center gap-2">
+                <Button
+                  size="icon-sm"
+                  variant="ghost"
+                  onClick={reset}
+                  aria-label="Reset scenario"
+                >
+                  <RefreshCcw />
+                </Button>
+                <Button
+                  size="icon"
+                  onClick={() => {
+                    if (time >= scenario.duration) setTime(0);
+                    setPlaying((value) => !value);
+                  }}
+                  aria-label={playing ? 'Pause scenario' : 'Play scenario'}
+                  className="bg-white text-[#071016] hover:bg-white/90"
+                >
+                  {playing ? <Pause /> : <Play className="fill-current" />}
+                </Button>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  onClick={() => {
+                    const index = SPEEDS.indexOf(speed);
+                    setSpeed(SPEEDS[(index + 1) % SPEEDS.length]);
+                  }}
+                  aria-label={`Playback speed ${speed} times. Activate to change.`}
+                  className="w-12 font-mono text-xs"
+                >
+                  {speed}×
+                </Button>
+              </div>
+              <div className="min-w-0 flex-1">
+                <Slider
+                  value={[time]}
+                  min={0}
+                  max={scenario.duration}
+                  step={0.01}
+                  onValueChange={(value) => {
+                    setPlaying(false);
+                    setTime(
+                      typeof value === 'number' ? value : (value[0] ?? 0),
+                    );
+                  }}
+                  aria-label="Scenario timeline"
+                />
+                <div className="mt-1.5 flex justify-between font-mono text-[9px] text-white/35">
+                  <span>OBSERVE</span>
+                  <span>CONTACT</span>
+                  <span>DECIDE</span>
+                </div>
+              </div>
+              <span className="w-[116px] text-right font-mono text-[11px] text-white/55">
+                {formatClock(time)} / {formatClock(scenario.duration)}
+              </span>
+            </div>
+          )}
         </section>
 
         <aside className="context-panel">
@@ -729,19 +1031,23 @@ export function SimulatorApp() {
                 <p className="eyebrow">
                   {mode === 'referee'
                     ? 'Referee decision'
-                    : mode === 'explore'
-                      ? 'Scenario controls'
-                      : 'Rule context'}
+                    : mode === 'manual'
+                      ? 'Manual positioning'
+                      : mode === 'explore'
+                        ? 'Scenario controls'
+                        : 'Rule context'}
                 </p>
                 <h1 className="mt-2 text-xl font-semibold tracking-tight">
-                  {scenario.title}
+                  {mode === 'manual'
+                    ? 'Arrange robots and ball'
+                    : scenario.title}
                 </h1>
               </div>
               <Badge
                 variant="outline"
                 className="shrink-0 border-sky-400/25 text-sky-300"
               >
-                {scenario.ruleRef.section}
+                {mode === 'manual' ? 'Sandbox' : scenario.ruleRef.section}
               </Badge>
             </div>
 
@@ -847,6 +1153,151 @@ export function SimulatorApp() {
               </>
             ) : null}
 
+            {mode === 'manual' ? (
+              <>
+                <p className="mt-4 text-sm leading-6 text-muted-foreground">
+                  Drag a robot or the ball directly on the field. Objects stop
+                  at the field edge and cannot pass through one another.
+                </p>
+                <div className="manual-tip">
+                  <MousePointer2 className="size-4 shrink-0 text-cyan-300" />
+                  <p>
+                    Drag empty turf to orbit the view. The object list below is
+                    also useful when two objects are close together.
+                  </p>
+                </div>
+                <div className="section-divider" />
+                <h2 className="panel-title flex items-center gap-2">
+                  <Move3D className="size-4 text-sky-400" /> Field objects
+                </h2>
+                <div className="mt-3 space-y-2">
+                  {scenario.actors.map((actor) => {
+                    const actorPose = frame.actors[actor.id];
+                    const active = actor.id === selectedActorId;
+                    return (
+                      <Button
+                        key={actor.id}
+                        variant="outline"
+                        className={cn(
+                          'manual-actor-button',
+                          active && 'manual-actor-button-active',
+                        )}
+                        aria-pressed={active}
+                        onClick={() => selectManualActor(actor.id)}
+                      >
+                        <span
+                          className={cn('manual-actor-dot', actorColor(actor))}
+                          aria-hidden="true"
+                        />
+                        <span className="min-w-0 flex-1 text-left">
+                          <span className="block truncate text-xs font-medium">
+                            {actor.label}
+                          </span>
+                          <span className="block text-[9px] capitalize text-muted-foreground">
+                            {actor.kind}
+                          </span>
+                        </span>
+                        {actorPose ? (
+                          <span className="manual-mini-coordinates">
+                            {actorPose.x.toFixed(2)} / {actorPose.z.toFixed(2)}
+                          </span>
+                        ) : null}
+                      </Button>
+                    );
+                  })}
+                </div>
+
+                {selectedManualActor && selectedManualPose ? (
+                  <div className="manual-object-card">
+                    <div className="flex items-center justify-between gap-3">
+                      <div>
+                        <p className="text-xs font-semibold text-foreground">
+                          {selectedManualActor.label}
+                        </p>
+                        <p className="mt-0.5 text-[9px] uppercase tracking-[0.12em] text-muted-foreground">
+                          Selected {selectedManualActor.kind}
+                        </p>
+                      </div>
+                      <span
+                        className={cn(
+                          'manual-actor-dot size-3',
+                          actorColor(selectedManualActor),
+                        )}
+                        aria-hidden="true"
+                      />
+                    </div>
+                    <div className="manual-coordinate-grid">
+                      <div className="manual-coordinate">
+                        <span>X position</span>
+                        <strong>
+                          {formatCoordinate(selectedManualPose.x)}
+                        </strong>
+                      </div>
+                      <div className="manual-coordinate">
+                        <span>Z position</span>
+                        <strong>
+                          {formatCoordinate(selectedManualPose.z)}
+                        </strong>
+                      </div>
+                    </div>
+                    {selectedManualActor.kind === 'robot' ? (
+                      <div className="manual-rotation-row">
+                        <Button
+                          size="icon-sm"
+                          variant="outline"
+                          onClick={() => rotateSelectedActor(-1)}
+                          aria-label={`Rotate ${selectedManualActor.label} left 15 degrees`}
+                        >
+                          <RotateCcw />
+                        </Button>
+                        <span>
+                          Heading{' '}
+                          <strong>
+                            {Math.round(
+                              (selectedManualPose.yaw * 180) / Math.PI,
+                            )}
+                            °
+                          </strong>
+                        </span>
+                        <Button
+                          size="icon-sm"
+                          variant="outline"
+                          onClick={() => rotateSelectedActor(1)}
+                          aria-label={`Rotate ${selectedManualActor.label} right 15 degrees`}
+                        >
+                          <RotateCw />
+                        </Button>
+                      </div>
+                    ) : null}
+                    <p className="mt-3 text-[9px] leading-4 text-muted-foreground">
+                      Arrow keys move 1 cm · Shift moves 5 cm · Q/E rotates · R
+                      resets
+                    </p>
+                  </div>
+                ) : (
+                  <p className="mt-4 text-xs text-muted-foreground">
+                    Select an object on the field or from the list.
+                  </p>
+                )}
+
+                <div className="section-divider" />
+                <div className="toggle-row">
+                  <label htmlFor="manual-rule-geometry">
+                    <strong>Rule geometry</strong>
+                    <small>Penalty areas and 15 mm plane</small>
+                  </label>
+                  <Switch
+                    id="manual-rule-geometry"
+                    checked={showRuleGeometry}
+                    onCheckedChange={setShowRuleGeometry}
+                  />
+                </div>
+                <p className="sr-only" aria-live="polite">
+                  {manualAnnouncement}
+                </p>
+              </>
+            ) : null}
+
             {mode === 'referee' ? (
               <>
                 <div className="decision-prompt">
@@ -922,19 +1373,28 @@ export function SimulatorApp() {
           </div>
 
           <footer className="context-footer">
-            <p className="text-[10px] leading-4 text-muted-foreground">
-              Repeatable animation supplies observations; the rubric keeps
-              objective facts, referee judgment, and committee interpretation
-              separate.
-            </p>
-            <a
-              href={scenario.ruleRef.url}
-              target="_blank"
-              rel="noreferrer"
-              className="mt-2 inline-flex items-center gap-1 text-[11px] font-medium text-sky-300 hover:text-sky-200"
-            >
-              Open official 2026 rules <ChevronRight className="size-3" />
-            </a>
+            {mode === 'manual' ? (
+              <p className="text-[10px] leading-4 text-muted-foreground">
+                Manual edits are a private sandbox and do not change the
+                authored rule situations.
+              </p>
+            ) : (
+              <>
+                <p className="text-[10px] leading-4 text-muted-foreground">
+                  Repeatable animation supplies observations; the rubric keeps
+                  objective facts, referee judgment, and committee
+                  interpretation separate.
+                </p>
+                <a
+                  href={scenario.ruleRef.url}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="mt-2 inline-flex items-center gap-1 text-[11px] font-medium text-sky-300 hover:text-sky-200"
+                >
+                  Open official 2026 rules <ChevronRight className="size-3" />
+                </a>
+              </>
+            )}
           </footer>
         </aside>
       </div>
