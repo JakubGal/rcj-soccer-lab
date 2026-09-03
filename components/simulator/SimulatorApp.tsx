@@ -37,6 +37,12 @@ import { Progress } from '@/components/ui/progress';
 import { Slider } from '@/components/ui/slider';
 import { Switch } from '@/components/ui/switch';
 import { cn } from '@/lib/utils';
+import {
+  DEFAULT_ROBOT_VISUAL_ID,
+  isRobotVisualId,
+  ROBOT_VISUALS,
+  type RobotVisualId,
+} from '@/lib/simulator/robot-models';
 import { getScenario, SCENARIOS } from '@/lib/simulator/scenarios';
 import type {
   RcjJoltWorld,
@@ -135,6 +141,35 @@ function MetricStatus({
   );
 }
 
+function RobotVisualPicker({
+  value,
+  onChange,
+  className,
+}: {
+  value: RobotVisualId;
+  onChange: (value: RobotVisualId) => void;
+  className?: string;
+}) {
+  return (
+    <NativeSelect
+      size="sm"
+      value={value}
+      onChange={(event) => {
+        const nextValue = event.target.value;
+        if (isRobotVisualId(nextValue)) onChange(nextValue);
+      }}
+      aria-label="Robot visual style"
+      className={cn('robot-select', className)}
+    >
+      {ROBOT_VISUALS.map((visual) => (
+        <NativeSelectOption key={visual.id} value={visual.id}>
+          {visual.label}
+        </NativeSelectOption>
+      ))}
+    </NativeSelect>
+  );
+}
+
 export function SimulatorApp() {
   const [scenarioId, setScenarioId] = useState(SCENARIOS[0].id);
   const [mode, setMode] = useState<SimulatorMode>('learn');
@@ -142,6 +177,9 @@ export function SimulatorApp() {
   const [playing, setPlaying] = useState(false);
   const [speed, setSpeed] = useState<(typeof SPEEDS)[number]>(1);
   const [cameraPreset, setCameraPreset] = useState<CameraPreset>('broadcast');
+  const [robotVisual, setRobotVisual] = useState<RobotVisualId>(
+    DEFAULT_ROBOT_VISUAL_ID,
+  );
   const [showRuleGeometry, setShowRuleGeometry] = useState(true);
   const [showBallTrail, setShowBallTrail] = useState(true);
   const [showContactEvidence, setShowContactEvidence] = useState(false);
@@ -266,6 +304,10 @@ export function SimulatorApp() {
   useEffect(() => {
     const animationFrame = window.requestAnimationFrame(() => {
       const query = new URLSearchParams(window.location.search);
+      const requestedRobotVisual = query.get('robot');
+      if (isRobotVisualId(requestedRobotVisual)) {
+        setRobotVisual(requestedRobotVisual);
+      }
       const embeddedScenario = query.get('embed');
       if (
         embeddedScenario &&
@@ -383,6 +425,7 @@ export function SimulatorApp() {
       playing,
       speed,
       camera: cameraPreset,
+      robotVisual,
       phase: frame.phaseLabel,
       physics: physicsStatus,
       actors: frame.actors,
@@ -404,6 +447,7 @@ export function SimulatorApp() {
     mode,
     physicsStatus,
     playing,
+    robotVisual,
     scenario,
     selectedChoice,
     speed,
@@ -424,6 +468,7 @@ export function SimulatorApp() {
     const url = new URL(window.location.href);
     url.search = '';
     url.searchParams.set('embed', scenario.id);
+    url.searchParams.set('robot', robotVisual);
     const snippet = `<iframe src="${url.toString()}" title="${scenario.title} — RCJ Soccer Lab" loading="lazy" allowfullscreen></iframe>`;
     await navigator.clipboard.writeText(snippet);
     setEmbedCopied(true);
@@ -452,20 +497,28 @@ export function SimulatorApp() {
               </p>
             </div>
           </div>
-          <a
-            href="./"
-            target="_blank"
-            rel="noreferrer"
-            className="text-[11px] text-sky-300 hover:text-sky-200"
-          >
-            Open lab ↗
-          </a>
+          <div className="embed-toolbar-actions">
+            <RobotVisualPicker
+              value={robotVisual}
+              onChange={setRobotVisual}
+              className="embed-robot-select"
+            />
+            <a
+              href="./"
+              target="_blank"
+              rel="noreferrer"
+              className="embed-open-link text-[11px] text-sky-300 hover:text-sky-200"
+            >
+              Open lab ↗
+            </a>
+          </div>
         </div>
         <section className="relative min-h-0 flex-1">
           <PlayCanvasViewport
             actors={scenario.actors}
             poses={frame.actors}
             cameraPreset={cameraPreset}
+            robotVisual={robotVisual}
             showRuleGeometry={showRuleGeometry}
             showBallTrail={showBallTrail}
             showContactEvidence={showContactEvidence}
@@ -636,7 +689,7 @@ export function SimulatorApp() {
                 className="border-white/10 bg-black/35 text-white/70 backdrop-blur-md"
               >
                 <Box className="size-3" aria-hidden="true" />
-                Live 3D
+                <span className="live-3d-label">Live 3D</span>
               </Badge>
               <Badge
                 variant="outline"
@@ -654,27 +707,34 @@ export function SimulatorApp() {
                 {physicsLabel}
               </Badge>
             </div>
-            <NativeSelect
-              size="sm"
-              value={cameraPreset}
-              onChange={(event) =>
-                setCameraPreset(event.target.value as CameraPreset)
-              }
-              aria-label="Camera preset"
-              className="camera-select"
-            >
-              {CAMERA_OPTIONS.map((camera) => (
-                <NativeSelectOption key={camera.value} value={camera.value}>
-                  {camera.label}
-                </NativeSelectOption>
-              ))}
-            </NativeSelect>
+            <div className="viewport-selects">
+              <RobotVisualPicker
+                value={robotVisual}
+                onChange={setRobotVisual}
+              />
+              <NativeSelect
+                size="sm"
+                value={cameraPreset}
+                onChange={(event) =>
+                  setCameraPreset(event.target.value as CameraPreset)
+                }
+                aria-label="Camera preset"
+                className="camera-select"
+              >
+                {CAMERA_OPTIONS.map((camera) => (
+                  <NativeSelectOption key={camera.value} value={camera.value}>
+                    {camera.label}
+                  </NativeSelectOption>
+                ))}
+              </NativeSelect>
+            </div>
           </div>
 
           <PlayCanvasViewport
             actors={scenario.actors}
             poses={frame.actors}
             cameraPreset={cameraPreset}
+            robotVisual={robotVisual}
             showRuleGeometry={showRuleGeometry}
             showBallTrail={showBallTrail}
             showContactEvidence={showContactEvidence}

@@ -14,6 +14,8 @@ Live application: <https://jakubgal.github.io/rcj-soccer-lab/>
 - Six deterministic, frame-scrubbable rule situations.
 - Explore, Learn, and Referee modes.
 - Multiple camera presets plus free orbit/zoom.
+- Selectable XLC Open 2020, XLC Innovation 2021, and lightweight proxy robot
+  visuals, with camera-facing team labels and overhead numbers.
 - A scored referee rubric that can accept legitimate discretion.
 - A 120 Hz JoltPhysics dribbler/contact demonstration using a 42 mm ball,
   moving roller surface, bounded compliance, and live capture/backspin metrics.
@@ -40,7 +42,7 @@ pnpm dev
 The local embed form also works, for example:
 
 ```text
-http://localhost:3000/?embed=legal-dribbler-backspin
+http://localhost:3000/?embed=legal-dribbler-backspin&robot=xlc-innovation-2021
 ```
 
 Validation commands:
@@ -90,3 +92,19 @@ The field constants and derived reference planes are in
 specification dated 2026-06-03. Dimensions not fixed by the rules, such as wall
 board thickness, follow the accompanying `SoccerField_202605.step` construction
 model and are explicitly labelled as construction values.
+
+## Robot asset pipeline
+
+Browser-ready models live in `public/models/robots`. New designs should ideally
+arrive as one resolved, colour-preserving GLB. STEP AP242/AP214 is also suitable:
+`scripts/convert-cad-to-glb.py` imports it with CadQuery and
+`scripts/prepare-robot-glb.py` uses Blender to correct axes, remove named helper
+objects, merge materials, decimate, fit the current 180 mm envelope, and export
+a compact GLB. `scripts/inspect-robot-glb.py` reports mesh bounds and materials
+for QA.
+
+A folder of individual STL or SolidWorks part files is insufficient when it
+does not include assembly occurrence transforms, repeats, and material data.
+Export the resolved top-level assembly instead. The selectable CAD mesh is only
+the visual layer; the simulator deliberately keeps its stable Jolt collision
+body and powered-dribbler model when a design changes.

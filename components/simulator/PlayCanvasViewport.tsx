@@ -7,6 +7,10 @@ import {
   RCJ_FIELD_DERIVED,
   RCJ_FIELD_SPEC_2026,
 } from '@/lib/simulator/field-spec';
+import {
+  getRobotVisual,
+  type RobotVisualId,
+} from '@/lib/simulator/robot-models';
 import type { ActorDefinition, Pose } from '@/lib/simulator/types';
 
 export type CameraPreset =
@@ -27,6 +31,7 @@ type ViewportProps = {
   showContactEvidence: boolean;
   ballTrail: Pose[];
   phaseLabel: string;
+  robotVisual: RobotVisualId;
   onReady?: () => void;
 };
 
@@ -44,6 +49,14 @@ type SceneHandles = {
     preset: CameraPreset,
     poses: Record<string, Pose>,
   ) => void;
+  setRobotVisual: (visual: RobotVisualId) => Promise<void>;
+};
+
+type RobotVisualHandle = {
+  procedural: PC.Entity;
+  imported: PC.Entity | null;
+  topBadge: PC.Entity;
+  labelPivot: PC.Entity;
 };
 
 const TEAM_COLORS = {
@@ -94,7 +107,7 @@ function addPrimitive(
   pc: typeof PC,
   parent: PC.Entity,
   name: string,
-  type: 'box' | 'cylinder' | 'sphere' | 'cone',
+  type: 'box' | 'cylinder' | 'sphere' | 'cone' | 'plane',
   scale: [number, number, number],
   position: [number, number, number],
   material: PC.StandardMaterial,
@@ -106,6 +119,160 @@ function addPrimitive(
   entity.setLocalPosition(...position);
   parent.addChild(entity);
   return entity;
+}
+
+function roundedRect(
+  context: CanvasRenderingContext2D,
+  x: number,
+  y: number,
+  width: number,
+  height: number,
+  radius: number,
+) {
+  const clamped = Math.min(radius, width / 2, height / 2);
+  context.beginPath();
+  context.moveTo(x + clamped, y);
+  context.arcTo(x + width, y, x + width, y + height, clamped);
+  context.arcTo(x + width, y + height, x, y + height, clamped);
+  context.arcTo(x, y + height, x, y, clamped);
+  context.arcTo(x, y, x + width, y, clamped);
+  context.closePath();
+}
+
+function makeMarkerMaterial(
+  pc: typeof PC,
+  app: PC.Application,
+  name: string,
+  canvas: HTMLCanvasElement,
+) {
+  const texture = new pc.Texture(app.graphicsDevice, {
+    name,
+    width: canvas.width,
+    height: canvas.height,
+    format: pc.PIXELFORMAT_SRGBA8,
+    mipmaps: true,
+    minFilter: pc.FILTER_LINEAR_MIPMAP_LINEAR,
+    magFilter: pc.FILTER_LINEAR,
+    anisotropy: Math.min(8, app.graphicsDevice.maxAnisotropy),
+  });
+  texture.setSource(canvas);
+
+  const material = new pc.StandardMaterial();
+  material.name = name;
+  material.diffuseMap = texture;
+  material.emissiveMap = texture;
+  material.emissive = new pc.Color(1, 1, 1);
+  material.emissiveIntensity = 1;
+  material.opacityMap = texture;
+  material.opacityMapChannel = 'a';
+  material.useLighting = false;
+  material.useFog = false;
+  material.useSkybox = false;
+  material.blendType = pc.BLEND_NORMAL;
+  material.depthWrite = false;
+  material.cull = pc.CULLFACE_NONE;
+  material.update();
+  return material;
+}
+
+function makeTopBadgeCanvas(team: 'blue' | 'yellow', number: number) {
+  const canvas = document.createElement('canvas');
+  canvas.width = 512;
+  canvas.height = 512;
+  const context = canvas.getContext('2d');
+  if (!context) throw new Error('Unable to create robot marker canvas.');
+  const color = TEAM_COLORS[team];
+  context.clearRect(0, 0, canvas.width, canvas.height);
+  context.beginPath();
+  context.arc(256, 256, 218, 0, Math.PI * 2);
+  context.fillStyle = '#f8fafc';
+  context.fill();
+  context.lineWidth = 34;
+  context.strokeStyle = color;
+  context.stroke();
+  context.fillStyle = '#071016';
+  context.font = '900 310px Inter, Arial, sans-serif';
+  context.textAlign = 'center';
+  context.textBaseline = 'middle';
+  context.fillText(String(number), 256, 280);
+  return canvas;
+}
+
+function makeTeamLabelCanvas(team: 'blue' | 'yellow', number: number) {
+  const canvas = document.createElement('canvas');
+  canvas.width = 512;
+  canvas.height = 256;
+  const context = canvas.getContext('2d');
+  if (!context) throw new Error('Unable to create robot label canvas.');
+  const color = TEAM_COLORS[team];
+  context.clearRect(0, 0, canvas.width, canvas.height);
+  // PlayCanvas' generated plane presents this canvas with V increasing in the
+  // opposite direction once it is rotated into a camera-facing billboard.
+  context.translate(canvas.width, canvas.height);
+  context.scale(-1, -1);
+  roundedRect(context, 10, 16, 492, 224, 38);
+  context.fillStyle = 'rgba(5, 16, 24, 0.94)';
+  context.fill();
+  context.lineWidth = 14;
+  context.strokeStyle = color;
+  context.stroke();
+  roundedRect(context, 25, 31, 38, 194, 17);
+  context.fillStyle = color;
+  context.fill();
+  context.fillStyle = '#f8fafc';
+  context.textAlign = 'left';
+  context.textBaseline = 'middle';
+  context.font = '800 64px Inter, Arial, sans-serif';
+  context.fillText(team.toUpperCase(), 88, 88);
+  context.font = '900 112px Inter, Arial, sans-serif';
+  context.fillText(String(number), 88, 169);
+  return canvas;
+}
+
+function addRobotMarkers(
+  pc: typeof PC,
+  app: PC.Application,
+  root: PC.Entity,
+  actor: ActorDefinition,
+) {
+  const team = actor.team === 'yellow' ? 'yellow' : 'blue';
+  const number = Math.max(1, Math.min(4, actor.number ?? 1));
+  const badgeMaterial = makeMarkerMaterial(
+    pc,
+    app,
+    `${team} robot ${number} top badge`,
+    makeTopBadgeCanvas(team, number),
+  );
+  const labelMaterial = makeMarkerMaterial(
+    pc,
+    app,
+    `${team} robot ${number} camera label`,
+    makeTeamLabelCanvas(team, number),
+  );
+
+  const topBadge = addPrimitive(
+    pc,
+    root,
+    `Robot ${number} overhead badge`,
+    'plane',
+    [0.052, 1, 0.052],
+    [0, 0.19, 0],
+    badgeMaterial,
+  );
+  const labelPivot = new pc.Entity(`Robot ${number} label pivot`);
+  labelPivot.setLocalPosition(0, 0.235, 0);
+  root.addChild(labelPivot);
+  const label = addPrimitive(
+    pc,
+    labelPivot,
+    `${team.toUpperCase()} ${number}`,
+    'plane',
+    [0.132, 1, 0.066],
+    [0, 0, 0],
+    labelMaterial,
+  );
+  label.setLocalEulerAngles(-90, 0, 0);
+  return { topBadge, labelPivot };
 }
 
 function addLine(
@@ -655,7 +822,6 @@ function buildRobot(
     neutral: PC.StandardMaterial;
     cyan: PC.StandardMaterial;
     roller: PC.StandardMaterial;
-    marker: PC.StandardMaterial;
   },
 ) {
   const root = new pc.Entity(actor.id);
@@ -673,9 +839,11 @@ function buildRobot(
     [0, 0.004, 0],
     teamMaterial,
   );
+  const procedural = new pc.Entity('Lab proxy visual');
+  root.addChild(procedural);
   addPrimitive(
     pc,
-    root,
+    procedural,
     'Chassis',
     'cylinder',
     [0.17, 0.07, 0.17],
@@ -684,7 +852,7 @@ function buildRobot(
   );
   addPrimitive(
     pc,
-    root,
+    procedural,
     'Team plate',
     'cylinder',
     [0.145, 0.025, 0.145],
@@ -693,7 +861,7 @@ function buildRobot(
   );
   addPrimitive(
     pc,
-    root,
+    procedural,
     'Controller',
     'box',
     [0.09, 0.035, 0.075],
@@ -702,7 +870,7 @@ function buildRobot(
   );
   addPrimitive(
     pc,
-    root,
+    procedural,
     'Dribbler roller',
     'cylinder',
     [0.026, 0.115, 0.026],
@@ -711,23 +879,22 @@ function buildRobot(
   ).setLocalEulerAngles(0, 0, 90);
   addPrimitive(
     pc,
-    root,
-    'Top marker',
-    'cylinder',
-    [0.05, 0.006, 0.05],
-    [0, 0.141, -0.005],
-    shared.marker,
-  );
-  addPrimitive(
-    pc,
-    root,
+    procedural,
     'Front direction',
     'cone',
     [0.035, 0.025, 0.035],
     [0, 0.116, 0.07],
     shared.cyan,
   ).setLocalEulerAngles(90, 0, 0);
-  return root;
+  const markers = addRobotMarkers(pc, app, root, actor);
+  return {
+    root,
+    visual: {
+      procedural,
+      imported: null,
+      ...markers,
+    } satisfies RobotVisualHandle,
+  };
 }
 
 function buildBall(
@@ -812,7 +979,6 @@ function buildScene(
     neutral: makeMaterial(pc, '#8b969f', { metalness: 0.48, gloss: 0.64 }),
     cyan: makeMaterial(pc, '#e879f9', { emissive: '#9d3bb0', gloss: 0.62 }),
     roller: makeMaterial(pc, '#e6edf2', { metalness: 0.7, gloss: 0.8 }),
-    marker: makeMaterial(pc, '#f5f7f8', { gloss: 0.3 }),
     ball: makeMaterial(pc, TEAM_COLORS.neutral, {
       emissive: '#6d1c05',
       gloss: 0.62,
@@ -821,13 +987,99 @@ function buildScene(
   };
 
   const actorEntities = new Map<string, PC.Entity>();
+  const robotVisualHandles = new Map<string, RobotVisualHandle>();
   for (const actor of actors) {
-    const entity =
-      actor.kind === 'ball'
-        ? buildBall(pc, app, materials)
-        : buildRobot(pc, app, actor, materials);
-    actorEntities.set(actor.id, entity);
+    if (actor.kind === 'ball') {
+      actorEntities.set(actor.id, buildBall(pc, app, materials));
+    } else {
+      const robot = buildRobot(pc, app, actor, materials);
+      actorEntities.set(actor.id, robot.root);
+      robotVisualHandles.set(actor.id, robot.visual);
+    }
   }
+
+  const containerCache = new Map<string, Promise<PC.ContainerResource>>();
+  let visualRevision = 0;
+  let activeRobotVisual: RobotVisualId | null = null;
+  let disposed = false;
+
+  const loadContainer = (url: string) => {
+    const existing = containerCache.get(url);
+    if (existing) return existing;
+    const promise = new Promise<PC.ContainerResource>((resolve, reject) => {
+      app.assets.loadFromUrl(url, 'container', (error, asset) => {
+        if (error || !asset) {
+          containerCache.delete(url);
+          reject(new Error(error ?? `No robot asset returned for ${url}.`));
+          return;
+        }
+        resolve(asset.resource as PC.ContainerResource);
+      });
+    });
+    containerCache.set(url, promise);
+    return promise;
+  };
+
+  const positionMarkers = (markerHeight: number) => {
+    for (const handle of robotVisualHandles.values()) {
+      handle.topBadge.setLocalPosition(0, markerHeight, 0);
+      handle.labelPivot.setLocalPosition(0, markerHeight + 0.047, 0);
+    }
+  };
+
+  const setRobotVisual = async (visual: RobotVisualId) => {
+    const selection = getRobotVisual(visual);
+    const revision = ++visualRevision;
+    if (activeRobotVisual === selection.id) return;
+
+    if (!selection.assetPath) {
+      for (const handle of robotVisualHandles.values()) {
+        handle.imported?.destroy();
+        handle.imported = null;
+        handle.procedural.enabled = true;
+      }
+      positionMarkers(selection.markerHeight);
+      activeRobotVisual = selection.id;
+      return;
+    }
+
+    const url = new URL(selection.assetPath, document.baseURI).href;
+    let resource: PC.ContainerResource;
+    try {
+      resource = await loadContainer(url);
+    } catch (error) {
+      if (disposed || revision !== visualRevision) return;
+      throw error;
+    }
+    if (disposed || revision !== visualRevision) return;
+
+    const candidates = new Map<string, PC.Entity>();
+    for (const actor of actors) {
+      if (actor.kind !== 'robot') continue;
+      const instance = resource.instantiateRenderEntity({
+        castShadows: true,
+        receiveShadows: true,
+      });
+      instance.name = `${selection.label} – ${actor.label}`;
+      instance.setLocalPosition(0, 0.003, 0);
+      candidates.set(actor.id, instance);
+    }
+    if (disposed || revision !== visualRevision) {
+      for (const instance of candidates.values()) instance.destroy();
+      return;
+    }
+
+    for (const [actorId, handle] of robotVisualHandles) {
+      const instance = candidates.get(actorId);
+      if (!instance) continue;
+      handle.imported?.destroy();
+      handle.imported = instance;
+      handle.procedural.enabled = false;
+      actorEntities.get(actorId)?.addChild(instance);
+    }
+    positionMarkers(selection.markerHeight);
+    activeRobotVisual = selection.id;
+  };
 
   const ruleGeometry = new pc.Entity('Rule geometry overlays');
   app.root.addChild(ruleGeometry);
@@ -924,6 +1176,14 @@ function buildScene(
   });
   app.root.addChild(camera);
 
+  const updateRobotLabels = () => {
+    const cameraPosition = camera.getPosition();
+    for (const handle of robotVisualHandles.values()) {
+      handle.labelPivot.lookAt(cameraPosition);
+    }
+  };
+  app.on('update', updateRobotLabels);
+
   const orbit = {
     yaw: 35,
     pitch: 49,
@@ -974,6 +1234,9 @@ function buildScene(
     poses: Record<string, Pose>,
   ) => {
     activePreset = preset;
+    for (const handle of robotVisualHandles.values()) {
+      handle.labelPivot.enabled = preset !== 'overhead';
+    }
     camera.camera!.projection = pc.PROJECTION_PERSPECTIVE;
     camera.camera!.orthoHeight = 1.5;
     orbit.target.set(0, 0.05, 0);
@@ -1100,9 +1363,13 @@ function buildScene(
     ruleGeometry,
     capturePlane,
     contactEvidence,
+    setRobotVisual,
     setCameraPreset,
     updateCameraTarget,
     dispose: () => {
+      disposed = true;
+      visualRevision += 1;
+      app.off('update', updateRobotLabels);
       resizeObserver.disconnect();
       canvas.removeEventListener('pointerdown', onPointerDown);
       canvas.removeEventListener('pointermove', onPointerMove);
@@ -1123,16 +1390,36 @@ export function PlayCanvasViewport({
   showContactEvidence,
   ballTrail,
   phaseLabel,
+  robotVisual,
   onReady,
 }: ViewportProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const sceneRef = useRef<SceneHandles | null>(null);
   const posesRef = useRef(poses);
+  const cameraPresetRef = useRef(cameraPreset);
+  const robotVisualRef = useRef(robotVisual);
   const [engineError, setEngineError] = useState<string | null>(null);
+  const [robotAssetError, setRobotAssetError] = useState<string | null>(null);
 
   useEffect(() => {
     posesRef.current = poses;
   }, [poses]);
+
+  useEffect(() => {
+    cameraPresetRef.current = cameraPreset;
+  }, [cameraPreset]);
+
+  useEffect(() => {
+    robotVisualRef.current = robotVisual;
+    const scene = sceneRef.current;
+    if (!scene) return;
+    setRobotAssetError(null);
+    void scene.setRobotVisual(robotVisual).catch((error: unknown) => {
+      setRobotAssetError(
+        error instanceof Error ? error.message : 'Unable to load robot design.',
+      );
+    });
+  }, [robotVisual]);
 
   useEffect(() => {
     let cancelled = false;
@@ -1145,6 +1432,16 @@ export function PlayCanvasViewport({
         if (cancelled) return;
         handles = buildScene(pc, canvas, actors);
         sceneRef.current = handles;
+        handles.setCameraPreset(cameraPresetRef.current, posesRef.current);
+        void handles
+          .setRobotVisual(robotVisualRef.current)
+          .catch((error: unknown) => {
+            setRobotAssetError(
+              error instanceof Error
+                ? error.message
+                : 'Unable to load robot design.',
+            );
+          });
         onReady?.();
       })
       .catch((error: unknown) => {
@@ -1254,6 +1551,12 @@ export function PlayCanvasViewport({
               {engineError}
             </p>
           </div>
+        </div>
+      ) : null}
+      {robotAssetError && !engineError ? (
+        <div className="absolute bottom-3 left-1/2 max-w-[min(90%,28rem)] -translate-x-1/2 rounded-lg border border-amber-300/25 bg-[#071016]/90 px-3 py-2 text-center text-xs text-amber-100 shadow-lg backdrop-blur">
+          The selected robot model could not be loaded. The current model
+          remains visible.
         </div>
       ) : null}
     </div>
