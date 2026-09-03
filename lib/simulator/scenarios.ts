@@ -406,8 +406,9 @@ export const SCENARIOS: ScenarioDefinition[] = [
         blue.z + Math.cos(yaw) * frontDistance,
         -time * 5.4,
       );
+      const releaseAwayFromOpponentX = controlledBall.x <= yellow.x ? -1 : 1;
       const ballPose = pose(
-        controlledBall.x + 0.3 * released,
+        controlledBall.x + releaseAwayFromOpponentX * 0.3 * released,
         controlledBall.z + 0.025 * released,
         controlledBall.yaw - released * 2,
       );
