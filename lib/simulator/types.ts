@@ -47,8 +47,23 @@ export interface ScenarioEvidence {
   text: string;
 }
 
+/**
+ * A visual attachment used by deterministic rule replays. A frame can name
+ * either one owner or no owner, so two robots can never hold the single ball
+ * at the same time.
+ */
+export interface BallPossession {
+  ownerId: string;
+  /** Distance from the owner's centre along its forward axis, in metres. */
+  forwardOffsetM: number;
+  /** Distance along the owner's right axis, in metres. */
+  lateralOffsetM?: number;
+}
+
 export interface ScenarioFrame {
   actors: Record<string, Pose>;
+  /** Null while the ball is moving freely. */
+  ballPossession: BallPossession | null;
   metrics: Record<string, FrameMetric>;
   phaseLabel: string;
   /** Short, viewer-facing observations valid at this instant. */

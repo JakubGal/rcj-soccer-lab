@@ -59,6 +59,11 @@ export const RCJ_FIELD_SPEC_2026 = {
   },
 } as const;
 
+/** Non-normative visual guides shared by the interactive teaching scenes. */
+export const RCJ_SIMULATOR_GUIDES = {
+  robotCapturePlaneForward: 0.102,
+} as const;
+
 const spec = RCJ_FIELD_SPEC_2026;
 
 export const RCJ_FIELD_DERIVED = {

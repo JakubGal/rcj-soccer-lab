@@ -45,10 +45,6 @@ import {
 } from '@/lib/simulator/robot-models';
 import { getScenario, SCENARIOS } from '@/lib/simulator/scenarios';
 import type {
-  RcjJoltWorld,
-  RcjPhysicsSnapshot,
-} from '@/lib/simulator/jolt-world';
-import type {
   RefereeChoice,
   ScenarioDefinition,
   SimulatorMode,
@@ -65,8 +61,6 @@ const CAMERA_OPTIONS: Array<{ value: CameraPreset; label: string }> = [
 ];
 
 const SPEEDS = [0.5, 1, 2] as const;
-
-type PhysicsStatus = 'loading' | 'ready' | 'fallback';
 
 type SnapshotWindow = Window & {
   snapshot?: () => unknown;
@@ -187,72 +181,10 @@ export function SimulatorApp() {
   const [isEmbed, setIsEmbed] = useState(false);
   const [embedCopied, setEmbedCopied] = useState(false);
   const [rendererReady, setRendererReady] = useState(false);
-  const [physicsStatus, setPhysicsStatus] = useState<PhysicsStatus>('loading');
-  const [physicsSnapshot, setPhysicsSnapshot] =
-    useState<RcjPhysicsSnapshot | null>(null);
   const previousFrameRef = useRef<number | null>(null);
-  const physicsWorldRef = useRef<RcjJoltWorld | null>(null);
 
   const scenario = useMemo(() => getScenario(scenarioId), [scenarioId]);
-  const authoredFrame = useMemo(() => scenario.sample(time), [scenario, time]);
-  const frame = useMemo(() => {
-    if (
-      scenario.id !== 'legal-dribbler-backspin' ||
-      !physicsSnapshot ||
-      time >= 7.15
-    ) {
-      return authoredFrame;
-    }
-
-    const robotPose = authoredFrame.actors['blue-1'];
-    if (!robotPose) return authoredFrame;
-    const relativeX =
-      physicsSnapshot.ball.position.x - physicsSnapshot.robot.position.x;
-    const relativeZ =
-      physicsSnapshot.ball.position.z - physicsSnapshot.robot.position.z;
-    const cosine = Math.cos(robotPose.yaw);
-    const sine = Math.sin(robotPose.yaw);
-    const physicalBallPose = {
-      x: robotPose.x + relativeX * cosine + relativeZ * sine,
-      z: robotPose.z - relativeX * sine + relativeZ * cosine,
-      yaw:
-        physicsSnapshot.simulationTime *
-        physicsSnapshot.dribbler.ballBackspinRadPerSec,
-    };
-    const withinLimit = physicsSnapshot.dribbler.within15MmCaptureLimit;
-    const hasBackspin =
-      Math.abs(physicsSnapshot.dribbler.ballBackspinRadPerSec) > 2;
-
-    return {
-      ...authoredFrame,
-      actors: {
-        ...authoredFrame.actors,
-        ball: physicalBallPose,
-      },
-      metrics: {
-        ...authoredFrame.metrics,
-        roller: {
-          label: 'Powered roller',
-          value: `${physicsSnapshot.dribbler.surfaceSpeedMps.toFixed(1)} m/s · Jolt`,
-          status: 'neutral' as const,
-        },
-        capture: {
-          label: 'Capture depth',
-          value: `${physicsSnapshot.dribbler.captureDepthMm.toFixed(1)} mm`,
-          status: withinLimit ? ('good' as const) : ('bad' as const),
-        },
-        spin: {
-          label: 'Ball backspin',
-          value: `${physicsSnapshot.dribbler.ballBackspinRadPerSec.toFixed(1)} rad/s`,
-          status: hasBackspin ? ('good' as const) : ('warn' as const),
-        },
-      },
-      evidence: [
-        'FACT — A 120 Hz Jolt contact model is driving the ball/roller relationship.',
-        ...authoredFrame.evidence,
-      ],
-    };
-  }, [authoredFrame, physicsSnapshot, scenario.id, time]);
+  const frame = useMemo(() => scenario.sample(time), [scenario, time]);
   const selectedChoice = useMemo(
     () =>
       scenario.choices.find((choice) => choice.id === answers[scenario.id]) ??
@@ -281,8 +213,6 @@ export function SimulatorApp() {
     setPlaying(false);
     setTime(0);
     previousFrameRef.current = null;
-    const world = physicsWorldRef.current;
-    if (world) setPhysicsSnapshot(world.resetDribblerDemo());
   }, []);
 
   const selectScenario = useCallback((id: string) => {
@@ -293,8 +223,6 @@ export function SimulatorApp() {
     setCameraPreset(normalizeCamera(nextScenario.defaultCamera));
     setShowContactEvidence(false);
     previousFrameRef.current = null;
-    const world = physicsWorldRef.current;
-    if (world) setPhysicsSnapshot(world.resetDribblerDemo());
   }, []);
 
   const handleRendererReady = useCallback(() => {
@@ -333,29 +261,6 @@ export function SimulatorApp() {
   }, []);
 
   useEffect(() => {
-    let cancelled = false;
-    import('@/lib/simulator/jolt-world')
-      .then(async (physics) => {
-        const world = await physics.createRcjJoltWorld();
-        if (cancelled) {
-          world.dispose();
-          return;
-        }
-        physicsWorldRef.current = world;
-        setPhysicsSnapshot(world.resetDribblerDemo());
-        setPhysicsStatus('ready');
-      })
-      .catch(() => {
-        if (!cancelled) setPhysicsStatus('fallback');
-      });
-    return () => {
-      cancelled = true;
-      physicsWorldRef.current?.dispose();
-      physicsWorldRef.current = null;
-    };
-  }, []);
-
-  useEffect(() => {
     if (!playing) {
       previousFrameRef.current = null;
       return;
@@ -365,12 +270,6 @@ export function SimulatorApp() {
       const previous = previousFrameRef.current ?? now;
       previousFrameRef.current = now;
       const delta = Math.min((now - previous) / 1000, 0.08) * speed;
-      if (
-        scenario.id === 'legal-dribbler-backspin' &&
-        physicsWorldRef.current
-      ) {
-        setPhysicsSnapshot(physicsWorldRef.current.step(delta));
-      }
       setTime((current) => {
         const next = current + delta;
         if (next >= scenario.duration) {
@@ -384,7 +283,7 @@ export function SimulatorApp() {
     };
     animationFrame = window.requestAnimationFrame(animate);
     return () => window.cancelAnimationFrame(animationFrame);
-  }, [playing, scenario.duration, scenario.id, speed]);
+  }, [playing, scenario.duration, speed]);
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
@@ -427,7 +326,9 @@ export function SimulatorApp() {
       camera: cameraPreset,
       robotVisual,
       phase: frame.phaseLabel,
-      physics: physicsStatus,
+      physics: 'scripted',
+      motion: 'deterministic-possession',
+      ballOwner: frame.ballPossession?.ownerId ?? null,
       actors: frame.actors,
       metrics: frame.metrics,
       answer: selectedChoice
@@ -445,7 +346,6 @@ export function SimulatorApp() {
     cameraPreset,
     frame,
     mode,
-    physicsStatus,
     playing,
     robotVisual,
     scenario,
@@ -475,12 +375,14 @@ export function SimulatorApp() {
     window.setTimeout(() => setEmbedCopied(false), 1800);
   };
 
-  const physicsLabel =
-    physicsStatus === 'ready'
-      ? 'Jolt · 120 Hz'
-      : physicsStatus === 'loading'
-        ? 'Physics loading'
-        : 'Replay fallback';
+  const ballOwner = frame.ballPossession
+    ? scenario.actors.find(
+        (actor) => actor.id === frame.ballPossession?.ownerId,
+      )
+    : null;
+  const ballStatusLabel = ballOwner
+    ? `Ball attached · ${ballOwner.label}`
+    : 'Ball · free';
 
   if (isEmbed) {
     return (
@@ -694,17 +596,25 @@ export function SimulatorApp() {
               <Badge
                 variant="outline"
                 className={cn(
-                  'border-white/10 bg-black/35 text-white/60 backdrop-blur-md',
-                  physicsStatus === 'ready' && 'text-emerald-300',
+                  'border-white/10 bg-black/35 backdrop-blur-md',
+                  ballOwner?.team === 'blue'
+                    ? 'text-sky-300'
+                    : ballOwner?.team === 'yellow'
+                      ? 'text-amber-300'
+                      : 'text-white/60',
                 )}
               >
                 <span
                   className={cn(
-                    'size-1.5 rounded-full bg-amber-300',
-                    physicsStatus === 'ready' && 'bg-emerald-400',
+                    'size-1.5 rounded-full',
+                    ballOwner?.team === 'blue'
+                      ? 'bg-sky-400'
+                      : ballOwner?.team === 'yellow'
+                        ? 'bg-amber-400'
+                        : 'bg-white/45',
                   )}
                 />
-                {physicsLabel}
+                {ballStatusLabel}
               </Badge>
             </div>
             <div className="viewport-selects">
@@ -1013,8 +923,9 @@ export function SimulatorApp() {
 
           <footer className="context-footer">
             <p className="text-[10px] leading-4 text-muted-foreground">
-              Physics supplies observations; the rubric keeps objective facts,
-              referee judgment, and committee interpretation separate.
+              Repeatable animation supplies observations; the rubric keeps
+              objective facts, referee judgment, and committee interpretation
+              separate.
             </p>
             <a
               href={scenario.ruleRef.url}

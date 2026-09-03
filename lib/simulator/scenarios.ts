@@ -1,6 +1,11 @@
-import { RCJ_FIELD_DERIVED, RCJ_FIELD_SPEC_2026 } from './field-spec';
+import {
+  RCJ_FIELD_DERIVED,
+  RCJ_FIELD_SPEC_2026,
+  RCJ_SIMULATOR_GUIDES,
+} from './field-spec';
 import type {
   ActorDefinition,
+  BallPossession,
   FrameMetric,
   Pose,
   RefereeChoice,
@@ -98,9 +103,42 @@ function frame(
   metrics: Record<string, FrameMetric>,
   phaseLabel: string,
   evidenceDetails: ScenarioEvidence[],
+  ballPossession: BallPossession | null = null,
 ): ScenarioFrame {
+  let resolvedActors = actors;
+  if (ballPossession) {
+    const owner = actors[ballPossession.ownerId];
+    const currentBall = actors.ball;
+    if (!owner || !currentBall) {
+      throw new Error(
+        `Ball possession requires both ball and owner "${ballPossession.ownerId}" poses.`,
+      );
+    }
+
+    const forwardX = Math.sin(owner.yaw);
+    const forwardZ = Math.cos(owner.yaw);
+    const rightX = Math.cos(owner.yaw);
+    const rightZ = -Math.sin(owner.yaw);
+    const lateralOffset = ballPossession.lateralOffsetM ?? 0;
+    resolvedActors = {
+      ...actors,
+      ball: {
+        ...currentBall,
+        x:
+          owner.x +
+          forwardX * ballPossession.forwardOffsetM +
+          rightX * lateralOffset,
+        z:
+          owner.z +
+          forwardZ * ballPossession.forwardOffsetM +
+          rightZ * lateralOffset,
+      },
+    };
+  }
+
   return {
-    actors,
+    actors: resolvedActors,
+    ballPossession,
     metrics,
     phaseLabel,
     evidence: evidenceDetails.map(evidenceLabel),
@@ -354,7 +392,15 @@ export const SCENARIOS: ScenarioDefinition[] = [
         challenge,
       );
       const released = smoothProgress(time, 7.15, 8.7);
-      const frontDistance = 0.107;
+      // Keep the visual ball shallow enough that it touches the roller without
+      // intersecting deeply with any of the selectable robot meshes.
+      const frontDistance = 0.1175;
+      const captureDepthMm = Math.max(
+        0,
+        (RCJ_SIMULATOR_GUIDES.robotCapturePlaneForward -
+          (frontDistance - RCJ_FIELD_SPEC_2026.ball.diameter / 2)) *
+          1000,
+      );
       const controlledBall = pose(
         blue.x + Math.sin(yaw) * frontDistance,
         blue.z + Math.cos(yaw) * frontDistance,
@@ -396,7 +442,7 @@ export const SCENARIOS: ScenarioDefinition[] = [
           roller: metric('Powered roller', '1.5 m/s surface', 'neutral'),
           capture: metric(
             'Capture depth',
-            `${mix(9, 12, travel).toFixed(0)} mm`,
+            `${captureDepthMm.toFixed(1)} mm`,
             'good',
           ),
           spin: metric(
@@ -412,6 +458,9 @@ export const SCENARIOS: ScenarioDefinition[] = [
         },
         phaseLabel,
         evidence,
+        released === 0
+          ? { ownerId: 'blue-1', forwardOffsetM: frontDistance }
+          : null,
       );
     },
   },
@@ -504,6 +553,7 @@ export const SCENARIOS: ScenarioDefinition[] = [
         },
         phaseLabel,
         evidence,
+        { ownerId: 'blue-1', forwardOffsetM: 0.112 },
       );
     },
   },
@@ -551,7 +601,7 @@ export const SCENARIOS: ScenarioDefinition[] = [
         relocation,
       );
       const yellow = pose(0.18, -0.55 + 0.025 * Math.sin(time * 0.8), PI);
-      const ballPose = pose(-0.14, -0.77 + 0.012 * Math.sin(time), time * 0.4);
+      const ballPose = pose(-0.14, -0.77, 0);
       const twoInside = time >= 2.4 && relocation < 0.65;
       const phaseLabel =
         time < 2.4

@@ -17,13 +17,15 @@ Live application: <https://jakubgal.github.io/rcj-soccer-lab/>
 - Selectable XLC Open 2020, XLC Innovation 2021, and lightweight proxy robot
   visuals, with camera-facing team labels and overhead numbers.
 - A scored referee rubric that can accept legitimate discretion.
-- A 120 Hz JoltPhysics dribbler/contact demonstration using a 42 mm ball,
-  moving roller surface, bounded compliance, and live capture/backspin metrics.
+- A deterministic single-owner ball system: the 42 mm ball stays at one stable
+  robot-relative attachment point and changes to free motion only at an authored
+  release.
 - An engine-independent scenario format in `lib/simulator`.
 - A development `window.snapshot()` hook for automated inspection.
 
-The dribbler constants are a reduced-order teaching calibration. They are not a
-certificate that a physical robot complies with the rules. Physics observations
+Ball attachment is a visual teaching aid, not a certificate that a physical
+robot complies with the rules. The legal example releases the ball during a
+challenge; the illegal-holding example deliberately does not. Observable facts
 and referee judgments intentionally remain separate.
 
 ## Run on localhost
@@ -76,10 +78,11 @@ snippet. Other IDs are exported in `lib/simulator/scenarios.ts`.
 ## Authoring model
 
 Published rule clips use deterministic sampled transforms so that video,
-scrubbing, and old rule examples remain stable. Live physics can replace selected
-actor tracks when interaction is useful. Referee choices carry a grade, a
-normalised score, and feedback; ambiguous situations can include more than one
-fully accepted decision.
+scrubbing, speed changes, and old rule examples remain stable. A frame can name
+one ball owner or no owner; the resolved ball pose is derived from the same
+timeline as every robot. Referee choices carry a grade, a normalised score, and
+feedback; ambiguous situations can include more than one fully accepted
+decision.
 
 Primary specifications:
 
@@ -106,5 +109,5 @@ for QA.
 A folder of individual STL or SolidWorks part files is insufficient when it
 does not include assembly occurrence transforms, repeats, and material data.
 Export the resolved top-level assembly instead. The selectable CAD mesh is only
-the visual layer; the simulator deliberately keeps its stable Jolt collision
-body and powered-dribbler model when a design changes.
+the visual layer; robot choice does not change the standard ball attachment
+point or any authored rule situation.

@@ -6,6 +6,7 @@ import type * as PC from 'playcanvas';
 import {
   RCJ_FIELD_DERIVED,
   RCJ_FIELD_SPEC_2026,
+  RCJ_SIMULATOR_GUIDES,
 } from '@/lib/simulator/field-spec';
 import {
   getRobotVisual,
@@ -1500,7 +1501,7 @@ export function PlayCanvasViewport({
     );
     const dribblerPose = dribblerActor ? poses[dribblerActor.id] : undefined;
     if (dribblerPose) {
-      const planeDistance = 0.102;
+      const planeDistance = RCJ_SIMULATOR_GUIDES.robotCapturePlaneForward;
       scene.capturePlane.setPosition(
         dribblerPose.x + Math.sin(dribblerPose.yaw) * planeDistance,
         0.052,
