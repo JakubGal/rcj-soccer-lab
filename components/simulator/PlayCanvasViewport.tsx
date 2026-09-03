@@ -66,6 +66,8 @@ const TEAM_COLORS = {
   neutral: '#ff7a45',
 };
 
+const BALL_CENTER_HEIGHT = RCJ_FIELD_SPEC_2026.ball.diameter / 2 + 0.001;
+
 function hexToRgb(hex: string) {
   const value = Number.parseInt(hex.slice(1), 16);
   return {
@@ -918,7 +920,7 @@ function buildBall(
       RCJ_FIELD_SPEC_2026.ball.diameter,
       RCJ_FIELD_SPEC_2026.ball.diameter,
     ],
-    [0, RCJ_FIELD_SPEC_2026.ball.diameter / 2 + 0.001, 0],
+    [0, 0, 0],
     materials.ball,
   );
   const spinMarker = addPrimitive(
@@ -927,7 +929,7 @@ function buildBall(
     'Spin marker',
     'cylinder',
     [0.011, 0.003, 0.011],
-    [0, 0.022, 0.0205],
+    [0, 0, 0.0205],
     materials.ballDetail,
   );
   spinMarker.setLocalEulerAngles(90, 0, 0);
@@ -937,7 +939,7 @@ function buildBall(
     'Spin stripe',
     'box',
     [0.004, 0.033, 0.004],
-    [0.0205, 0.022, 0],
+    [0.0205, 0, 0],
     materials.ballDetail,
   );
   return root;
@@ -1471,10 +1473,11 @@ export function PlayCanvasViewport({
         continue;
       }
       entity.enabled = true;
-      entity.setPosition(pose.x, 0, pose.z);
       if (actor.kind === 'ball') {
+        entity.setPosition(pose.x, BALL_CENTER_HEIGHT, pose.z);
         entity.setEulerAngles((pose.yaw * 180) / Math.PI, 0, 0);
       } else {
+        entity.setPosition(pose.x, 0, pose.z);
         entity.setEulerAngles(0, (pose.yaw * 180) / Math.PI, 0);
       }
     }
