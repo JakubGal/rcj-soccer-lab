@@ -36,7 +36,7 @@ export const metadata: Metadata = {
     template: '%s · RCJ Soccer Lab',
   },
   description:
-    'Explore RoboCupJunior Soccer 2026 situations in 3D, learn observable rule evidence, and practise referee decisions.',
+    'Explore the complete RoboCupJunior Soccer 2026 rulebook with 3D examples, interactive inspections, referee practice, and playable matches.',
   ...(githubPagesUrl ? { alternates: { canonical: githubPagesUrl } } : {}),
   icons: {
     icon: faviconUrl,

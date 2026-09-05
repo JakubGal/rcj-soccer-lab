@@ -12,7 +12,15 @@ Live application: <https://jakubgal.github.io/rcj-soccer-lab/>
   areas, neutral spots, matte walls/goals, and ball-return wedges with flat goal
   pockets.
 - Six deterministic, frame-scrubbable rule situations.
+- A full **Rules** reader covering six official documents and 259 navigation
+  entries, including appendices and footnotes.
+- 32 additional gameplay animations with timelines, camera choices and questions,
+  plus interactive inspection, kicker, field, ball and scoring workbenches.
 - Explore, Learn, and Referee modes.
+- A Play mode with live 2v2 matches, manual driving, autonomous teams, and a
+  scoreboard with timed games and automatic kickoffs.
+- Referee AI match practice with 35 shuffled incidents, scored calls, real
+  removals and return timers, goals, placements, restarts and replay.
 - Multiple camera presets plus free orbit/zoom.
 - Selectable XLC Open 2020, XLC Innovation 2021, and lightweight proxy robot
   visuals, with camera-facing team labels and overhead numbers.
@@ -51,6 +59,9 @@ Validation commands:
 
 ```bash
 pnpm typecheck
+pnpm test:match
+pnpm test:rules
+pnpm test:referee
 pnpm lint
 pnpm build
 ```
@@ -58,6 +69,140 @@ pnpm build
 Every push to `main` is also type-checked, statically exported, and deployed
 to GitHub Pages by `.github/workflows/deploy-pages.yml`. The normal local and
 Sites/Cloudflare builds remain unchanged.
+
+## Play simulated games
+
+Open **Play** in the top bar, or visit `/?mode=play`. Select **You vs AI** to
+drive Blue 1 with an AI teammate against two opponents; **AI vs AI** lets both
+teams play. Each team can also be set to manual with an AI teammate,
+autonomous, or stationary. Picking any robot takes manual control of its team;
+only one robot is directly driven at a time. Start the match to begin.
+
+- **WASD / arrow keys:** robot-relative forward, backward, and sideways motion.
+- **Q / E:** turn left / right. **Space:** kick a ball directly in front.
+- **C:** switch to the other robot on the selected team.
+- **P:** pause / resume. **R:** reset the match and score.
+- The on-screen buttons can also be held, including on a touchscreen.
+
+The manual robot's dribbler can be switched off. Match length is 1, 2, or 5
+minutes; changing it resets the match. Input clears when paused, when switching
+robots or control modes, or when the window loses focus. Backgrounding the page
+pauses the game. Leaving Play ends the current match.
+
+Play uses an independent 120 Hz planar model with swept robot collisions,
+ball contact and damping, kicks, and goal-panel collisions. A goal counts when
+the ball contacts the inside back wall. Goals restart automatically; stalled
+AI play resets after 8 seconds. This is a practice game, without ball height,
+ramp physics, or automatic referee penalties. Scripted rule lessons and the
+Manual layout editor keep their separate behavior.
+
+## Referee the AI teams
+
+In **Play**, select **Referee AI match**, or open
+`/?mode=play&referee=1`. Both teams play autonomously. Press **Whistle** (Space)
+when you want to make a call, select the affected robot where relevant, and
+choose your action. Goal buttons identify the scoring team directly. **P**
+pauses playback. Other actions are available through the action-category menu.
+
+There are 35 authored situations spanning scoring, pushing and multiple defense,
+lack of progress, out of bounds, ball movement, damaged robots and returns,
+kickoffs, interference, stoppages and match checks. The shuffle visits every
+case before repeating, with random delays, reflected layouts and swapped teams.
+Legal situations are mixed in. The **Practice setup & coverage** panel shows
+what you have encountered, lets you choose a drill or skip the gap before the
+next incident, and provides a seed for repeating or changing the sequence.
+
+Normal AI play runs between drills. Live back-wall contacts, out-of-bounds
+events and stalled play are held for assessment; whistling also evaluates live
+pushing and multiple-defense geometry. Authored evidence stops before the
+lesson's referee action and hides its answer captions. Observation notes
+supply facts such as a reported power failure or unauthorized human contact.
+Replay is available for an authored incident before its first resolved call.
+
+Correct calls apply to the match: remove robots with their motors off, move the
+ball or the relevant defender to a clear neutral spot, award/disallow goals,
+correct setups and restart play. Wrong calls leave the match unchanged and
+explain the rule and target to reconsider. Retrying does not recover first-try
+credit. Accepted discretionary choices are labelled **Supported referee
+judgment**. Combined infringements require successive decisions using the
+updated ball position.
+
+Benched robots stay absent from AI, collisions and new drills. Their penalty
+starts at removal; normal play continues and return requires your permission,
+readiness, time/kickoff eligibility and a clear neutral spot. The trainer
+simulates repair completion after a short interval. Returning robots face
+their own goal. Speed controls scale simulated play and penalty time together.
+
+Decision reviews and authored evidence are training pauses: no match or bench
+time is charged while studying them. The visible lack-of-progress count is a
+teaching example, not a universal three-second rule. Holding inspection and
+retrieving a ball kicked out use explicitly labelled exercise procedures where
+the rule does not specify one mandatory restart. This covers the main Soccer
+match situations; it does not claim to adjudicate every possible physical,
+administrative or discretionary circumstance, or replace event officials.
+
+The pure controller and case catalog are `lib/simulator/referee-match.ts` and
+`lib/simulator/referee-cases.ts`. `pnpm test:referee` checks scoring, double-call
+protection, grading, count sequencing, live geometry, removal, return eligibility,
+symmetry, shuffle coverage and completion of every case in all four variants.
+The normal Play engine keeps automatic goal/stall behavior unless referee mode
+is explicitly enabled.
+
+## Read and explore every rule
+
+Open **Rules** in the top bar, or visit `/?mode=rules`. The contents cover the
+complete main Soccer rules, field specification, ball specification, scoring
+and judging guidelines, SuperTeam rules, and Entry rules. The federation
+conduct policy incorporated by the rules is linked in the contents footer.
+
+The official-text pane loads the original document, including every paragraph,
+table, note and appendix. It requires internet access and has an **Open original**
+link. The local index records the revision and source hash checked on
+2026-09-05; the reader loads the live official pages, which may subsequently
+change. Official paragraphs are not mirrored into the repository.
+
+- Search section titles and numbers across all six documents. Select a section
+  to jump to its official text and corresponding learning tool.
+- Use split view, full-width text or the interactive guide. **Reviewed** marks
+  persist in this browser. The URL remembers the selected rule and app mode.
+- Every subsection of the main gameplay chapter has at least two animations.
+  The penalty-area section has five examples covering pushing, ordinary
+  contact, multiple defense, combined infringements and goals during pushing.
+  Replay, scrub, jump to key moments, change speed/camera, and answer a question.
+- The inspection workbench compares Vision and Infrared dimensions, mass,
+  capture depth, handle clearance, marker diameter, voltage and radio power.
+  Diagrams and limit checks update as measurements change. Its checklist links
+  directly to relevant inspection paragraphs.
+- The kicker bench compares rebound paths. The field and ball explorers show
+  dimensions; the scoring explorer combines tournament placement, actual rubric
+  grade choices, TDP bonuses and the Community Award point. Preparation guides
+  cover team requirements, documentation, interviews and referee decisions.
+
+The interactive guides are authored learning aids. Waiting periods in animations
+may be compressed; the kicker diagram is a geometric illustration, and the
+inspection checks do not replace official certification. These guides do not
+add automatic enforcement of every rule to Play mode. Competition robots must
+operate autonomously.
+
+Entry and SuperTeam retain their own complete documents and format guides;
+main-league animations and measurement limits are not applied to those formats.
+The reader calls out source differences, including legacy large-ball details
+and conflicting poster dimensions. Check event amendments with the organizers.
+
+Rulebook data and learning logic live in `lib/rulebook`, and the reader and
+workbenches in `components/rulebook`. After an official source update, refresh
+the heading index and review the learning aids against the revised text:
+
+```bash
+python scripts/sync-rulebook.py
+pnpm test:rules
+```
+
+The sync script indexes headings and counts paragraph/footnote blocks, records
+source hashes, and handles duplicate source anchors. It does not generate new
+animations or reinterpret changed rules. Tests cover chapter and source
+coverage, animation timelines and contact geometry, neutral placements,
+inspection boundaries, scoring conversion, search and separate-league routing.
 
 ## Embed a situation
 

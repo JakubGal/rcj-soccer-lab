@@ -11,6 +11,7 @@ import {
   Code2,
   Eye,
   Gauge,
+  Gamepad2,
   GraduationCap,
   Layers3,
   Move3D,
@@ -48,6 +49,8 @@ import {
   type RobotVisualId,
 } from '@/lib/simulator/robot-models';
 import { clonePoses, moveManualActor } from '@/lib/simulator/manual-layout';
+import { MatchPlay } from '@/components/simulator/MatchPlay';
+import { Rulebook } from '@/components/rulebook/Rulebook';
 import { getScenario, SCENARIOS } from '@/lib/simulator/scenarios';
 import type {
   ActorDefinition,
@@ -89,9 +92,11 @@ function normalizeCamera(
 }
 
 function modeIcon(mode: SimulatorMode) {
+  if (mode === 'rules') return BookOpen;
   if (mode === 'explore') return Eye;
   if (mode === 'referee') return Scale;
   if (mode === 'manual') return Move3D;
+  if (mode === 'play') return Gamepad2;
   return GraduationCap;
 }
 
@@ -302,6 +307,7 @@ export function SimulatorApp() {
 
   const selectMode = useCallback(
     (nextMode: SimulatorMode) => {
+      if (nextMode === 'play' || nextMode === 'rules') setPlaying(false);
       if (nextMode === 'manual' && mode !== 'manual') {
         const nextLayout = clonePoses(scriptedFrame.actors);
         setPlaying(false);
@@ -317,6 +323,11 @@ export function SimulatorApp() {
         setCameraPreset(normalizeCamera(scenario.defaultCamera));
       }
       setMode(nextMode);
+      const url = new URL(window.location.href);
+      url.searchParams.set('mode', nextMode);
+      url.searchParams.delete('embed');
+      window.history.replaceState(null, '', url);
+      setIsEmbed(false);
     },
     [mode, scenario, scriptedFrame.actors],
   );
@@ -442,6 +453,13 @@ export function SimulatorApp() {
       }
       const queryMode = query.get('mode');
       if (
+        (queryMode === 'play' || queryMode === 'rules') &&
+        !embeddedScenario
+      ) {
+        setMode(queryMode);
+        return;
+      }
+      if (
         queryMode === 'explore' ||
         queryMode === 'learn' ||
         queryMode === 'referee'
@@ -463,7 +481,7 @@ export function SimulatorApp() {
   }, []);
 
   useEffect(() => {
-    if (!playing || mode === 'manual') {
+    if (!playing || mode === 'manual' || mode === 'play' || mode === 'rules') {
       previousFrameRef.current = null;
       return;
     }
@@ -489,6 +507,7 @@ export function SimulatorApp() {
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
+      if (mode === 'play' || mode === 'rules') return;
       const target = event.target as HTMLElement | null;
       if (target?.matches('input, select, textarea')) return;
       const targetIsButton = Boolean(target?.matches('button'));
@@ -558,6 +577,7 @@ export function SimulatorApp() {
   }, [mode, scenario, time]);
 
   useEffect(() => {
+    if (mode === 'play' || mode === 'rules') return;
     const snapshotWindow = window as SnapshotWindow;
     snapshotWindow.snapshot = () => ({
       app: 'RCJ Soccer Lab',
@@ -735,25 +755,32 @@ export function SimulatorApp() {
         </div>
 
         <nav className="mode-switcher" aria-label="Simulator mode">
-          {(['explore', 'learn', 'manual', 'referee'] as SimulatorMode[]).map(
-            (item) => {
-              const Icon = modeIcon(item);
-              return (
-                <Button
-                  key={item}
-                  size="sm"
-                  variant={mode === item ? 'secondary' : 'ghost'}
-                  onClick={() => selectMode(item)}
-                  aria-pressed={mode === item}
-                  aria-label={`${item[0].toUpperCase()}${item.slice(1)} mode`}
-                  className="capitalize"
-                >
-                  <Icon aria-hidden="true" />
-                  <span className="hidden sm:inline">{item}</span>
-                </Button>
-              );
-            },
-          )}
+          {(
+            [
+              'rules',
+              'explore',
+              'learn',
+              'manual',
+              'play',
+              'referee',
+            ] as SimulatorMode[]
+          ).map((item) => {
+            const Icon = modeIcon(item);
+            return (
+              <Button
+                key={item}
+                size="sm"
+                variant={mode === item ? 'secondary' : 'ghost'}
+                onClick={() => selectMode(item)}
+                aria-pressed={mode === item}
+                aria-label={`${item[0].toUpperCase()}${item.slice(1)} mode`}
+                className="capitalize"
+              >
+                <Icon aria-hidden="true" />
+                <span className="hidden sm:inline">{item}</span>
+              </Button>
+            );
+          })}
         </nav>
 
         <div className="flex items-center justify-end gap-2">
@@ -765,639 +792,660 @@ export function SimulatorApp() {
               Score {sessionScore}%
             </Badge>
           ) : null}
-          <Button size="sm" variant="outline" onClick={copyEmbed}>
-            {embedCopied ? <Check /> : <Code2 />}
-            <span className="hidden md:inline">
-              {embedCopied ? 'Copied' : 'Embed'}
-            </span>
-          </Button>
+          {mode !== 'play' && mode !== 'rules' && (
+            <Button size="sm" variant="outline" onClick={copyEmbed}>
+              {embedCopied ? <Check /> : <Code2 />}
+              <span className="hidden md:inline">
+                {embedCopied ? 'Copied' : 'Embed'}
+              </span>
+            </Button>
+          )}
         </div>
       </header>
 
-      <div className="workspace-grid">
-        <aside className="scenario-rail" aria-label="Situation library">
-          <div className="rail-heading">
-            {mode === 'manual' ? (
-              <Move3D className="size-3.5" aria-hidden="true" />
-            ) : (
-              <BookOpen className="size-3.5" aria-hidden="true" />
-            )}
-            {mode === 'manual' ? 'Starting layouts' : 'Situation library'}
-            <span className="ml-auto font-mono text-[10px] text-white/35">
-              {SCENARIOS.length}
-            </span>
-          </div>
-          <div className="scenario-list">
-            {SCENARIOS.map((item, index) => {
-              const active = item.id === scenario.id;
-              const answered = answers[item.id];
-              return (
-                <Button
-                  key={item.id}
-                  variant="ghost"
-                  onClick={() => selectScenario(item.id)}
-                  className={cn(
-                    'scenario-card',
-                    active && 'scenario-card-active',
-                  )}
-                  aria-current={active ? 'true' : undefined}
-                >
-                  <span className="scenario-index">
-                    {String(index + 1).padStart(2, '0')}
-                  </span>
-                  <span className="min-w-0 flex-1 text-left">
-                    <span className="block truncate text-[13px] font-medium text-foreground">
-                      {item.shortTitle}
-                    </span>
-                    <span className="mt-1 block truncate text-[10px] text-muted-foreground">
-                      {item.category.replace('-', ' ')} · {item.ruleRef.section}
-                    </span>
-                  </span>
-                  {answered ? (
-                    <CheckCircle2
-                      className="size-3.5 text-emerald-400"
-                      aria-label="Answered"
-                    />
-                  ) : (
-                    <ChevronRight
-                      className="size-3.5 text-white/25"
-                      aria-hidden="true"
-                    />
-                  )}
-                </Button>
-              );
-            })}
-          </div>
-
-          <div className="rail-footer">
-            {mode === 'manual' ? (
-              <p className="text-[10px] leading-4 text-muted-foreground">
-                Choose any situation as a starting arrangement. Your edits stay
-                local to Manual mode.
-              </p>
-            ) : (
-              <>
-                <div className="flex items-center justify-between text-[10px] text-muted-foreground">
-                  <span>Lesson progress</span>
-                  <span className="font-mono">
-                    {Object.keys(answers).length}/{SCENARIOS.length}
-                  </span>
-                </div>
-                <Progress
-                  value={(Object.keys(answers).length / SCENARIOS.length) * 100}
-                  className="mt-2 h-1"
-                />
-              </>
-            )}
-          </div>
-        </aside>
-
-        <section className="viewport-panel" aria-label="3D situation viewer">
-          <div className="viewport-toolbar">
-            <div className="flex items-center gap-2">
-              <Badge
-                variant="outline"
-                className="border-white/10 bg-black/35 text-white/70 backdrop-blur-md"
-              >
-                <Box className="size-3" aria-hidden="true" />
-                <span className="live-3d-label">Live 3D</span>
-              </Badge>
-              <Badge
-                variant="outline"
-                className={cn(
-                  'border-white/10 bg-black/35 backdrop-blur-md',
-                  ballOwner?.team === 'blue'
-                    ? 'text-sky-300'
-                    : ballOwner?.team === 'yellow'
-                      ? 'text-amber-300'
-                      : 'text-white/60',
-                )}
-              >
-                <span
-                  className={cn(
-                    'size-1.5 rounded-full',
-                    ballOwner?.team === 'blue'
-                      ? 'bg-sky-400'
-                      : ballOwner?.team === 'yellow'
-                        ? 'bg-amber-400'
-                        : 'bg-white/45',
-                  )}
-                />
-                {ballStatusLabel}
-              </Badge>
-            </div>
-            <div className="viewport-selects">
-              <RobotVisualPicker
-                value={robotVisual}
-                onChange={setRobotVisual}
-              />
-              <NativeSelect
-                size="sm"
-                value={cameraPreset}
-                onChange={(event) =>
-                  setCameraPreset(event.target.value as CameraPreset)
-                }
-                aria-label="Camera preset"
-                className="camera-select"
-              >
-                {CAMERA_OPTIONS.map((camera) => (
-                  <NativeSelectOption key={camera.value} value={camera.value}>
-                    {camera.label}
-                  </NativeSelectOption>
-                ))}
-              </NativeSelect>
-            </div>
-          </div>
-
-          <PlayCanvasViewport
-            actors={scenario.actors}
-            poses={frame.actors}
-            cameraPreset={cameraPreset}
-            robotVisual={robotVisual}
-            showRuleGeometry={showRuleGeometry}
-            showBallTrail={mode !== 'manual' && showBallTrail}
-            showContactEvidence={mode !== 'manual' && showContactEvidence}
-            ballTrail={ballTrail}
-            phaseLabel={frame.phaseLabel}
-            editable={mode === 'manual'}
-            selectedActorId={selectedActorId}
-            onActorSelect={selectManualActor}
-            onActorMove={updateManualActor}
-            onActorMoveEnd={finishMovingManualActor}
-            onReady={handleRendererReady}
-          />
-
-          <div className="viewport-phase">
-            <span className="phase-pulse" aria-hidden="true" />
-            <span>{frame.phaseLabel}</span>
-          </div>
-          <div className="viewport-help">
-            {mode === 'manual'
-              ? 'Drag object · empty space orbits · wheel zooms'
-              : 'Drag to orbit · wheel to zoom · keys 1–7 cameras'}
-          </div>
-          {!rendererReady ? (
-            <div className="renderer-loader">Preparing field…</div>
-          ) : null}
-
-          {mode === 'manual' ? (
-            <div className="transport-panel manual-transport">
-              <Button
-                size="sm"
-                variant="outline"
-                onClick={reset}
-                aria-label="Reset manual layout"
-              >
-                <RefreshCcw /> Reset layout
-              </Button>
-              <div className="manual-transport-copy">
-                <MousePointer2 className="size-4 text-cyan-300" />
-                <span>
-                  Select and drag an object. Drag empty turf to move the camera.
-                </span>
-              </div>
-              <span className="manual-selection-readout">
-                {selectedManualActor && selectedManualPose
-                  ? `${selectedManualActor.label} · ${formatCoordinate(selectedManualPose.x)}, ${formatCoordinate(selectedManualPose.z)}`
-                  : 'No object selected'}
+      {mode === 'rules' ? (
+        <Rulebook robotVisual={robotVisual} />
+      ) : mode === 'play' ? (
+        <MatchPlay
+          robotVisual={robotVisual}
+          onRobotVisualChange={setRobotVisual}
+        />
+      ) : (
+        <div className="workspace-grid">
+          <aside className="scenario-rail" aria-label="Situation library">
+            <div className="rail-heading">
+              {mode === 'manual' ? (
+                <Move3D className="size-3.5" aria-hidden="true" />
+              ) : (
+                <BookOpen className="size-3.5" aria-hidden="true" />
+              )}
+              {mode === 'manual' ? 'Starting layouts' : 'Situation library'}
+              <span className="ml-auto font-mono text-[10px] text-white/35">
+                {SCENARIOS.length}
               </span>
             </div>
-          ) : (
-            <div className="transport-panel">
+            <div className="scenario-list">
+              {SCENARIOS.map((item, index) => {
+                const active = item.id === scenario.id;
+                const answered = answers[item.id];
+                return (
+                  <Button
+                    key={item.id}
+                    variant="ghost"
+                    onClick={() => selectScenario(item.id)}
+                    className={cn(
+                      'scenario-card',
+                      active && 'scenario-card-active',
+                    )}
+                    aria-current={active ? 'true' : undefined}
+                  >
+                    <span className="scenario-index">
+                      {String(index + 1).padStart(2, '0')}
+                    </span>
+                    <span className="min-w-0 flex-1 text-left">
+                      <span className="block truncate text-[13px] font-medium text-foreground">
+                        {item.shortTitle}
+                      </span>
+                      <span className="mt-1 block truncate text-[10px] text-muted-foreground">
+                        {item.category.replace('-', ' ')} ·{' '}
+                        {item.ruleRef.section}
+                      </span>
+                    </span>
+                    {answered ? (
+                      <CheckCircle2
+                        className="size-3.5 text-emerald-400"
+                        aria-label="Answered"
+                      />
+                    ) : (
+                      <ChevronRight
+                        className="size-3.5 text-white/25"
+                        aria-hidden="true"
+                      />
+                    )}
+                  </Button>
+                );
+              })}
+            </div>
+
+            <div className="rail-footer">
+              {mode === 'manual' ? (
+                <p className="text-[10px] leading-4 text-muted-foreground">
+                  Choose any situation as a starting arrangement. Your edits
+                  stay local to Manual mode.
+                </p>
+              ) : (
+                <>
+                  <div className="flex items-center justify-between text-[10px] text-muted-foreground">
+                    <span>Lesson progress</span>
+                    <span className="font-mono">
+                      {Object.keys(answers).length}/{SCENARIOS.length}
+                    </span>
+                  </div>
+                  <Progress
+                    value={
+                      (Object.keys(answers).length / SCENARIOS.length) * 100
+                    }
+                    className="mt-2 h-1"
+                  />
+                </>
+              )}
+            </div>
+          </aside>
+
+          <section className="viewport-panel" aria-label="3D situation viewer">
+            <div className="viewport-toolbar">
               <div className="flex items-center gap-2">
-                <Button
-                  size="icon-sm"
-                  variant="ghost"
-                  onClick={reset}
-                  aria-label="Reset scenario"
+                <Badge
+                  variant="outline"
+                  className="border-white/10 bg-black/35 text-white/70 backdrop-blur-md"
                 >
-                  <RefreshCcw />
-                </Button>
-                <Button
-                  size="icon"
-                  onClick={() => {
-                    if (time >= scenario.duration) setTime(0);
-                    setPlaying((value) => !value);
-                  }}
-                  aria-label={playing ? 'Pause scenario' : 'Play scenario'}
-                  className="bg-white text-[#071016] hover:bg-white/90"
+                  <Box className="size-3" aria-hidden="true" />
+                  <span className="live-3d-label">Live 3D</span>
+                </Badge>
+                <Badge
+                  variant="outline"
+                  className={cn(
+                    'border-white/10 bg-black/35 backdrop-blur-md',
+                    ballOwner?.team === 'blue'
+                      ? 'text-sky-300'
+                      : ballOwner?.team === 'yellow'
+                        ? 'text-amber-300'
+                        : 'text-white/60',
+                  )}
                 >
-                  {playing ? <Pause /> : <Play className="fill-current" />}
-                </Button>
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  onClick={() => {
-                    const index = SPEEDS.indexOf(speed);
-                    setSpeed(SPEEDS[(index + 1) % SPEEDS.length]);
-                  }}
-                  aria-label={`Playback speed ${speed} times. Activate to change.`}
-                  className="w-12 font-mono text-xs"
-                >
-                  {speed}×
-                </Button>
+                  <span
+                    className={cn(
+                      'size-1.5 rounded-full',
+                      ballOwner?.team === 'blue'
+                        ? 'bg-sky-400'
+                        : ballOwner?.team === 'yellow'
+                          ? 'bg-amber-400'
+                          : 'bg-white/45',
+                    )}
+                  />
+                  {ballStatusLabel}
+                </Badge>
               </div>
-              <div className="min-w-0 flex-1">
-                <Slider
-                  value={[time]}
-                  min={0}
-                  max={scenario.duration}
-                  step={0.01}
-                  onValueChange={(value) => {
-                    setPlaying(false);
-                    setTime(
-                      typeof value === 'number' ? value : (value[0] ?? 0),
-                    );
-                  }}
-                  aria-label="Scenario timeline"
+              <div className="viewport-selects">
+                <RobotVisualPicker
+                  value={robotVisual}
+                  onChange={setRobotVisual}
                 />
-                <div className="mt-1.5 flex justify-between font-mono text-[9px] text-white/35">
-                  <span>OBSERVE</span>
-                  <span>CONTACT</span>
-                  <span>DECIDE</span>
-                </div>
-              </div>
-              <span className="w-[116px] text-right font-mono text-[11px] text-white/55">
-                {formatClock(time)} / {formatClock(scenario.duration)}
-              </span>
-            </div>
-          )}
-        </section>
-
-        <aside className="context-panel">
-          <div className="context-scroll">
-            <div className="flex items-start justify-between gap-3">
-              <div>
-                <p className="eyebrow">
-                  {mode === 'referee'
-                    ? 'Referee decision'
-                    : mode === 'manual'
-                      ? 'Manual positioning'
-                      : mode === 'explore'
-                        ? 'Scenario controls'
-                        : 'Rule context'}
-                </p>
-                <h1 className="mt-2 text-xl font-semibold tracking-tight">
-                  {mode === 'manual'
-                    ? 'Arrange robots and ball'
-                    : scenario.title}
-                </h1>
-              </div>
-              <Badge
-                variant="outline"
-                className="shrink-0 border-sky-400/25 text-sky-300"
-              >
-                {mode === 'manual' ? 'Sandbox' : scenario.ruleRef.section}
-              </Badge>
-            </div>
-
-            {mode === 'learn' ? (
-              <>
-                <p className="mt-4 text-sm leading-6 text-muted-foreground">
-                  {scenario.publicSummary}
-                </p>
-                <div className="section-divider" />
-                <div className="flex items-center gap-2">
-                  <Gauge className="size-4 text-sky-400" aria-hidden="true" />
-                  <h2 className="panel-title">Live evidence</h2>
-                </div>
-                <div className="mt-3 space-y-2">
-                  {Object.entries(frame.metrics).map(([id, metric]) => (
-                    <div key={id} className="metric-row">
-                      <span className="flex items-center gap-2 text-muted-foreground">
-                        <MetricStatus status={metric.status} />
-                        {metric.label}
-                      </span>
-                      <span className="font-mono text-[12px] text-foreground">
-                        {metric.value}
-                      </span>
-                    </div>
+                <NativeSelect
+                  size="sm"
+                  value={cameraPreset}
+                  onChange={(event) =>
+                    setCameraPreset(event.target.value as CameraPreset)
+                  }
+                  aria-label="Camera preset"
+                  className="camera-select"
+                >
+                  {CAMERA_OPTIONS.map((camera) => (
+                    <NativeSelectOption key={camera.value} value={camera.value}>
+                      {camera.label}
+                    </NativeSelectOption>
                   ))}
-                </div>
-                <div className="evidence-card">
-                  <p className="flex items-center gap-2 text-[11px] font-medium text-amber-200">
-                    <Sparkles className="size-3.5" aria-hidden="true" />
-                    What to notice
-                  </p>
-                  <ul className="mt-2 space-y-1.5 text-xs leading-5 text-amber-50/65">
-                    {frame.evidence.map((item) => (
-                      <li key={item}>• {item}</li>
-                    ))}
-                  </ul>
-                </div>
-              </>
+                </NativeSelect>
+              </div>
+            </div>
+
+            <PlayCanvasViewport
+              actors={scenario.actors}
+              poses={frame.actors}
+              cameraPreset={cameraPreset}
+              robotVisual={robotVisual}
+              showRuleGeometry={showRuleGeometry}
+              showBallTrail={mode !== 'manual' && showBallTrail}
+              showContactEvidence={mode !== 'manual' && showContactEvidence}
+              ballTrail={ballTrail}
+              phaseLabel={frame.phaseLabel}
+              editable={mode === 'manual'}
+              selectedActorId={mode === 'manual' ? selectedActorId : null}
+              onActorSelect={selectManualActor}
+              onActorMove={updateManualActor}
+              onActorMoveEnd={finishMovingManualActor}
+              onReady={handleRendererReady}
+            />
+
+            <div className="viewport-phase">
+              <span className="phase-pulse" aria-hidden="true" />
+              <span>{frame.phaseLabel}</span>
+            </div>
+            <div className="viewport-help">
+              {mode === 'manual'
+                ? 'Drag object · empty space orbits · wheel zooms'
+                : 'Drag to orbit · wheel to zoom · keys 1–7 cameras'}
+            </div>
+            {!rendererReady ? (
+              <div className="renderer-loader">Preparing field…</div>
             ) : null}
 
-            {mode === 'explore' ? (
-              <>
-                <p className="mt-4 text-sm leading-6 text-muted-foreground">
-                  Scrub the event, move around the field, and isolate the
-                  evidence a referee can actually observe.
-                </p>
-                <div className="section-divider" />
-                <h2 className="panel-title flex items-center gap-2">
-                  <Layers3 className="size-4 text-sky-400" /> Evidence layers
-                </h2>
-                <div className="mt-3 space-y-2">
+            {mode === 'manual' ? (
+              <div className="transport-panel manual-transport">
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={reset}
+                  aria-label="Reset manual layout"
+                >
+                  <RefreshCcw /> Reset layout
+                </Button>
+                <div className="manual-transport-copy">
+                  <MousePointer2 className="size-4 text-cyan-300" />
+                  <span>
+                    Select and drag an object. Drag empty turf to move the
+                    camera.
+                  </span>
+                </div>
+                <span className="manual-selection-readout">
+                  {selectedManualActor && selectedManualPose
+                    ? `${selectedManualActor.label} · ${formatCoordinate(selectedManualPose.x)}, ${formatCoordinate(selectedManualPose.z)}`
+                    : 'No object selected'}
+                </span>
+              </div>
+            ) : (
+              <div className="transport-panel">
+                <div className="flex items-center gap-2">
+                  <Button
+                    size="icon-sm"
+                    variant="ghost"
+                    onClick={reset}
+                    aria-label="Reset scenario"
+                  >
+                    <RefreshCcw />
+                  </Button>
+                  <Button
+                    size="icon"
+                    onClick={() => {
+                      if (time >= scenario.duration) setTime(0);
+                      setPlaying((value) => !value);
+                    }}
+                    aria-label={playing ? 'Pause scenario' : 'Play scenario'}
+                    className="bg-white text-[#071016] hover:bg-white/90"
+                  >
+                    {playing ? <Pause /> : <Play className="fill-current" />}
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    onClick={() => {
+                      const index = SPEEDS.indexOf(speed);
+                      setSpeed(SPEEDS[(index + 1) % SPEEDS.length]);
+                    }}
+                    aria-label={`Playback speed ${speed} times. Activate to change.`}
+                    className="w-12 font-mono text-xs"
+                  >
+                    {speed}×
+                  </Button>
+                </div>
+                <div className="min-w-0 flex-1">
+                  <Slider
+                    value={[time]}
+                    min={0}
+                    max={scenario.duration}
+                    step={0.01}
+                    onValueChange={(value) => {
+                      setPlaying(false);
+                      setTime(
+                        typeof value === 'number' ? value : (value[0] ?? 0),
+                      );
+                    }}
+                    aria-label="Scenario timeline"
+                  />
+                  <div className="mt-1.5 flex justify-between font-mono text-[9px] text-white/35">
+                    <span>OBSERVE</span>
+                    <span>CONTACT</span>
+                    <span>DECIDE</span>
+                  </div>
+                </div>
+                <span className="w-[116px] text-right font-mono text-[11px] text-white/55">
+                  {formatClock(time)} / {formatClock(scenario.duration)}
+                </span>
+              </div>
+            )}
+          </section>
+
+          <aside className="context-panel">
+            <div className="context-scroll">
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <p className="eyebrow">
+                    {mode === 'referee'
+                      ? 'Referee decision'
+                      : mode === 'manual'
+                        ? 'Manual positioning'
+                        : mode === 'explore'
+                          ? 'Scenario controls'
+                          : 'Rule context'}
+                  </p>
+                  <h1 className="mt-2 text-xl font-semibold tracking-tight">
+                    {mode === 'manual'
+                      ? 'Arrange robots and ball'
+                      : scenario.title}
+                  </h1>
+                </div>
+                <Badge
+                  variant="outline"
+                  className="shrink-0 border-sky-400/25 text-sky-300"
+                >
+                  {mode === 'manual' ? 'Sandbox' : scenario.ruleRef.section}
+                </Badge>
+              </div>
+
+              {mode === 'learn' ? (
+                <>
+                  <p className="mt-4 text-sm leading-6 text-muted-foreground">
+                    {scenario.publicSummary}
+                  </p>
+                  <div className="section-divider" />
+                  <div className="flex items-center gap-2">
+                    <Gauge className="size-4 text-sky-400" aria-hidden="true" />
+                    <h2 className="panel-title">Live evidence</h2>
+                  </div>
+                  <div className="mt-3 space-y-2">
+                    {Object.entries(frame.metrics).map(([id, metric]) => (
+                      <div key={id} className="metric-row">
+                        <span className="flex items-center gap-2 text-muted-foreground">
+                          <MetricStatus status={metric.status} />
+                          {metric.label}
+                        </span>
+                        <span className="font-mono text-[12px] text-foreground">
+                          {metric.value}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                  <div className="evidence-card">
+                    <p className="flex items-center gap-2 text-[11px] font-medium text-amber-200">
+                      <Sparkles className="size-3.5" aria-hidden="true" />
+                      What to notice
+                    </p>
+                    <ul className="mt-2 space-y-1.5 text-xs leading-5 text-amber-50/65">
+                      {frame.evidence.map((item) => (
+                        <li key={item}>• {item}</li>
+                      ))}
+                    </ul>
+                  </div>
+                </>
+              ) : null}
+
+              {mode === 'explore' ? (
+                <>
+                  <p className="mt-4 text-sm leading-6 text-muted-foreground">
+                    Scrub the event, move around the field, and isolate the
+                    evidence a referee can actually observe.
+                  </p>
+                  <div className="section-divider" />
+                  <h2 className="panel-title flex items-center gap-2">
+                    <Layers3 className="size-4 text-sky-400" /> Evidence layers
+                  </h2>
+                  <div className="mt-3 space-y-2">
+                    <div className="toggle-row">
+                      <label htmlFor="rule-geometry">
+                        <strong>Rule geometry</strong>
+                        <small>Penalty areas and 15 mm plane</small>
+                      </label>
+                      <Switch
+                        id="rule-geometry"
+                        checked={showRuleGeometry}
+                        onCheckedChange={setShowRuleGeometry}
+                      />
+                    </div>
+                    <div className="toggle-row">
+                      <label htmlFor="ball-path">
+                        <strong>Ball path</strong>
+                        <small>Recent trajectory samples</small>
+                      </label>
+                      <Switch
+                        id="ball-path"
+                        checked={showBallTrail}
+                        onCheckedChange={setShowBallTrail}
+                      />
+                    </div>
+                    <div className="toggle-row">
+                      <label htmlFor="contact-evidence">
+                        <strong>Contact evidence</strong>
+                        <small>Highlight current ball contact</small>
+                      </label>
+                      <Switch
+                        id="contact-evidence"
+                        checked={showContactEvidence}
+                        onCheckedChange={setShowContactEvidence}
+                      />
+                    </div>
+                  </div>
+                  <div className="section-divider" />
+                  <h2 className="panel-title flex items-center gap-2">
+                    <Target className="size-4 text-sky-400" /> Observations
+                  </h2>
+                  <div className="mt-3 space-y-2">
+                    {Object.entries(frame.metrics).map(([id, metric]) => (
+                      <div key={id} className="metric-row">
+                        <span className="flex items-center gap-2 text-muted-foreground">
+                          <MetricStatus status={metric.status} />
+                          {metric.label}
+                        </span>
+                        <span className="font-mono text-[12px]">
+                          {metric.value}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </>
+              ) : null}
+
+              {mode === 'manual' ? (
+                <>
+                  <p className="mt-4 text-sm leading-6 text-muted-foreground">
+                    Drag a robot or the ball directly on the field. Objects stop
+                    at the field edge and cannot pass through one another.
+                  </p>
+                  <div className="manual-tip">
+                    <MousePointer2 className="size-4 shrink-0 text-cyan-300" />
+                    <p>
+                      Drag empty turf to orbit the view. The object list below
+                      is also useful when two objects are close together.
+                    </p>
+                  </div>
+                  <div className="section-divider" />
+                  <h2 className="panel-title flex items-center gap-2">
+                    <Move3D className="size-4 text-sky-400" /> Field objects
+                  </h2>
+                  <div className="mt-3 space-y-2">
+                    {scenario.actors.map((actor) => {
+                      const actorPose = frame.actors[actor.id];
+                      const active = actor.id === selectedActorId;
+                      return (
+                        <Button
+                          key={actor.id}
+                          variant="outline"
+                          className={cn(
+                            'manual-actor-button',
+                            active && 'manual-actor-button-active',
+                          )}
+                          aria-pressed={active}
+                          onClick={() => selectManualActor(actor.id)}
+                        >
+                          <span
+                            className={cn(
+                              'manual-actor-dot',
+                              actorColor(actor),
+                            )}
+                            aria-hidden="true"
+                          />
+                          <span className="min-w-0 flex-1 text-left">
+                            <span className="block truncate text-xs font-medium">
+                              {actor.label}
+                            </span>
+                            <span className="block text-[9px] capitalize text-muted-foreground">
+                              {actor.kind}
+                            </span>
+                          </span>
+                          {actorPose ? (
+                            <span className="manual-mini-coordinates">
+                              {actorPose.x.toFixed(2)} /{' '}
+                              {actorPose.z.toFixed(2)}
+                            </span>
+                          ) : null}
+                        </Button>
+                      );
+                    })}
+                  </div>
+
+                  {selectedManualActor && selectedManualPose ? (
+                    <div className="manual-object-card">
+                      <div className="flex items-center justify-between gap-3">
+                        <div>
+                          <p className="text-xs font-semibold text-foreground">
+                            {selectedManualActor.label}
+                          </p>
+                          <p className="mt-0.5 text-[9px] uppercase tracking-[0.12em] text-muted-foreground">
+                            Selected {selectedManualActor.kind}
+                          </p>
+                        </div>
+                        <span
+                          className={cn(
+                            'manual-actor-dot size-3',
+                            actorColor(selectedManualActor),
+                          )}
+                          aria-hidden="true"
+                        />
+                      </div>
+                      <div className="manual-coordinate-grid">
+                        <div className="manual-coordinate">
+                          <span>X position</span>
+                          <strong>
+                            {formatCoordinate(selectedManualPose.x)}
+                          </strong>
+                        </div>
+                        <div className="manual-coordinate">
+                          <span>Z position</span>
+                          <strong>
+                            {formatCoordinate(selectedManualPose.z)}
+                          </strong>
+                        </div>
+                      </div>
+                      {selectedManualActor.kind === 'robot' ? (
+                        <div className="manual-rotation-row">
+                          <Button
+                            size="icon-sm"
+                            variant="outline"
+                            onClick={() => rotateSelectedActor(-1)}
+                            aria-label={`Rotate ${selectedManualActor.label} left 15 degrees`}
+                          >
+                            <RotateCcw />
+                          </Button>
+                          <span>
+                            Heading{' '}
+                            <strong>
+                              {Math.round(
+                                (selectedManualPose.yaw * 180) / Math.PI,
+                              )}
+                              °
+                            </strong>
+                          </span>
+                          <Button
+                            size="icon-sm"
+                            variant="outline"
+                            onClick={() => rotateSelectedActor(1)}
+                            aria-label={`Rotate ${selectedManualActor.label} right 15 degrees`}
+                          >
+                            <RotateCw />
+                          </Button>
+                        </div>
+                      ) : null}
+                      <p className="mt-3 text-[9px] leading-4 text-muted-foreground">
+                        Arrow keys move 1 cm · Shift moves 5 cm · Q/E rotates ·
+                        R resets
+                      </p>
+                    </div>
+                  ) : (
+                    <p className="mt-4 text-xs text-muted-foreground">
+                      Select an object on the field or from the list.
+                    </p>
+                  )}
+
+                  <div className="section-divider" />
                   <div className="toggle-row">
-                    <label htmlFor="rule-geometry">
+                    <label htmlFor="manual-rule-geometry">
                       <strong>Rule geometry</strong>
                       <small>Penalty areas and 15 mm plane</small>
                     </label>
                     <Switch
-                      id="rule-geometry"
+                      id="manual-rule-geometry"
                       checked={showRuleGeometry}
                       onCheckedChange={setShowRuleGeometry}
                     />
                   </div>
-                  <div className="toggle-row">
-                    <label htmlFor="ball-path">
-                      <strong>Ball path</strong>
-                      <small>Recent trajectory samples</small>
-                    </label>
-                    <Switch
-                      id="ball-path"
-                      checked={showBallTrail}
-                      onCheckedChange={setShowBallTrail}
-                    />
-                  </div>
-                  <div className="toggle-row">
-                    <label htmlFor="contact-evidence">
-                      <strong>Contact evidence</strong>
-                      <small>Highlight current ball contact</small>
-                    </label>
-                    <Switch
-                      id="contact-evidence"
-                      checked={showContactEvidence}
-                      onCheckedChange={setShowContactEvidence}
-                    />
-                  </div>
-                </div>
-                <div className="section-divider" />
-                <h2 className="panel-title flex items-center gap-2">
-                  <Target className="size-4 text-sky-400" /> Observations
-                </h2>
-                <div className="mt-3 space-y-2">
-                  {Object.entries(frame.metrics).map(([id, metric]) => (
-                    <div key={id} className="metric-row">
-                      <span className="flex items-center gap-2 text-muted-foreground">
-                        <MetricStatus status={metric.status} />
-                        {metric.label}
-                      </span>
-                      <span className="font-mono text-[12px]">
-                        {metric.value}
-                      </span>
-                    </div>
-                  ))}
-                </div>
-              </>
-            ) : null}
-
-            {mode === 'manual' ? (
-              <>
-                <p className="mt-4 text-sm leading-6 text-muted-foreground">
-                  Drag a robot or the ball directly on the field. Objects stop
-                  at the field edge and cannot pass through one another.
-                </p>
-                <div className="manual-tip">
-                  <MousePointer2 className="size-4 shrink-0 text-cyan-300" />
-                  <p>
-                    Drag empty turf to orbit the view. The object list below is
-                    also useful when two objects are close together.
+                  <p className="sr-only" aria-live="polite">
+                    {manualAnnouncement}
                   </p>
-                </div>
-                <div className="section-divider" />
-                <h2 className="panel-title flex items-center gap-2">
-                  <Move3D className="size-4 text-sky-400" /> Field objects
-                </h2>
-                <div className="mt-3 space-y-2">
-                  {scenario.actors.map((actor) => {
-                    const actorPose = frame.actors[actor.id];
-                    const active = actor.id === selectedActorId;
-                    return (
+                </>
+              ) : null}
+
+              {mode === 'referee' ? (
+                <>
+                  <div className="decision-prompt">
+                    <span className="grid size-8 shrink-0 place-items-center rounded-lg bg-sky-400/12 text-sky-300">
+                      <Scale className="size-4" />
+                    </span>
+                    <div>
+                      <p className="text-[10px] font-medium uppercase tracking-[0.12em] text-sky-300">
+                        Your call
+                      </p>
+                      <p className="mt-1 text-sm leading-5 text-foreground">
+                        {scenario.refereeCue}
+                      </p>
+                    </div>
+                  </div>
+                  <fieldset className="mt-3 space-y-2">
+                    <legend className="sr-only">
+                      Referee decision choices
+                    </legend>
+                    {scenario.choices.map((choice, index) => (
                       <Button
-                        key={actor.id}
+                        key={choice.id}
                         variant="outline"
                         className={cn(
-                          'manual-actor-button',
-                          active && 'manual-actor-button-active',
+                          'decision-button',
+                          selectedChoice?.id === choice.id &&
+                            'border-sky-400/50 bg-sky-400/10',
                         )}
-                        aria-pressed={active}
-                        onClick={() => selectManualActor(actor.id)}
+                        onClick={() => chooseAnswer(choice)}
                       >
-                        <span
-                          className={cn('manual-actor-dot', actorColor(actor))}
-                          aria-hidden="true"
-                        />
-                        <span className="min-w-0 flex-1 text-left">
-                          <span className="block truncate text-xs font-medium">
-                            {actor.label}
-                          </span>
-                          <span className="block text-[9px] capitalize text-muted-foreground">
-                            {actor.kind}
-                          </span>
+                        <span className="decision-key">
+                          {String.fromCharCode(65 + index)}
                         </span>
-                        {actorPose ? (
-                          <span className="manual-mini-coordinates">
-                            {actorPose.x.toFixed(2)} / {actorPose.z.toFixed(2)}
-                          </span>
-                        ) : null}
+                        <span className="flex-1 text-left whitespace-normal">
+                          {choice.label}
+                        </span>
                       </Button>
-                    );
-                  })}
-                </div>
-
-                {selectedManualActor && selectedManualPose ? (
-                  <div className="manual-object-card">
-                    <div className="flex items-center justify-between gap-3">
-                      <div>
-                        <p className="text-xs font-semibold text-foreground">
-                          {selectedManualActor.label}
-                        </p>
-                        <p className="mt-0.5 text-[9px] uppercase tracking-[0.12em] text-muted-foreground">
-                          Selected {selectedManualActor.kind}
-                        </p>
-                      </div>
-                      <span
-                        className={cn(
-                          'manual-actor-dot size-3',
-                          actorColor(selectedManualActor),
-                        )}
-                        aria-hidden="true"
-                      />
-                    </div>
-                    <div className="manual-coordinate-grid">
-                      <div className="manual-coordinate">
-                        <span>X position</span>
-                        <strong>
-                          {formatCoordinate(selectedManualPose.x)}
-                        </strong>
-                      </div>
-                      <div className="manual-coordinate">
-                        <span>Z position</span>
-                        <strong>
-                          {formatCoordinate(selectedManualPose.z)}
-                        </strong>
-                      </div>
-                    </div>
-                    {selectedManualActor.kind === 'robot' ? (
-                      <div className="manual-rotation-row">
-                        <Button
-                          size="icon-sm"
-                          variant="outline"
-                          onClick={() => rotateSelectedActor(-1)}
-                          aria-label={`Rotate ${selectedManualActor.label} left 15 degrees`}
+                    ))}
+                  </fieldset>
+                  {selectedChoice ? (
+                    (() => {
+                      const grade = gradePresentation(selectedChoice.grade);
+                      return (
+                        <div
+                          className={cn('feedback-card', grade.className)}
+                          aria-live="polite"
                         >
-                          <RotateCcw />
-                        </Button>
-                        <span>
-                          Heading{' '}
-                          <strong>
-                            {Math.round(
-                              (selectedManualPose.yaw * 180) / Math.PI,
-                            )}
-                            °
-                          </strong>
-                        </span>
-                        <Button
-                          size="icon-sm"
-                          variant="outline"
-                          onClick={() => rotateSelectedActor(1)}
-                          aria-label={`Rotate ${selectedManualActor.label} right 15 degrees`}
-                        >
-                          <RotateCw />
-                        </Button>
-                      </div>
-                    ) : null}
-                    <p className="mt-3 text-[9px] leading-4 text-muted-foreground">
-                      Arrow keys move 1 cm · Shift moves 5 cm · Q/E rotates · R
-                      resets
+                          <p className="flex items-center gap-2 text-xs font-semibold">
+                            <grade.Icon className="size-4" />
+                            {grade.label} ·{' '}
+                            {Math.round(selectedChoice.score * 100)}%
+                          </p>
+                          <p className="mt-2 text-xs leading-5 text-current/75">
+                            {selectedChoice.feedback}
+                          </p>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={showNextScenario}
+                            className="mt-3 w-full border-current/20 bg-black/10"
+                          >
+                            Next situation <ChevronRight />
+                          </Button>
+                        </div>
+                      );
+                    })()
+                  ) : (
+                    <p className="mt-3 text-[11px] leading-5 text-muted-foreground">
+                      Watch the whole sequence or make the call in real time.
+                      Some situations deliberately allow referee discretion.
                     </p>
-                  </div>
-                ) : (
-                  <p className="mt-4 text-xs text-muted-foreground">
-                    Select an object on the field or from the list.
-                  </p>
-                )}
+                  )}
+                </>
+              ) : null}
+            </div>
 
-                <div className="section-divider" />
-                <div className="toggle-row">
-                  <label htmlFor="manual-rule-geometry">
-                    <strong>Rule geometry</strong>
-                    <small>Penalty areas and 15 mm plane</small>
-                  </label>
-                  <Switch
-                    id="manual-rule-geometry"
-                    checked={showRuleGeometry}
-                    onCheckedChange={setShowRuleGeometry}
-                  />
-                </div>
-                <p className="sr-only" aria-live="polite">
-                  {manualAnnouncement}
-                </p>
-              </>
-            ) : null}
-
-            {mode === 'referee' ? (
-              <>
-                <div className="decision-prompt">
-                  <span className="grid size-8 shrink-0 place-items-center rounded-lg bg-sky-400/12 text-sky-300">
-                    <Scale className="size-4" />
-                  </span>
-                  <div>
-                    <p className="text-[10px] font-medium uppercase tracking-[0.12em] text-sky-300">
-                      Your call
-                    </p>
-                    <p className="mt-1 text-sm leading-5 text-foreground">
-                      {scenario.refereeCue}
-                    </p>
-                  </div>
-                </div>
-                <fieldset className="mt-3 space-y-2">
-                  <legend className="sr-only">Referee decision choices</legend>
-                  {scenario.choices.map((choice, index) => (
-                    <Button
-                      key={choice.id}
-                      variant="outline"
-                      className={cn(
-                        'decision-button',
-                        selectedChoice?.id === choice.id &&
-                          'border-sky-400/50 bg-sky-400/10',
-                      )}
-                      onClick={() => chooseAnswer(choice)}
-                    >
-                      <span className="decision-key">
-                        {String.fromCharCode(65 + index)}
-                      </span>
-                      <span className="flex-1 text-left whitespace-normal">
-                        {choice.label}
-                      </span>
-                    </Button>
-                  ))}
-                </fieldset>
-                {selectedChoice ? (
-                  (() => {
-                    const grade = gradePresentation(selectedChoice.grade);
-                    return (
-                      <div
-                        className={cn('feedback-card', grade.className)}
-                        aria-live="polite"
-                      >
-                        <p className="flex items-center gap-2 text-xs font-semibold">
-                          <grade.Icon className="size-4" />
-                          {grade.label} ·{' '}
-                          {Math.round(selectedChoice.score * 100)}%
-                        </p>
-                        <p className="mt-2 text-xs leading-5 text-current/75">
-                          {selectedChoice.feedback}
-                        </p>
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          onClick={showNextScenario}
-                          className="mt-3 w-full border-current/20 bg-black/10"
-                        >
-                          Next situation <ChevronRight />
-                        </Button>
-                      </div>
-                    );
-                  })()
-                ) : (
-                  <p className="mt-3 text-[11px] leading-5 text-muted-foreground">
-                    Watch the whole sequence or make the call in real time. Some
-                    situations deliberately allow referee discretion.
-                  </p>
-                )}
-              </>
-            ) : null}
-          </div>
-
-          <footer className="context-footer">
-            {mode === 'manual' ? (
-              <p className="text-[10px] leading-4 text-muted-foreground">
-                Manual edits are a private sandbox and do not change the
-                authored rule situations.
-              </p>
-            ) : (
-              <>
+            <footer className="context-footer">
+              {mode === 'manual' ? (
                 <p className="text-[10px] leading-4 text-muted-foreground">
-                  Repeatable animation supplies observations; the rubric keeps
-                  objective facts, referee judgment, and committee
-                  interpretation separate.
+                  Manual edits are a private sandbox and do not change the
+                  authored rule situations.
                 </p>
-                <a
-                  href={scenario.ruleRef.url}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="mt-2 inline-flex items-center gap-1 text-[11px] font-medium text-sky-300 hover:text-sky-200"
-                >
-                  Open official 2026 rules <ChevronRight className="size-3" />
-                </a>
-              </>
-            )}
-          </footer>
-        </aside>
-      </div>
+              ) : (
+                <>
+                  <p className="text-[10px] leading-4 text-muted-foreground">
+                    Repeatable animation supplies observations; the rubric keeps
+                    objective facts, referee judgment, and committee
+                    interpretation separate.
+                  </p>
+                  <a
+                    href={scenario.ruleRef.url}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="mt-2 inline-flex items-center gap-1 text-[11px] font-medium text-sky-300 hover:text-sky-200"
+                  >
+                    Open official 2026 rules <ChevronRight className="size-3" />
+                  </a>
+                </>
+              )}
+            </footer>
+          </aside>
+        </div>
+      )}
     </main>
   );
 }

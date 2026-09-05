@@ -26,6 +26,7 @@ export type CameraPreset =
 type ViewportProps = {
   actors: ActorDefinition[];
   poses: Record<string, Pose>;
+  actorHeights?: Record<string, number>;
   cameraPreset: CameraPreset;
   showRuleGeometry: boolean;
   showBallTrail: boolean;
@@ -1565,6 +1566,7 @@ function buildScene(
 export function PlayCanvasViewport({
   actors,
   poses,
+  actorHeights,
   cameraPreset,
   showRuleGeometry,
   showBallTrail,
@@ -1677,10 +1679,14 @@ export function PlayCanvasViewport({
       }
       entity.enabled = true;
       if (actor.kind === 'ball') {
-        entity.setPosition(pose.x, BALL_CENTER_HEIGHT, pose.z);
+        entity.setPosition(
+          pose.x,
+          actorHeights?.[actor.id] ?? BALL_CENTER_HEIGHT,
+          pose.z,
+        );
         entity.setEulerAngles((pose.yaw * 180) / Math.PI, 0, 0);
       } else {
-        entity.setPosition(pose.x, 0, pose.z);
+        entity.setPosition(pose.x, actorHeights?.[actor.id] ?? 0, pose.z);
         entity.setEulerAngles(0, (pose.yaw * 180) / Math.PI, 0);
       }
     }
@@ -1690,10 +1696,8 @@ export function PlayCanvasViewport({
       ? actors.find((actor) => actor.id === selectedActorId)
       : null;
     const selectedPose = selectedActor ? poses[selectedActor.id] : null;
-    scene.selectionIndicator.enabled = Boolean(
-      editable && selectedActor && selectedPose,
-    );
-    if (editable && selectedActor && selectedPose) {
+    scene.selectionIndicator.enabled = Boolean(selectedActor && selectedPose);
+    if (selectedActor && selectedPose) {
       scene.selectionIndicator.setPosition(selectedPose.x, 0, selectedPose.z);
       scene.selectionIndicator.setEulerAngles(
         0,
@@ -1704,7 +1708,15 @@ export function PlayCanvasViewport({
       scene.selectionDisc.setLocalScale(discDiameter, 0.003, discDiameter);
       scene.selectionArrow.enabled = selectedActor.kind === 'robot';
     }
-  }, [actors, cameraPreset, editable, poses, sceneVersion, selectedActorId]);
+  }, [
+    actorHeights,
+    actors,
+    cameraPreset,
+    editable,
+    poses,
+    sceneVersion,
+    selectedActorId,
+  ]);
 
   useEffect(() => {
     sceneRef.current?.setCameraPreset(cameraPreset, posesRef.current);

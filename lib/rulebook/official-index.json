@@ -1,0 +1,2408 @@
+{
+  "checkedOn": "2026-09-05",
+  "documents": [
+    {
+      "id": "soccer",
+      "title": "Soccer rules",
+      "url": "https://robocup-junior.github.io/soccer-rules/master/rules.html",
+      "revision": "2026-06-03",
+      "headingCount": 68,
+      "paragraphCount": 221,
+      "footnoteCount": 29,
+      "sha256": "23d09750ff4937a5adb0ed86fea95105bfec750fed7ce84644cb04788465a0b1",
+      "duplicateAnchors": []
+    },
+    {
+      "id": "field",
+      "title": "Field specification",
+      "url": "https://robocup-junior.github.io/soccer-rules/master/field_specification.html",
+      "revision": "2026-06-03",
+      "headingCount": 29,
+      "paragraphCount": 41,
+      "footnoteCount": 1,
+      "sha256": "3c3d0eb21b897a6a69a21cf522c0beeead3f60992630adee0f7050a4e67216b4",
+      "duplicateAnchors": []
+    },
+    {
+      "id": "ball",
+      "title": "Ball specification",
+      "url": "https://robocup-junior.github.io/soccer-rules/master/ball_specification.html",
+      "revision": "2026-06-03",
+      "headingCount": 19,
+      "paragraphCount": 21,
+      "footnoteCount": 2,
+      "sha256": "389b69c069eef50797883888ff92cd1197b433cc1f3ce7de1c6fc70542ce8267",
+      "duplicateAnchors": []
+    },
+    {
+      "id": "scoring",
+      "title": "Awards & interviews",
+      "url": "https://robocup-junior.github.io/soccer-rules/master/scoring.html",
+      "revision": "2026-06-03",
+      "headingCount": 27,
+      "paragraphCount": 270,
+      "footnoteCount": 0,
+      "sha256": "477511788b3196555d706000ade216201c2dbb6d24cb4847ece8806ce2c59fa7",
+      "duplicateAnchors": [
+        "documentation-and-community-contribution",
+        "short-form-video-tdp",
+        "sportsmanship"
+      ]
+    },
+    {
+      "id": "superteam",
+      "title": "SuperTeam rules",
+      "url": "https://robocup-junior.github.io/soccer-rules/master/superteam_rules.html",
+      "revision": "2026-06-03",
+      "headingCount": 38,
+      "paragraphCount": 59,
+      "footnoteCount": 5,
+      "sha256": "7d3bc1748724668b3998f8d8a622787b6eafd29715918771bded102622882733",
+      "duplicateAnchors": []
+    },
+    {
+      "id": "entry",
+      "title": "Entry league",
+      "url": "https://robocup-junior.github.io/soccer-rules-entry/master/rules.html",
+      "revision": "2026-03-18",
+      "headingCount": 73,
+      "paragraphCount": 216,
+      "footnoteCount": 3,
+      "sha256": "b94c925edf9072745b590c0302a0c50fcd0f27d78be42f522d66ba571f4b5743",
+      "duplicateAnchors": []
+    }
+  ],
+  "sections": [
+    {
+      "id": "soccer:_preface",
+      "document": "soccer",
+      "anchor": "_preface",
+      "title": "Preface",
+      "number": "",
+      "depth": 0,
+      "chapter": "Preface"
+    },
+    {
+      "id": "soccer:general-rules",
+      "document": "soccer",
+      "anchor": "general-rules",
+      "title": "RoboCupJunior International 2026 General Rules",
+      "number": "1",
+      "depth": 0,
+      "chapter": "1. RoboCupJunior International 2026 General Rules"
+    },
+    {
+      "id": "soccer:_team_requirements",
+      "document": "soccer",
+      "anchor": "_team_requirements",
+      "title": "Team Requirements",
+      "number": "1.1",
+      "depth": 1,
+      "chapter": "1. RoboCupJunior International 2026 General Rules"
+    },
+    {
+      "id": "soccer:_team_size",
+      "document": "soccer",
+      "anchor": "_team_size",
+      "title": "Team Size",
+      "number": "1.1.1",
+      "depth": 2,
+      "chapter": "1. RoboCupJunior International 2026 General Rules"
+    },
+    {
+      "id": "soccer:_team_supervision",
+      "document": "soccer",
+      "anchor": "_team_supervision",
+      "title": "Team Supervision",
+      "number": "1.1.2",
+      "depth": 2,
+      "chapter": "1. RoboCupJunior International 2026 General Rules"
+    },
+    {
+      "id": "soccer:_age_requirements",
+      "document": "soccer",
+      "anchor": "_age_requirements",
+      "title": "Age Requirements",
+      "number": "1.1.3",
+      "depth": 2,
+      "chapter": "1. RoboCupJunior International 2026 General Rules"
+    },
+    {
+      "id": "soccer:_team_members",
+      "document": "soccer",
+      "anchor": "_team_members",
+      "title": "Team Members",
+      "number": "1.1.4",
+      "depth": 2,
+      "chapter": "1. RoboCupJunior International 2026 General Rules"
+    },
+    {
+      "id": "soccer:_international_team_qualification_process",
+      "document": "soccer",
+      "anchor": "_international_team_qualification_process",
+      "title": "International Team Qualification Process",
+      "number": "1.2",
+      "depth": 1,
+      "chapter": "1. RoboCupJunior International 2026 General Rules"
+    },
+    {
+      "id": "soccer:_robot_requirements",
+      "document": "soccer",
+      "anchor": "_robot_requirements",
+      "title": "Robot Requirements",
+      "number": "1.3",
+      "depth": 1,
+      "chapter": "1. RoboCupJunior International 2026 General Rules"
+    },
+    {
+      "id": "soccer:_robot_communication",
+      "document": "soccer",
+      "anchor": "_robot_communication",
+      "title": "Robot Communication",
+      "number": "1.3.1",
+      "depth": 2,
+      "chapter": "1. RoboCupJunior International 2026 General Rules"
+    },
+    {
+      "id": "soccer:_safety_and_power_requirements",
+      "document": "soccer",
+      "anchor": "_safety_and_power_requirements",
+      "title": "Safety and Power Requirements",
+      "number": "1.3.2",
+      "depth": 2,
+      "chapter": "1. RoboCupJunior International 2026 General Rules"
+    },
+    {
+      "id": "soccer:_documentation_and_sharing_requirements",
+      "document": "soccer",
+      "anchor": "_documentation_and_sharing_requirements",
+      "title": "Documentation and Sharing Requirements",
+      "number": "1.4",
+      "depth": 1,
+      "chapter": "1. RoboCupJunior International 2026 General Rules"
+    },
+    {
+      "id": "soccer:_robocupjunior_team_posters",
+      "document": "soccer",
+      "anchor": "_robocupjunior_team_posters",
+      "title": "RoboCupJunior Team Posters",
+      "number": "1.4.1",
+      "depth": 2,
+      "chapter": "1. RoboCupJunior International 2026 General Rules"
+    },
+    {
+      "id": "soccer:_technical_description_video_see_league_documentation",
+      "document": "soccer",
+      "anchor": "_technical_description_video_see_league_documentation",
+      "title": "Technical Description Video (See League Documentation)",
+      "number": "1.4.2",
+      "depth": 2,
+      "chapter": "1. RoboCupJunior International 2026 General Rules"
+    },
+    {
+      "id": "soccer:_sharing_team_resources",
+      "document": "soccer",
+      "anchor": "_sharing_team_resources",
+      "title": "Sharing Team Resources",
+      "number": "1.4.3",
+      "depth": 2,
+      "chapter": "1. RoboCupJunior International 2026 General Rules"
+    },
+    {
+      "id": "soccer:_plagiarism_guidelines",
+      "document": "soccer",
+      "anchor": "_plagiarism_guidelines",
+      "title": "Plagiarism Guidelines",
+      "number": "1.4.4",
+      "depth": 2,
+      "chapter": "1. RoboCupJunior International 2026 General Rules"
+    },
+    {
+      "id": "soccer:_bill_of_materials_bom",
+      "document": "soccer",
+      "anchor": "_bill_of_materials_bom",
+      "title": "Bill of Materials (BOM)",
+      "number": "1.4.5",
+      "depth": 2,
+      "chapter": "1. RoboCupJunior International 2026 General Rules"
+    },
+    {
+      "id": "soccer:_spirit_and_behavior",
+      "document": "soccer",
+      "anchor": "_spirit_and_behavior",
+      "title": "Spirit and Behavior",
+      "number": "1.5",
+      "depth": 1,
+      "chapter": "1. RoboCupJunior International 2026 General Rules"
+    },
+    {
+      "id": "soccer:_behavior",
+      "document": "soccer",
+      "anchor": "_behavior",
+      "title": "Behavior",
+      "number": "1.5.1",
+      "depth": 2,
+      "chapter": "1. RoboCupJunior International 2026 General Rules"
+    },
+    {
+      "id": "soccer:_code_of_conduct",
+      "document": "soccer",
+      "anchor": "_code_of_conduct",
+      "title": "Code of Conduct",
+      "number": "1.5.2",
+      "depth": 2,
+      "chapter": "1. RoboCupJunior International 2026 General Rules"
+    },
+    {
+      "id": "soccer:_mentoring_and_onsite_assistance",
+      "document": "soccer",
+      "anchor": "_mentoring_and_onsite_assistance",
+      "title": "Mentoring and Onsite Assistance",
+      "number": "1.5.3",
+      "depth": 2,
+      "chapter": "1. RoboCupJunior International 2026 General Rules"
+    },
+    {
+      "id": "soccer:_teams_onsite",
+      "document": "soccer",
+      "anchor": "_teams_onsite",
+      "title": "Teams Onsite",
+      "number": "1.5.4",
+      "depth": 2,
+      "chapter": "1. RoboCupJunior International 2026 General Rules"
+    },
+    {
+      "id": "soccer:_violations",
+      "document": "soccer",
+      "anchor": "_violations",
+      "title": "Violations",
+      "number": "1.5.5",
+      "depth": 2,
+      "chapter": "1. RoboCupJunior International 2026 General Rules"
+    },
+    {
+      "id": "soccer:_changes_from_the_2025_robocupjunior_soccer_rules",
+      "document": "soccer",
+      "anchor": "_changes_from_the_2025_robocupjunior_soccer_rules",
+      "title": "Changes from the 2025 RoboCupJunior Soccer Rules",
+      "number": "",
+      "depth": 1,
+      "chapter": "1. RoboCupJunior International 2026 General Rules"
+    },
+    {
+      "id": "soccer:gameplay",
+      "document": "soccer",
+      "anchor": "gameplay",
+      "title": "GAMEPLAY",
+      "number": "2",
+      "depth": 0,
+      "chapter": "2. GAMEPLAY"
+    },
+    {
+      "id": "soccer:game-procedure-and-length-of-a-game",
+      "document": "soccer",
+      "anchor": "game-procedure-and-length-of-a-game",
+      "title": "Game procedure and length of a game",
+      "number": "2.1",
+      "depth": 1,
+      "chapter": "2. GAMEPLAY"
+    },
+    {
+      "id": "soccer:pre-match-meeting",
+      "document": "soccer",
+      "anchor": "pre-match-meeting",
+      "title": "Pre-match meeting",
+      "number": "2.2",
+      "depth": 1,
+      "chapter": "2. GAMEPLAY"
+    },
+    {
+      "id": "soccer:kick-off",
+      "document": "soccer",
+      "anchor": "kick-off",
+      "title": "Kick-off",
+      "number": "2.3",
+      "depth": 1,
+      "chapter": "2. GAMEPLAY"
+    },
+    {
+      "id": "soccer:neutral-kickoff",
+      "document": "soccer",
+      "anchor": "neutral-kickoff",
+      "title": "Neutral kick-off",
+      "number": "2.3.1",
+      "depth": 2,
+      "chapter": "2. GAMEPLAY"
+    },
+    {
+      "id": "soccer:scoring",
+      "document": "soccer",
+      "anchor": "scoring",
+      "title": "Scoring",
+      "number": "2.4",
+      "depth": 1,
+      "chapter": "2. GAMEPLAY"
+    },
+    {
+      "id": "soccer:ball-movement",
+      "document": "soccer",
+      "anchor": "ball-movement",
+      "title": "Ball movement",
+      "number": "2.5",
+      "depth": 1,
+      "chapter": "2. GAMEPLAY"
+    },
+    {
+      "id": "soccer:inside-penalty-area",
+      "document": "soccer",
+      "anchor": "inside-penalty-area",
+      "title": "Inside the Penalty Area (Pushing and Multiple defense)",
+      "number": "2.6",
+      "depth": 1,
+      "chapter": "2. GAMEPLAY"
+    },
+    {
+      "id": "soccer:lack-of-progress",
+      "document": "soccer",
+      "anchor": "lack-of-progress",
+      "title": "Lack of progress",
+      "number": "2.7",
+      "depth": 1,
+      "chapter": "2. GAMEPLAY"
+    },
+    {
+      "id": "soccer:out-of-bounds",
+      "document": "soccer",
+      "anchor": "out-of-bounds",
+      "title": "Out of bounds",
+      "number": "2.8",
+      "depth": 1,
+      "chapter": "2. GAMEPLAY"
+    },
+    {
+      "id": "soccer:damaged-robots",
+      "document": "soccer",
+      "anchor": "damaged-robots",
+      "title": "Damaged robots",
+      "number": "2.9",
+      "depth": 1,
+      "chapter": "2. GAMEPLAY"
+    },
+    {
+      "id": "soccer:human-interference",
+      "document": "soccer",
+      "anchor": "human-interference",
+      "title": "Human interference",
+      "number": "2.10",
+      "depth": 1,
+      "chapter": "2. GAMEPLAY"
+    },
+    {
+      "id": "soccer:interruption-of-game-ref-interruption",
+      "document": "soccer",
+      "anchor": "interruption-of-game-ref-interruption",
+      "title": "Interruption of Game",
+      "number": "2.11",
+      "depth": 1,
+      "chapter": "2. GAMEPLAY"
+    },
+    {
+      "id": "soccer:robots",
+      "document": "soccer",
+      "anchor": "robots",
+      "title": "ROBOTS",
+      "number": "3",
+      "depth": 0,
+      "chapter": "3. ROBOTS"
+    },
+    {
+      "id": "soccer:robots-interference",
+      "document": "soccer",
+      "anchor": "robots-interference",
+      "title": "Interference",
+      "number": "3.1",
+      "depth": 1,
+      "chapter": "3. ROBOTS"
+    },
+    {
+      "id": "soccer:robots-control",
+      "document": "soccer",
+      "anchor": "robots-control",
+      "title": "Control & Communication",
+      "number": "3.2",
+      "depth": 1,
+      "chapter": "3. ROBOTS"
+    },
+    {
+      "id": "soccer:agility",
+      "document": "soccer",
+      "anchor": "agility",
+      "title": "Agility",
+      "number": "3.3",
+      "depth": 1,
+      "chapter": "3. ROBOTS"
+    },
+    {
+      "id": "soccer:handle",
+      "document": "soccer",
+      "anchor": "handle",
+      "title": "Handle",
+      "number": "3.4",
+      "depth": 1,
+      "chapter": "3. ROBOTS"
+    },
+    {
+      "id": "soccer:top-markers",
+      "document": "soccer",
+      "anchor": "top-markers",
+      "title": "Top Markers",
+      "number": "3.5",
+      "depth": 1,
+      "chapter": "3. ROBOTS"
+    },
+    {
+      "id": "soccer:violations",
+      "document": "soccer",
+      "anchor": "violations",
+      "title": "Violations",
+      "number": "3.6",
+      "depth": 1,
+      "chapter": "3. ROBOTS"
+    },
+    {
+      "id": "soccer:specifications",
+      "document": "soccer",
+      "anchor": "specifications",
+      "title": "Material specifications",
+      "number": "3.7",
+      "depth": 1,
+      "chapter": "3. ROBOTS"
+    },
+    {
+      "id": "soccer:infrared-ball-change",
+      "document": "soccer",
+      "anchor": "infrared-ball-change",
+      "title": "Soccer Infrared League Ball change 2026",
+      "number": "3.8",
+      "depth": 1,
+      "chapter": "3. ROBOTS"
+    },
+    {
+      "id": "soccer:tournament-balls",
+      "document": "soccer",
+      "anchor": "tournament-balls",
+      "title": "Tournament balls",
+      "number": "3.9",
+      "depth": 1,
+      "chapter": "3. ROBOTS"
+    },
+    {
+      "id": "soccer:code-of-conduct",
+      "document": "soccer",
+      "anchor": "code-of-conduct",
+      "title": "CODE OF CONDUCT",
+      "number": "4",
+      "depth": 0,
+      "chapter": "4. CODE OF CONDUCT"
+    },
+    {
+      "id": "soccer:fair-play",
+      "document": "soccer",
+      "anchor": "fair-play",
+      "title": "Fair Play",
+      "number": "4.1",
+      "depth": 1,
+      "chapter": "4. CODE OF CONDUCT"
+    },
+    {
+      "id": "soccer:conflict-resolution",
+      "document": "soccer",
+      "anchor": "conflict-resolution",
+      "title": "CONFLICT RESOLUTION",
+      "number": "5",
+      "depth": 0,
+      "chapter": "5. CONFLICT RESOLUTION"
+    },
+    {
+      "id": "soccer:referees",
+      "document": "soccer",
+      "anchor": "referees",
+      "title": "Referees",
+      "number": "5.1",
+      "depth": 1,
+      "chapter": "5. CONFLICT RESOLUTION"
+    },
+    {
+      "id": "soccer:rule-clarification",
+      "document": "soccer",
+      "anchor": "rule-clarification",
+      "title": "Rule clarification",
+      "number": "5.2",
+      "depth": 1,
+      "chapter": "5. CONFLICT RESOLUTION"
+    },
+    {
+      "id": "soccer:rule-modification",
+      "document": "soccer",
+      "anchor": "rule-modification",
+      "title": "Rule modification",
+      "number": "5.3",
+      "depth": 1,
+      "chapter": "5. CONFLICT RESOLUTION"
+    },
+    {
+      "id": "soccer:competition-specifics",
+      "document": "soccer",
+      "anchor": "competition-specifics",
+      "title": "Competition specifics",
+      "number": "5.4",
+      "depth": 1,
+      "chapter": "5. CONFLICT RESOLUTION"
+    },
+    {
+      "id": "soccer:league-regulations",
+      "document": "soccer",
+      "anchor": "league-regulations",
+      "title": "LEAGUE REGULATIONS",
+      "number": "6",
+      "depth": 0,
+      "chapter": "6. LEAGUE REGULATIONS"
+    },
+    {
+      "id": "soccer:league-regulations-preamble",
+      "document": "soccer",
+      "anchor": "league-regulations-preamble",
+      "title": "Preamble",
+      "number": "6.1",
+      "depth": 1,
+      "chapter": "6. LEAGUE REGULATIONS"
+    },
+    {
+      "id": "soccer:regulations",
+      "document": "soccer",
+      "anchor": "regulations",
+      "title": "Regulations",
+      "number": "6.2",
+      "depth": 1,
+      "chapter": "6. LEAGUE REGULATIONS"
+    },
+    {
+      "id": "soccer:dimensions",
+      "document": "soccer",
+      "anchor": "dimensions",
+      "title": "Dimensions",
+      "number": "6.2.1",
+      "depth": 2,
+      "chapter": "6. LEAGUE REGULATIONS"
+    },
+    {
+      "id": "soccer:regulations-inference-in-infrared",
+      "document": "soccer",
+      "anchor": "regulations-inference-in-infrared",
+      "title": "Infrared interference",
+      "number": "6.2.2",
+      "depth": 2,
+      "chapter": "6. LEAGUE REGULATIONS"
+    },
+    {
+      "id": "soccer:regulations-limitations",
+      "document": "soccer",
+      "anchor": "regulations-limitations",
+      "title": "Limitations",
+      "number": "6.2.3",
+      "depth": 2,
+      "chapter": "6. LEAGUE REGULATIONS"
+    },
+    {
+      "id": "soccer:regulations-inspections",
+      "document": "soccer",
+      "anchor": "regulations-inspections",
+      "title": "Inspections",
+      "number": "6.2.4",
+      "depth": 2,
+      "chapter": "6. LEAGUE REGULATIONS"
+    },
+    {
+      "id": "soccer:international-competition",
+      "document": "soccer",
+      "anchor": "international-competition",
+      "title": "INTERNATIONAL COMPETITION",
+      "number": "7",
+      "depth": 0,
+      "chapter": "7. INTERNATIONAL COMPETITION"
+    },
+    {
+      "id": "soccer:international-competition-specifics",
+      "document": "soccer",
+      "anchor": "international-competition-specifics",
+      "title": "International Competition Specifics",
+      "number": "7.1",
+      "depth": 1,
+      "chapter": "7. INTERNATIONAL COMPETITION"
+    },
+    {
+      "id": "soccer:interviews",
+      "document": "soccer",
+      "anchor": "interviews",
+      "title": "Interviews",
+      "number": "7.2",
+      "depth": 1,
+      "chapter": "7. INTERNATIONAL COMPETITION"
+    },
+    {
+      "id": "soccer:technical-challenges",
+      "document": "soccer",
+      "anchor": "technical-challenges",
+      "title": "Technical Challenges",
+      "number": "7.3",
+      "depth": 1,
+      "chapter": "7. INTERNATIONAL COMPETITION"
+    },
+    {
+      "id": "soccer:further-information-on-international-competition",
+      "document": "soccer",
+      "anchor": "further-information-on-international-competition",
+      "title": "Further information on International Competition",
+      "number": "7.4",
+      "depth": 1,
+      "chapter": "7. INTERNATIONAL COMPETITION"
+    },
+    {
+      "id": "soccer:entry-league",
+      "document": "soccer",
+      "anchor": "entry-league",
+      "title": "ENTRY LEAGUE",
+      "number": "8",
+      "depth": 0,
+      "chapter": "8. ENTRY LEAGUE"
+    },
+    {
+      "id": "soccer:kicker-power-measuring",
+      "document": "soccer",
+      "anchor": "kicker-power-measuring",
+      "title": "Appendix A: Kicker Power Measuring Procedures",
+      "number": "",
+      "depth": 0,
+      "chapter": "Appendix A: Kicker Power Measuring Procedures"
+    },
+    {
+      "id": "soccer:footnotes",
+      "document": "soccer",
+      "anchor": "footnotes",
+      "title": "Footnotes & references",
+      "number": "",
+      "depth": 0,
+      "chapter": "Footnotes & references"
+    },
+    {
+      "id": "field:dimensions-of-the-field",
+      "document": "field",
+      "anchor": "dimensions-of-the-field",
+      "title": "Dimensions of the field",
+      "number": "1",
+      "depth": 0,
+      "chapter": "1. Dimensions of the field"
+    },
+    {
+      "id": "field:field-walls",
+      "document": "field",
+      "anchor": "field-walls",
+      "title": "Walls",
+      "number": "2",
+      "depth": 0,
+      "chapter": "2. Walls"
+    },
+    {
+      "id": "field:goals",
+      "document": "field",
+      "anchor": "goals",
+      "title": "Goals",
+      "number": "3",
+      "depth": 0,
+      "chapter": "3. Goals"
+    },
+    {
+      "id": "field:floor",
+      "document": "field",
+      "anchor": "floor",
+      "title": "Floor",
+      "number": "4",
+      "depth": 0,
+      "chapter": "4. Floor"
+    },
+    {
+      "id": "field:neutral-spots",
+      "document": "field",
+      "anchor": "neutral-spots",
+      "title": "Neutral spots",
+      "number": "5",
+      "depth": 0,
+      "chapter": "5. Neutral spots"
+    },
+    {
+      "id": "field:center-circle",
+      "document": "field",
+      "anchor": "center-circle",
+      "title": "Center circle",
+      "number": "6",
+      "depth": 0,
+      "chapter": "6. Center circle"
+    },
+    {
+      "id": "field:penalty-areas",
+      "document": "field",
+      "anchor": "penalty-areas",
+      "title": "Penalty areas",
+      "number": "7",
+      "depth": 0,
+      "chapter": "7. Penalty areas"
+    },
+    {
+      "id": "field:lighting-and-magnetic-conditions",
+      "document": "field",
+      "anchor": "lighting-and-magnetic-conditions",
+      "title": "Lighting and Magnetic Conditions",
+      "number": "8",
+      "depth": 0,
+      "chapter": "8. Lighting and Magnetic Conditions"
+    },
+    {
+      "id": "field:field-diagrams",
+      "document": "field",
+      "anchor": "field-diagrams",
+      "title": "FIELD DIAGRAMS",
+      "number": "",
+      "depth": 0,
+      "chapter": "FIELD DIAGRAMS"
+    },
+    {
+      "id": "field:_field_cad_models",
+      "document": "field",
+      "anchor": "_field_cad_models",
+      "title": "Field CAD models",
+      "number": "9",
+      "depth": 0,
+      "chapter": "9. Field CAD models"
+    },
+    {
+      "id": "field:_suggestions_for_getting_started_with_building_fields",
+      "document": "field",
+      "anchor": "_suggestions_for_getting_started_with_building_fields",
+      "title": "Suggestions for getting started with building fields",
+      "number": "10",
+      "depth": 0,
+      "chapter": "10. Suggestions for getting started with building fields"
+    },
+    {
+      "id": "field:_getting_your_first_field_starting_small",
+      "document": "field",
+      "anchor": "_getting_your_first_field_starting_small",
+      "title": "Getting your first field - starting small",
+      "number": "10.1",
+      "depth": 1,
+      "chapter": "10. Suggestions for getting started with building fields"
+    },
+    {
+      "id": "field:_converting_existing_equipment_esp_for_entry_leagues",
+      "document": "field",
+      "anchor": "_converting_existing_equipment_esp_for_entry_leagues",
+      "title": "Converting existing equipment (esp. for Entry Leagues)",
+      "number": "10.2",
+      "depth": 1,
+      "chapter": "10. Suggestions for getting started with building fields"
+    },
+    {
+      "id": "field:_building_competition_fields",
+      "document": "field",
+      "anchor": "_building_competition_fields",
+      "title": "Building Competition Fields",
+      "number": "10.3",
+      "depth": 1,
+      "chapter": "10. Suggestions for getting started with building fields"
+    },
+    {
+      "id": "field:_competition_conditions",
+      "document": "field",
+      "anchor": "_competition_conditions",
+      "title": "Competition conditions",
+      "number": "10.4",
+      "depth": 1,
+      "chapter": "10. Suggestions for getting started with building fields"
+    },
+    {
+      "id": "field:appendix-1",
+      "document": "field",
+      "anchor": "appendix-1",
+      "title": "Appendix A: How to Start Building a Field",
+      "number": "",
+      "depth": 0,
+      "chapter": "Appendix A: How to Start Building a Field"
+    },
+    {
+      "id": "field:_mobility_criteria",
+      "document": "field",
+      "anchor": "_mobility_criteria",
+      "title": "A.1. Mobility Criteria",
+      "number": "",
+      "depth": 1,
+      "chapter": "Appendix A: How to Start Building a Field"
+    },
+    {
+      "id": "field:_choosing_the_type_of_materials",
+      "document": "field",
+      "anchor": "_choosing_the_type_of_materials",
+      "title": "A.2. Choosing the type of materials",
+      "number": "",
+      "depth": 1,
+      "chapter": "Appendix A: How to Start Building a Field"
+    },
+    {
+      "id": "field:_the_woods",
+      "document": "field",
+      "anchor": "_the_woods",
+      "title": "A.2.1. The woods",
+      "number": "",
+      "depth": 2,
+      "chapter": "Appendix A: How to Start Building a Field"
+    },
+    {
+      "id": "field:_the_carpet",
+      "document": "field",
+      "anchor": "_the_carpet",
+      "title": "A.2.2. The carpet",
+      "number": "",
+      "depth": 2,
+      "chapter": "Appendix A: How to Start Building a Field"
+    },
+    {
+      "id": "field:_the_lines",
+      "document": "field",
+      "anchor": "_the_lines",
+      "title": "A.2.3. The lines",
+      "number": "",
+      "depth": 2,
+      "chapter": "Appendix A: How to Start Building a Field"
+    },
+    {
+      "id": "field:_building_the_field",
+      "document": "field",
+      "anchor": "_building_the_field",
+      "title": "A.3. Building the field",
+      "number": "",
+      "depth": 1,
+      "chapter": "Appendix A: How to Start Building a Field"
+    },
+    {
+      "id": "field:_building_the_baseboard_and_the_wedges",
+      "document": "field",
+      "anchor": "_building_the_baseboard_and_the_wedges",
+      "title": "A.3.1. building the baseboard and the wedges",
+      "number": "",
+      "depth": 2,
+      "chapter": "Appendix A: How to Start Building a Field"
+    },
+    {
+      "id": "field:_laying_down_the_carpet",
+      "document": "field",
+      "anchor": "_laying_down_the_carpet",
+      "title": "A.3.2. Laying down the carpet",
+      "number": "",
+      "depth": 2,
+      "chapter": "Appendix A: How to Start Building a Field"
+    },
+    {
+      "id": "field:_building_the_goals",
+      "document": "field",
+      "anchor": "_building_the_goals",
+      "title": "A.3.3. Building the goals",
+      "number": "",
+      "depth": 2,
+      "chapter": "Appendix A: How to Start Building a Field"
+    },
+    {
+      "id": "field:_painting_the_walls_and_the_goals_optional",
+      "document": "field",
+      "anchor": "_painting_the_walls_and_the_goals_optional",
+      "title": "A.3.4. Painting the walls and the goals (optional)",
+      "number": "",
+      "depth": 2,
+      "chapter": "Appendix A: How to Start Building a Field"
+    },
+    {
+      "id": "field:_drawing_the_lines",
+      "document": "field",
+      "anchor": "_drawing_the_lines",
+      "title": "A.3.5. Drawing the lines",
+      "number": "",
+      "depth": 2,
+      "chapter": "Appendix A: How to Start Building a Field"
+    },
+    {
+      "id": "field:_connecting_the_walls_and_the_goals_to_the_base_board",
+      "document": "field",
+      "anchor": "_connecting_the_walls_and_the_goals_to_the_base_board",
+      "title": "A.3.6. Connecting the walls and the goals to the base board",
+      "number": "",
+      "depth": 2,
+      "chapter": "Appendix A: How to Start Building a Field"
+    },
+    {
+      "id": "field:_placing_the_goals",
+      "document": "field",
+      "anchor": "_placing_the_goals",
+      "title": "A.3.7. Placing the goals",
+      "number": "",
+      "depth": 2,
+      "chapter": "Appendix A: How to Start Building a Field"
+    },
+    {
+      "id": "field:footnotes",
+      "document": "field",
+      "anchor": "footnotes",
+      "title": "Footnotes & references",
+      "number": "",
+      "depth": 0,
+      "chapter": "Footnotes & references"
+    },
+    {
+      "id": "ball:technical-specification-for-pulsed-soccer-ball",
+      "document": "ball",
+      "anchor": "technical-specification-for-pulsed-soccer-ball",
+      "title": "Technical Specification for pulsed Soccer Ball",
+      "number": "1",
+      "depth": 0,
+      "chapter": "1. Technical Specification for pulsed Soccer Ball"
+    },
+    {
+      "id": "ball:pulsed-preamble",
+      "document": "ball",
+      "anchor": "pulsed-preamble",
+      "title": "Preamble",
+      "number": "1.1",
+      "depth": 1,
+      "chapter": "1. Technical Specification for pulsed Soccer Ball"
+    },
+    {
+      "id": "ball:pulsed-golf-2026",
+      "document": "ball",
+      "anchor": "pulsed-golf-2026",
+      "title": "Switch to golf-ball sized pulsed ball in 2026",
+      "number": "1.2",
+      "depth": 1,
+      "chapter": "1. Technical Specification for pulsed Soccer Ball"
+    },
+    {
+      "id": "ball:pulsed-specifications",
+      "document": "ball",
+      "anchor": "pulsed-specifications",
+      "title": "Specifications",
+      "number": "1.3",
+      "depth": 1,
+      "chapter": "1. Technical Specification for pulsed Soccer Ball"
+    },
+    {
+      "id": "ball:ir-light",
+      "document": "ball",
+      "anchor": "ir-light",
+      "title": "IR light",
+      "number": "1.3.1",
+      "depth": 2,
+      "chapter": "1. Technical Specification for pulsed Soccer Ball"
+    },
+    {
+      "id": "ball:pulsed-diameter",
+      "document": "ball",
+      "anchor": "pulsed-diameter",
+      "title": "Diameter",
+      "number": "1.3.2",
+      "depth": 2,
+      "chapter": "1. Technical Specification for pulsed Soccer Ball"
+    },
+    {
+      "id": "ball:pulsed-drop-test",
+      "document": "ball",
+      "anchor": "pulsed-drop-test",
+      "title": "Drop Test",
+      "number": "1.3.3",
+      "depth": 2,
+      "chapter": "1. Technical Specification for pulsed Soccer Ball"
+    },
+    {
+      "id": "ball:pulsed-modulation",
+      "document": "ball",
+      "anchor": "pulsed-modulation",
+      "title": "Modulation",
+      "number": "1.3.4",
+      "depth": 2,
+      "chapter": "1. Technical Specification for pulsed Soccer Ball"
+    },
+    {
+      "id": "ball:pulsed-battery-life",
+      "document": "ball",
+      "anchor": "pulsed-battery-life",
+      "title": "Battery Life",
+      "number": "1.3.5",
+      "depth": 2,
+      "chapter": "1. Technical Specification for pulsed Soccer Ball"
+    },
+    {
+      "id": "ball:pulsed-coloration",
+      "document": "ball",
+      "anchor": "pulsed-coloration",
+      "title": "Coloration",
+      "number": "1.3.6",
+      "depth": 2,
+      "chapter": "1. Technical Specification for pulsed Soccer Ball"
+    },
+    {
+      "id": "ball:official-suppliers-for-pulsed-balls",
+      "document": "ball",
+      "anchor": "official-suppliers-for-pulsed-balls",
+      "title": "Official suppliers for pulsed balls",
+      "number": "1.4",
+      "depth": 1,
+      "chapter": "1. Technical Specification for pulsed Soccer Ball"
+    },
+    {
+      "id": "ball:passive-ball-spec",
+      "document": "ball",
+      "anchor": "passive-ball-spec",
+      "title": "Appendix A: Technical Specification for passive Soccer Ball",
+      "number": "",
+      "depth": 0,
+      "chapter": "Appendix A: Technical Specification for passive Soccer Ball"
+    },
+    {
+      "id": "ball:passive-ball-spec-preamble",
+      "document": "ball",
+      "anchor": "passive-ball-spec-preamble",
+      "title": "A.1. Preamble",
+      "number": "",
+      "depth": 1,
+      "chapter": "Appendix A: Technical Specification for passive Soccer Ball"
+    },
+    {
+      "id": "ball:specifications",
+      "document": "ball",
+      "anchor": "specifications",
+      "title": "A.2. Specifications",
+      "number": "",
+      "depth": 1,
+      "chapter": "Appendix A: Technical Specification for passive Soccer Ball"
+    },
+    {
+      "id": "ball:passive-diameter",
+      "document": "ball",
+      "anchor": "passive-diameter",
+      "title": "A.2.1. Diameter",
+      "number": "",
+      "depth": 2,
+      "chapter": "Appendix A: Technical Specification for passive Soccer Ball"
+    },
+    {
+      "id": "ball:passive-drop-test",
+      "document": "ball",
+      "anchor": "passive-drop-test",
+      "title": "A.2.2. Drop Test",
+      "number": "",
+      "depth": 2,
+      "chapter": "Appendix A: Technical Specification for passive Soccer Ball"
+    },
+    {
+      "id": "ball:passive-coloration",
+      "document": "ball",
+      "anchor": "passive-coloration",
+      "title": "A.2.3. Coloration",
+      "number": "",
+      "depth": 2,
+      "chapter": "Appendix A: Technical Specification for passive Soccer Ball"
+    },
+    {
+      "id": "ball:passive-surface",
+      "document": "ball",
+      "anchor": "passive-surface",
+      "title": "A.2.4. Surface",
+      "number": "",
+      "depth": 2,
+      "chapter": "Appendix A: Technical Specification for passive Soccer Ball"
+    },
+    {
+      "id": "ball:passive-weight",
+      "document": "ball",
+      "anchor": "passive-weight",
+      "title": "A.2.5. Weight",
+      "number": "",
+      "depth": 2,
+      "chapter": "Appendix A: Technical Specification for passive Soccer Ball"
+    },
+    {
+      "id": "ball:footnotes",
+      "document": "ball",
+      "anchor": "footnotes",
+      "title": "Footnotes & references",
+      "number": "",
+      "depth": 0,
+      "chapter": "Footnotes & references"
+    },
+    {
+      "id": "scoring:award-types",
+      "document": "scoring",
+      "anchor": "award-types",
+      "title": "Award Types",
+      "number": "1",
+      "depth": 0,
+      "chapter": "1. Award Types"
+    },
+    {
+      "id": "scoring:award-criteria",
+      "document": "scoring",
+      "anchor": "award-criteria",
+      "title": "Award Criteria",
+      "number": "2",
+      "depth": 0,
+      "chapter": "2. Award Criteria"
+    },
+    {
+      "id": "scoring:trophy-winners",
+      "document": "scoring",
+      "anchor": "trophy-winners",
+      "title": "Trophy Winners",
+      "number": "2.1",
+      "depth": 1,
+      "chapter": "2. Award Criteria"
+    },
+    {
+      "id": "scoring:individual-gameplay-tournament",
+      "document": "scoring",
+      "anchor": "individual-gameplay-tournament",
+      "title": "Individual Gameplay Tournament",
+      "number": "2.1.1",
+      "depth": 2,
+      "chapter": "2. Award Criteria"
+    },
+    {
+      "id": "scoring:technical-documentation-paper-tdp-form",
+      "document": "scoring",
+      "anchor": "technical-documentation-paper-tdp-form",
+      "title": "Technical Documentation Paper (TDP Form)",
+      "number": "2.1.2",
+      "depth": 2,
+      "chapter": "2. Award Criteria"
+    },
+    {
+      "id": "scoring:poster-design-and-presentation",
+      "document": "scoring",
+      "anchor": "poster-design-and-presentation",
+      "title": "Poster Design & Presentation",
+      "number": "2.1.3",
+      "depth": 2,
+      "chapter": "2. Award Criteria"
+    },
+    {
+      "id": "scoring:group-team-interview",
+      "document": "scoring",
+      "anchor": "group-team-interview",
+      "title": "Group Team Interview",
+      "number": "2.1.4",
+      "depth": 2,
+      "chapter": "2. Award Criteria"
+    },
+    {
+      "id": "scoring:sportsmanship",
+      "document": "scoring",
+      "anchor": "sportsmanship",
+      "title": "Sportsmanship",
+      "number": "2.1.5",
+      "depth": 2,
+      "chapter": "2. Award Criteria"
+    },
+    {
+      "id": "scoring:documentation-and-community-contribution",
+      "document": "scoring",
+      "anchor": "documentation-and-community-contribution",
+      "title": "Documentation and Community Contribution",
+      "number": "2.1.6",
+      "depth": 2,
+      "chapter": "2. Award Criteria"
+    },
+    {
+      "id": "scoring:short-form-video-tdp",
+      "document": "scoring",
+      "anchor": "short-form-video-tdp",
+      "title": "Short Form Video TDP",
+      "number": "2.1.7",
+      "depth": 2,
+      "chapter": "2. Award Criteria"
+    },
+    {
+      "id": "scoring:community-award",
+      "document": "scoring",
+      "anchor": "community-award",
+      "title": "Community Award",
+      "number": "2.1.8",
+      "depth": 2,
+      "chapter": "2. Award Criteria"
+    },
+    {
+      "id": "scoring:certificates",
+      "document": "scoring",
+      "anchor": "certificates",
+      "title": "Certificates",
+      "number": "2.2",
+      "depth": 1,
+      "chapter": "2. Award Criteria"
+    },
+    {
+      "id": "scoring:gameplay-tournament",
+      "document": "scoring",
+      "anchor": "gameplay-tournament",
+      "title": "Gameplay Tournament 1st, 2nd, 3rd",
+      "number": "2.2.1",
+      "depth": 2,
+      "chapter": "2. Award Criteria"
+    },
+    {
+      "id": "scoring:outstanding-design-certificate",
+      "document": "scoring",
+      "anchor": "outstanding-design-certificate",
+      "title": "Outstanding Design Certificate",
+      "number": "2.2.2",
+      "depth": 2,
+      "chapter": "2. Award Criteria"
+    },
+    {
+      "id": "scoring:outstanding-innovation-certificate",
+      "document": "scoring",
+      "anchor": "outstanding-innovation-certificate",
+      "title": "Outstanding Innovation Certificate",
+      "number": "2.2.3",
+      "depth": 2,
+      "chapter": "2. Award Criteria"
+    },
+    {
+      "id": "scoring:outstanding-documentation-certificate",
+      "document": "scoring",
+      "anchor": "outstanding-documentation-certificate",
+      "title": "Outstanding Documentation Certificate",
+      "number": "2.2.4",
+      "depth": 2,
+      "chapter": "2. Award Criteria"
+    },
+    {
+      "id": "scoring:exemplary-team-certificate",
+      "document": "scoring",
+      "anchor": "exemplary-team-certificate",
+      "title": "Exemplary Team Certificate",
+      "number": "2.2.5",
+      "depth": 2,
+      "chapter": "2. Award Criteria"
+    },
+    {
+      "id": "scoring:superteam-challenge",
+      "document": "scoring",
+      "anchor": "superteam-challenge",
+      "title": "SuperTeam Challenge",
+      "number": "2.3",
+      "depth": 1,
+      "chapter": "2. Award Criteria"
+    },
+    {
+      "id": "scoring:score-criteria-and-rubrics",
+      "document": "scoring",
+      "anchor": "score-criteria-and-rubrics",
+      "title": "Score Criteria and Rubrics",
+      "number": "3",
+      "depth": 0,
+      "chapter": "3. Score Criteria and Rubrics"
+    },
+    {
+      "id": "scoring:technical-documentation-paper-tdp",
+      "document": "scoring",
+      "anchor": "technical-documentation-paper-tdp",
+      "title": "Technical Documentation Paper (TDP)",
+      "number": "3.1",
+      "depth": 1,
+      "chapter": "3. Score Criteria and Rubrics"
+    },
+    {
+      "id": "scoring:poster-presentation",
+      "document": "scoring",
+      "anchor": "poster-presentation",
+      "title": "Poster Presentation",
+      "number": "3.2",
+      "depth": 1,
+      "chapter": "3. Score Criteria and Rubrics"
+    },
+    {
+      "id": "scoring:poster-requirements",
+      "document": "scoring",
+      "anchor": "poster-requirements",
+      "title": "Poster Requirements",
+      "number": "3.2.1",
+      "depth": 2,
+      "chapter": "3. Score Criteria and Rubrics"
+    },
+    {
+      "id": "scoring:group-interview",
+      "document": "scoring",
+      "anchor": "group-interview",
+      "title": "Group Interview",
+      "number": "3.3",
+      "depth": 1,
+      "chapter": "3. Score Criteria and Rubrics"
+    },
+    {
+      "id": "scoring:sportsmanship-2",
+      "document": "scoring",
+      "anchor": "score-criteria-and-rubrics",
+      "title": "Sportsmanship",
+      "number": "3.4",
+      "depth": 1,
+      "chapter": "3. Score Criteria and Rubrics"
+    },
+    {
+      "id": "scoring:documentation-and-community-contribution-2",
+      "document": "scoring",
+      "anchor": "score-criteria-and-rubrics",
+      "title": "Documentation and Community Contribution",
+      "number": "3.5",
+      "depth": 1,
+      "chapter": "3. Score Criteria and Rubrics"
+    },
+    {
+      "id": "scoring:short-form-video-tdp-2",
+      "document": "scoring",
+      "anchor": "score-criteria-and-rubrics",
+      "title": "Short Form Video TDP",
+      "number": "3.6",
+      "depth": 1,
+      "chapter": "3. Score Criteria and Rubrics"
+    },
+    {
+      "id": "scoring:group-interview-questions",
+      "document": "scoring",
+      "anchor": "group-interview-questions",
+      "title": "Appendix A: Group Interview Questions",
+      "number": "",
+      "depth": 0,
+      "chapter": "Appendix A: Group Interview Questions"
+    },
+    {
+      "id": "superteam:_preface",
+      "document": "superteam",
+      "anchor": "_preface",
+      "title": "Preface",
+      "number": "",
+      "depth": 0,
+      "chapter": "Preface"
+    },
+    {
+      "id": "superteam:_changes_from_the_2025_robocupjunior_soccer_superteam_rules",
+      "document": "superteam",
+      "anchor": "_changes_from_the_2025_robocupjunior_soccer_superteam_rules",
+      "title": "Changes from the 2025 RoboCupJunior Soccer SuperTeam Rules",
+      "number": "",
+      "depth": 1,
+      "chapter": "Preface"
+    },
+    {
+      "id": "superteam:general-rules",
+      "document": "superteam",
+      "anchor": "general-rules",
+      "title": "RoboCupJunior International 2026 General Rules",
+      "number": "1",
+      "depth": 0,
+      "chapter": "1. RoboCupJunior International 2026 General Rules"
+    },
+    {
+      "id": "superteam:gameplay",
+      "document": "superteam",
+      "anchor": "gameplay",
+      "title": "GAMEPLAY",
+      "number": "2",
+      "depth": 0,
+      "chapter": "2. GAMEPLAY"
+    },
+    {
+      "id": "superteam:game-procedure-and-length-of-a-game",
+      "document": "superteam",
+      "anchor": "game-procedure-and-length-of-a-game",
+      "title": "Game procedure and length of a game",
+      "number": "2.1",
+      "depth": 1,
+      "chapter": "2. GAMEPLAY"
+    },
+    {
+      "id": "superteam:pre-match-meeting",
+      "document": "superteam",
+      "anchor": "pre-match-meeting",
+      "title": "Pre-match meeting",
+      "number": "2.2",
+      "depth": 1,
+      "chapter": "2. GAMEPLAY"
+    },
+    {
+      "id": "superteam:kick-off",
+      "document": "superteam",
+      "anchor": "kick-off",
+      "title": "Kick-off",
+      "number": "2.3",
+      "depth": 1,
+      "chapter": "2. GAMEPLAY"
+    },
+    {
+      "id": "superteam:neutral-kickoff",
+      "document": "superteam",
+      "anchor": "neutral-kickoff",
+      "title": "Neutral kick-off",
+      "number": "2.3.1",
+      "depth": 2,
+      "chapter": "2. GAMEPLAY"
+    },
+    {
+      "id": "superteam:scoring",
+      "document": "superteam",
+      "anchor": "scoring",
+      "title": "Scoring",
+      "number": "2.4",
+      "depth": 1,
+      "chapter": "2. GAMEPLAY"
+    },
+    {
+      "id": "superteam:ball-movement",
+      "document": "superteam",
+      "anchor": "ball-movement",
+      "title": "Ball movement",
+      "number": "2.5",
+      "depth": 1,
+      "chapter": "2. GAMEPLAY"
+    },
+    {
+      "id": "superteam:inside-penalty-area",
+      "document": "superteam",
+      "anchor": "inside-penalty-area",
+      "title": "Inside the Penalty Area (Pushing and Multiple defense)",
+      "number": "2.6",
+      "depth": 1,
+      "chapter": "2. GAMEPLAY"
+    },
+    {
+      "id": "superteam:lack-of-progress",
+      "document": "superteam",
+      "anchor": "lack-of-progress",
+      "title": "Lack of progress",
+      "number": "2.7",
+      "depth": 1,
+      "chapter": "2. GAMEPLAY"
+    },
+    {
+      "id": "superteam:out-of-bounds",
+      "document": "superteam",
+      "anchor": "out-of-bounds",
+      "title": "Out of bounds",
+      "number": "2.8",
+      "depth": 1,
+      "chapter": "2. GAMEPLAY"
+    },
+    {
+      "id": "superteam:damaged-robots",
+      "document": "superteam",
+      "anchor": "damaged-robots",
+      "title": "Damaged robots",
+      "number": "2.9",
+      "depth": 1,
+      "chapter": "2. GAMEPLAY"
+    },
+    {
+      "id": "superteam:human-interference",
+      "document": "superteam",
+      "anchor": "human-interference",
+      "title": "Human interference",
+      "number": "2.10",
+      "depth": 1,
+      "chapter": "2. GAMEPLAY"
+    },
+    {
+      "id": "superteam:interruption-of-game-ref-interruption",
+      "document": "superteam",
+      "anchor": "interruption-of-game-ref-interruption",
+      "title": "Interruption of Game",
+      "number": "2.11",
+      "depth": 1,
+      "chapter": "2. GAMEPLAY"
+    },
+    {
+      "id": "superteam:tournament-mode-byes",
+      "document": "superteam",
+      "anchor": "tournament-mode-byes",
+      "title": "Tournament mode and Bye games",
+      "number": "2.12",
+      "depth": 1,
+      "chapter": "2. GAMEPLAY"
+    },
+    {
+      "id": "superteam:robots",
+      "document": "superteam",
+      "anchor": "robots",
+      "title": "ROBOTS",
+      "number": "3",
+      "depth": 0,
+      "chapter": "3. ROBOTS"
+    },
+    {
+      "id": "superteam:robots-interference",
+      "document": "superteam",
+      "anchor": "robots-interference",
+      "title": "Interference",
+      "number": "3.1",
+      "depth": 1,
+      "chapter": "3. ROBOTS"
+    },
+    {
+      "id": "superteam:robots-control",
+      "document": "superteam",
+      "anchor": "robots-control",
+      "title": "Control & Communication",
+      "number": "3.2",
+      "depth": 1,
+      "chapter": "3. ROBOTS"
+    },
+    {
+      "id": "superteam:agility",
+      "document": "superteam",
+      "anchor": "agility",
+      "title": "Agility",
+      "number": "3.3",
+      "depth": 1,
+      "chapter": "3. ROBOTS"
+    },
+    {
+      "id": "superteam:handle",
+      "document": "superteam",
+      "anchor": "handle",
+      "title": "Handle",
+      "number": "3.4",
+      "depth": 1,
+      "chapter": "3. ROBOTS"
+    },
+    {
+      "id": "superteam:top-markers",
+      "document": "superteam",
+      "anchor": "top-markers",
+      "title": "Top Markers",
+      "number": "3.5",
+      "depth": 1,
+      "chapter": "3. ROBOTS"
+    },
+    {
+      "id": "superteam:violations",
+      "document": "superteam",
+      "anchor": "violations",
+      "title": "Violations",
+      "number": "3.6",
+      "depth": 1,
+      "chapter": "3. ROBOTS"
+    },
+    {
+      "id": "superteam:specifications",
+      "document": "superteam",
+      "anchor": "specifications",
+      "title": "Material specifications",
+      "number": "3.7",
+      "depth": 1,
+      "chapter": "3. ROBOTS"
+    },
+    {
+      "id": "superteam:infrared-ball-change",
+      "document": "superteam",
+      "anchor": "infrared-ball-change",
+      "title": "Soccer Infrared League Ball Change 2026",
+      "number": "3.8",
+      "depth": 1,
+      "chapter": "3. ROBOTS"
+    },
+    {
+      "id": "superteam:tournament-balls",
+      "document": "superteam",
+      "anchor": "tournament-balls",
+      "title": "Tournament Balls",
+      "number": "3.9",
+      "depth": 1,
+      "chapter": "3. ROBOTS"
+    },
+    {
+      "id": "superteam:number-of-robots-substitution",
+      "document": "superteam",
+      "anchor": "number-of-robots-substitution",
+      "title": "Number of robots / substitution",
+      "number": "3.10",
+      "depth": 1,
+      "chapter": "3. ROBOTS"
+    },
+    {
+      "id": "superteam:code-of-conduct",
+      "document": "superteam",
+      "anchor": "code-of-conduct",
+      "title": "CODE OF CONDUCT",
+      "number": "4",
+      "depth": 0,
+      "chapter": "4. CODE OF CONDUCT"
+    },
+    {
+      "id": "superteam:conflict-resolution",
+      "document": "superteam",
+      "anchor": "conflict-resolution",
+      "title": "CONFLICT RESOLUTION",
+      "number": "5",
+      "depth": 0,
+      "chapter": "5. CONFLICT RESOLUTION"
+    },
+    {
+      "id": "superteam:league-regulations",
+      "document": "superteam",
+      "anchor": "league-regulations",
+      "title": "LEAGUE REGULATIONS",
+      "number": "6",
+      "depth": 0,
+      "chapter": "6. LEAGUE REGULATIONS"
+    },
+    {
+      "id": "superteam:kicker-power-measuring",
+      "document": "superteam",
+      "anchor": "kicker-power-measuring",
+      "title": "Kicker Power Measuring Procedures",
+      "number": "7",
+      "depth": 0,
+      "chapter": "7. Kicker Power Measuring Procedures"
+    },
+    {
+      "id": "superteam:field",
+      "document": "superteam",
+      "anchor": "field",
+      "title": "BIGFIELD",
+      "number": "8",
+      "depth": 0,
+      "chapter": "8. BIGFIELD"
+    },
+    {
+      "id": "superteam:dimensions-of-the-field",
+      "document": "superteam",
+      "anchor": "dimensions-of-the-field",
+      "title": "Dimensions of the field",
+      "number": "8.1",
+      "depth": 1,
+      "chapter": "8. BIGFIELD"
+    },
+    {
+      "id": "superteam:neutral-spots",
+      "document": "superteam",
+      "anchor": "neutral-spots",
+      "title": "Neutral spots",
+      "number": "8.2",
+      "depth": 1,
+      "chapter": "8. BIGFIELD"
+    },
+    {
+      "id": "superteam:center-circle",
+      "document": "superteam",
+      "anchor": "center-circle",
+      "title": "Center circle",
+      "number": "8.3",
+      "depth": 1,
+      "chapter": "8. BIGFIELD"
+    },
+    {
+      "id": "superteam:penalty-areas",
+      "document": "superteam",
+      "anchor": "penalty-areas",
+      "title": "Penalty areas",
+      "number": "8.4",
+      "depth": 1,
+      "chapter": "8. BIGFIELD"
+    },
+    {
+      "id": "superteam:big-field-diagram",
+      "document": "superteam",
+      "anchor": "big-field-diagram",
+      "title": "BIG FIELD DIAGRAM",
+      "number": "",
+      "depth": 0,
+      "chapter": "BIG FIELD DIAGRAM"
+    },
+    {
+      "id": "superteam:footnotes",
+      "document": "superteam",
+      "anchor": "footnotes",
+      "title": "Footnotes & references",
+      "number": "",
+      "depth": 0,
+      "chapter": "Footnotes & references"
+    },
+    {
+      "id": "entry:_preface",
+      "document": "entry",
+      "anchor": "_preface",
+      "title": "Preface",
+      "number": "",
+      "depth": 0,
+      "chapter": "Preface"
+    },
+    {
+      "id": "entry:_differences_to_22_league_rulesets",
+      "document": "entry",
+      "anchor": "_differences_to_22_league_rulesets",
+      "title": "Differences to 2:2 League rulesets",
+      "number": "1",
+      "depth": 0,
+      "chapter": "1. Differences to 2:2 League rulesets"
+    },
+    {
+      "id": "entry:_both_11_leagues",
+      "document": "entry",
+      "anchor": "_both_11_leagues",
+      "title": "Both 1:1 Leagues",
+      "number": "1.1",
+      "depth": 1,
+      "chapter": "1. Differences to 2:2 League rulesets"
+    },
+    {
+      "id": "entry:_11_standard_kit_league",
+      "document": "entry",
+      "anchor": "_11_standard_kit_league",
+      "title": "1:1 Standard Kit League",
+      "number": "1.2",
+      "depth": 1,
+      "chapter": "1. Differences to 2:2 League rulesets"
+    },
+    {
+      "id": "entry:_11_infrared_league",
+      "document": "entry",
+      "anchor": "_11_infrared_league",
+      "title": "1:1 Infrared League",
+      "number": "1.3",
+      "depth": 1,
+      "chapter": "1. Differences to 2:2 League rulesets"
+    },
+    {
+      "id": "entry:_changes_from_the_2025_robocupjunior_soccer_entry_rules",
+      "document": "entry",
+      "anchor": "_changes_from_the_2025_robocupjunior_soccer_entry_rules",
+      "title": "Changes from the 2025 RoboCupJunior Soccer Entry Rules",
+      "number": "",
+      "depth": 1,
+      "chapter": "1. Differences to 2:2 League rulesets"
+    },
+    {
+      "id": "entry:competition-cap",
+      "document": "entry",
+      "anchor": "competition-cap",
+      "title": "Competition Cap",
+      "number": "1.4",
+      "depth": 1,
+      "chapter": "1. Differences to 2:2 League rulesets"
+    },
+    {
+      "id": "entry:_construction_and_programming_have_to_be_performed_exclusively_by_the_students",
+      "document": "entry",
+      "anchor": "_construction_and_programming_have_to_be_performed_exclusively_by_the_students",
+      "title": "Construction and Programming have to be performed exclusively by the students",
+      "number": "",
+      "depth": 1,
+      "chapter": "1. Differences to 2:2 League rulesets"
+    },
+    {
+      "id": "entry:gameplay",
+      "document": "entry",
+      "anchor": "gameplay",
+      "title": "GAMEPLAY",
+      "number": "2",
+      "depth": 0,
+      "chapter": "2. GAMEPLAY"
+    },
+    {
+      "id": "entry:game-procedure-and-length-of-a-game",
+      "document": "entry",
+      "anchor": "game-procedure-and-length-of-a-game",
+      "title": "Game procedure and length of a game",
+      "number": "2.1",
+      "depth": 1,
+      "chapter": "2. GAMEPLAY"
+    },
+    {
+      "id": "entry:pre-match-meeting",
+      "document": "entry",
+      "anchor": "pre-match-meeting",
+      "title": "Pre-match meeting",
+      "number": "2.2",
+      "depth": 1,
+      "chapter": "2. GAMEPLAY"
+    },
+    {
+      "id": "entry:kick-off",
+      "document": "entry",
+      "anchor": "kick-off",
+      "title": "Kick-off",
+      "number": "2.3",
+      "depth": 1,
+      "chapter": "2. GAMEPLAY"
+    },
+    {
+      "id": "entry:neutral-kickoff",
+      "document": "entry",
+      "anchor": "neutral-kickoff",
+      "title": "Neutral kick-off",
+      "number": "2.3.1",
+      "depth": 2,
+      "chapter": "2. GAMEPLAY"
+    },
+    {
+      "id": "entry:human-interference",
+      "document": "entry",
+      "anchor": "human-interference",
+      "title": "Human interference",
+      "number": "2.4",
+      "depth": 1,
+      "chapter": "2. GAMEPLAY"
+    },
+    {
+      "id": "entry:ball-movement",
+      "document": "entry",
+      "anchor": "ball-movement",
+      "title": "Ball movement",
+      "number": "2.5",
+      "depth": 1,
+      "chapter": "2. GAMEPLAY"
+    },
+    {
+      "id": "entry:scoring",
+      "document": "entry",
+      "anchor": "scoring",
+      "title": "Scoring",
+      "number": "2.6",
+      "depth": 1,
+      "chapter": "2. GAMEPLAY"
+    },
+    {
+      "id": "entry:lack-of-progress",
+      "document": "entry",
+      "anchor": "lack-of-progress",
+      "title": "Lack of progress",
+      "number": "2.7",
+      "depth": 1,
+      "chapter": "2. GAMEPLAY"
+    },
+    {
+      "id": "entry:damaged-robots",
+      "document": "entry",
+      "anchor": "damaged-robots",
+      "title": "Damaged robots",
+      "number": "2.8",
+      "depth": 1,
+      "chapter": "2. GAMEPLAY"
+    },
+    {
+      "id": "entry:interruption-of-game-ref-interruption",
+      "document": "entry",
+      "anchor": "interruption-of-game-ref-interruption",
+      "title": "Interruption of Game",
+      "number": "2.9",
+      "depth": 1,
+      "chapter": "2. GAMEPLAY"
+    },
+    {
+      "id": "entry:team",
+      "document": "entry",
+      "anchor": "team",
+      "title": "TEAM",
+      "number": "3",
+      "depth": 0,
+      "chapter": "3. TEAM"
+    },
+    {
+      "id": "entry:team-regulations",
+      "document": "entry",
+      "anchor": "team-regulations",
+      "title": "Regulations",
+      "number": "3.1",
+      "depth": 1,
+      "chapter": "3. TEAM"
+    },
+    {
+      "id": "entry:team-violations",
+      "document": "entry",
+      "anchor": "team-violations",
+      "title": "Violations",
+      "number": "3.2",
+      "depth": 1,
+      "chapter": "3. TEAM"
+    },
+    {
+      "id": "entry:robots",
+      "document": "entry",
+      "anchor": "robots",
+      "title": "ROBOTS",
+      "number": "4",
+      "depth": 0,
+      "chapter": "4. ROBOTS"
+    },
+    {
+      "id": "entry:number-of-robots-substitution",
+      "document": "entry",
+      "anchor": "number-of-robots-substitution",
+      "title": "Number of robots / substitutions",
+      "number": "4.1",
+      "depth": 1,
+      "chapter": "4. ROBOTS"
+    },
+    {
+      "id": "entry:robots-interference",
+      "document": "entry",
+      "anchor": "robots-interference",
+      "title": "Interference",
+      "number": "4.2",
+      "depth": 1,
+      "chapter": "4. ROBOTS"
+    },
+    {
+      "id": "entry:robots-control",
+      "document": "entry",
+      "anchor": "robots-control",
+      "title": "Control",
+      "number": "4.3",
+      "depth": 1,
+      "chapter": "4. ROBOTS"
+    },
+    {
+      "id": "entry:agility",
+      "document": "entry",
+      "anchor": "agility",
+      "title": "Agility",
+      "number": "4.4",
+      "depth": 1,
+      "chapter": "4. ROBOTS"
+    },
+    {
+      "id": "entry:handle",
+      "document": "entry",
+      "anchor": "handle",
+      "title": "Handle",
+      "number": "4.5",
+      "depth": 1,
+      "chapter": "4. ROBOTS"
+    },
+    {
+      "id": "entry:top-markers",
+      "document": "entry",
+      "anchor": "top-markers",
+      "title": "Top Markers",
+      "number": "4.6",
+      "depth": 1,
+      "chapter": "4. ROBOTS"
+    },
+    {
+      "id": "entry:violations",
+      "document": "entry",
+      "anchor": "violations",
+      "title": "Violations",
+      "number": "4.7",
+      "depth": 1,
+      "chapter": "4. ROBOTS"
+    },
+    {
+      "id": "entry:field",
+      "document": "entry",
+      "anchor": "field",
+      "title": "FIELD",
+      "number": "5",
+      "depth": 0,
+      "chapter": "5. FIELD"
+    },
+    {
+      "id": "entry:dimensions-of-the-field",
+      "document": "entry",
+      "anchor": "dimensions-of-the-field",
+      "title": "Dimensions of the field",
+      "number": "5.1",
+      "depth": 1,
+      "chapter": "5. FIELD"
+    },
+    {
+      "id": "entry:field-walls",
+      "document": "entry",
+      "anchor": "field-walls",
+      "title": "Walls",
+      "number": "5.2",
+      "depth": 1,
+      "chapter": "5. FIELD"
+    },
+    {
+      "id": "entry:goals",
+      "document": "entry",
+      "anchor": "goals",
+      "title": "Goals",
+      "number": "5.3",
+      "depth": 1,
+      "chapter": "5. FIELD"
+    },
+    {
+      "id": "entry:floor",
+      "document": "entry",
+      "anchor": "floor",
+      "title": "Floor",
+      "number": "5.4",
+      "depth": 1,
+      "chapter": "5. FIELD"
+    },
+    {
+      "id": "entry:neutral-spots",
+      "document": "entry",
+      "anchor": "neutral-spots",
+      "title": "Neutral spots",
+      "number": "5.5",
+      "depth": 1,
+      "chapter": "5. FIELD"
+    },
+    {
+      "id": "entry:center-circle",
+      "document": "entry",
+      "anchor": "center-circle",
+      "title": "Center circle",
+      "number": "5.6",
+      "depth": 1,
+      "chapter": "5. FIELD"
+    },
+    {
+      "id": "entry:penalty-areas",
+      "document": "entry",
+      "anchor": "penalty-areas",
+      "title": "Penalty areas",
+      "number": "5.7",
+      "depth": 1,
+      "chapter": "5. FIELD"
+    },
+    {
+      "id": "entry:lighting-and-magnetic-conditions",
+      "document": "entry",
+      "anchor": "lighting-and-magnetic-conditions",
+      "title": "Lighting and Magnetic Conditions",
+      "number": "5.8",
+      "depth": 1,
+      "chapter": "5. FIELD"
+    },
+    {
+      "id": "entry:field-diagrams",
+      "document": "entry",
+      "anchor": "field-diagrams",
+      "title": "FIELD DIAGRAMS",
+      "number": "",
+      "depth": 0,
+      "chapter": "FIELD DIAGRAMS"
+    },
+    {
+      "id": "entry:ball",
+      "document": "entry",
+      "anchor": "ball",
+      "title": "BALL",
+      "number": "6",
+      "depth": 0,
+      "chapter": "6. BALL"
+    },
+    {
+      "id": "entry:specification-for-ball",
+      "document": "entry",
+      "anchor": "specification-for-ball",
+      "title": "Specification for Soccer Entry Ball",
+      "number": "6.1",
+      "depth": 1,
+      "chapter": "6. BALL"
+    },
+    {
+      "id": "entry:tournament-balls",
+      "document": "entry",
+      "anchor": "tournament-balls",
+      "title": "Tournament balls",
+      "number": "6.2",
+      "depth": 1,
+      "chapter": "6. BALL"
+    },
+    {
+      "id": "entry:code-of-conduct",
+      "document": "entry",
+      "anchor": "code-of-conduct",
+      "title": "CODE OF CONDUCT",
+      "number": "7",
+      "depth": 0,
+      "chapter": "7. CODE OF CONDUCT"
+    },
+    {
+      "id": "entry:fair-play",
+      "document": "entry",
+      "anchor": "fair-play",
+      "title": "Fair Play",
+      "number": "7.1",
+      "depth": 1,
+      "chapter": "7. CODE OF CONDUCT"
+    },
+    {
+      "id": "entry:behavior",
+      "document": "entry",
+      "anchor": "behavior",
+      "title": "Behavior",
+      "number": "7.2",
+      "depth": 1,
+      "chapter": "7. CODE OF CONDUCT"
+    },
+    {
+      "id": "entry:help",
+      "document": "entry",
+      "anchor": "help",
+      "title": "Help",
+      "number": "7.3",
+      "depth": 1,
+      "chapter": "7. CODE OF CONDUCT"
+    },
+    {
+      "id": "entry:sharing",
+      "document": "entry",
+      "anchor": "sharing",
+      "title": "Sharing",
+      "number": "7.4",
+      "depth": 1,
+      "chapter": "7. CODE OF CONDUCT"
+    },
+    {
+      "id": "entry:spirit",
+      "document": "entry",
+      "anchor": "spirit",
+      "title": "Spirit",
+      "number": "7.5",
+      "depth": 1,
+      "chapter": "7. CODE OF CONDUCT"
+    },
+    {
+      "id": "entry:violations-disqualification",
+      "document": "entry",
+      "anchor": "violations-disqualification",
+      "title": "Violations / Disqualification",
+      "number": "7.6",
+      "depth": 1,
+      "chapter": "7. CODE OF CONDUCT"
+    },
+    {
+      "id": "entry:conflict-resolution",
+      "document": "entry",
+      "anchor": "conflict-resolution",
+      "title": "CONFLICT RESOLUTION",
+      "number": "8",
+      "depth": 0,
+      "chapter": "8. CONFLICT RESOLUTION"
+    },
+    {
+      "id": "entry:referees",
+      "document": "entry",
+      "anchor": "referees",
+      "title": "Referees",
+      "number": "8.1",
+      "depth": 1,
+      "chapter": "8. CONFLICT RESOLUTION"
+    },
+    {
+      "id": "entry:rule-clarification",
+      "document": "entry",
+      "anchor": "rule-clarification",
+      "title": "Rule clarification",
+      "number": "8.2",
+      "depth": 1,
+      "chapter": "8. CONFLICT RESOLUTION"
+    },
+    {
+      "id": "entry:rule-modification",
+      "document": "entry",
+      "anchor": "rule-modification",
+      "title": "Rule modification",
+      "number": "8.3",
+      "depth": 1,
+      "chapter": "8. CONFLICT RESOLUTION"
+    },
+    {
+      "id": "entry:regulatory-statutes",
+      "document": "entry",
+      "anchor": "regulatory-statutes",
+      "title": "Regulatory statutes",
+      "number": "8.4",
+      "depth": 1,
+      "chapter": "8. CONFLICT RESOLUTION"
+    },
+    {
+      "id": "entry:regulations",
+      "document": "entry",
+      "anchor": "regulations",
+      "title": "Regulations",
+      "number": "8.5",
+      "depth": 1,
+      "chapter": "8. CONFLICT RESOLUTION"
+    },
+    {
+      "id": "entry:dimensions",
+      "document": "entry",
+      "anchor": "dimensions",
+      "title": "Dimensions",
+      "number": "8.5.1",
+      "depth": 2,
+      "chapter": "8. CONFLICT RESOLUTION"
+    },
+    {
+      "id": "entry:regulations-inference",
+      "document": "entry",
+      "anchor": "regulations-inference",
+      "title": "Infrared interference",
+      "number": "8.5.2",
+      "depth": 2,
+      "chapter": "8. CONFLICT RESOLUTION"
+    },
+    {
+      "id": "entry:regulations-limitations",
+      "document": "entry",
+      "anchor": "regulations-limitations",
+      "title": "Limitations",
+      "number": "8.5.3",
+      "depth": 2,
+      "chapter": "8. CONFLICT RESOLUTION"
+    },
+    {
+      "id": "entry:_11_standard_kit_league_2",
+      "document": "entry",
+      "anchor": "_11_standard_kit_league_2",
+      "title": "1:1 Standard Kit League",
+      "number": "8.5.4",
+      "depth": 2,
+      "chapter": "8. CONFLICT RESOLUTION"
+    },
+    {
+      "id": "entry:_11_infrared_league_2",
+      "document": "entry",
+      "anchor": "_11_infrared_league_2",
+      "title": "1:1 Infrared League",
+      "number": "8.5.5",
+      "depth": 2,
+      "chapter": "8. CONFLICT RESOLUTION"
+    },
+    {
+      "id": "entry:regulations-construction",
+      "document": "entry",
+      "anchor": "regulations-construction",
+      "title": "Construction",
+      "number": "8.5.6",
+      "depth": 2,
+      "chapter": "8. CONFLICT RESOLUTION"
+    },
+    {
+      "id": "entry:regulations-programming",
+      "document": "entry",
+      "anchor": "regulations-programming",
+      "title": "Programming",
+      "number": "8.5.7",
+      "depth": 2,
+      "chapter": "8. CONFLICT RESOLUTION"
+    },
+    {
+      "id": "entry:regulations-inspections",
+      "document": "entry",
+      "anchor": "regulations-inspections",
+      "title": "Inspections",
+      "number": "8.5.8",
+      "depth": 2,
+      "chapter": "8. CONFLICT RESOLUTION"
+    },
+    {
+      "id": "entry:technical-specification-for-pulsed-soccer-ball",
+      "document": "entry",
+      "anchor": "technical-specification-for-pulsed-soccer-ball",
+      "title": "Appendix A: Technical Specification for pulsed Soccer Ball",
+      "number": "",
+      "depth": 0,
+      "chapter": "Appendix A: Technical Specification for pulsed Soccer Ball"
+    },
+    {
+      "id": "entry:pulsed-specifications",
+      "document": "entry",
+      "anchor": "pulsed-specifications",
+      "title": "A.1. Specifications",
+      "number": "",
+      "depth": 1,
+      "chapter": "Appendix A: Technical Specification for pulsed Soccer Ball"
+    },
+    {
+      "id": "entry:ir-light",
+      "document": "entry",
+      "anchor": "ir-light",
+      "title": "A.1.1. IR light",
+      "number": "",
+      "depth": 2,
+      "chapter": "Appendix A: Technical Specification for pulsed Soccer Ball"
+    },
+    {
+      "id": "entry:pulsed-diameter",
+      "document": "entry",
+      "anchor": "pulsed-diameter",
+      "title": "A.1.2. Diameter",
+      "number": "",
+      "depth": 2,
+      "chapter": "Appendix A: Technical Specification for pulsed Soccer Ball"
+    },
+    {
+      "id": "entry:pulsed-modulation",
+      "document": "entry",
+      "anchor": "pulsed-modulation",
+      "title": "A.1.3. Modulation",
+      "number": "",
+      "depth": 2,
+      "chapter": "Appendix A: Technical Specification for pulsed Soccer Ball"
+    },
+    {
+      "id": "entry:pulsed-coloration",
+      "document": "entry",
+      "anchor": "pulsed-coloration",
+      "title": "A.1.4. Coloration",
+      "number": "",
+      "depth": 2,
+      "chapter": "Appendix A: Technical Specification for pulsed Soccer Ball"
+    },
+    {
+      "id": "entry:official-suppliers-for-pulsed-balls",
+      "document": "entry",
+      "anchor": "official-suppliers-for-pulsed-balls",
+      "title": "A.2. Official suppliers for pulsed balls",
+      "number": "",
+      "depth": 1,
+      "chapter": "Appendix A: Technical Specification for pulsed Soccer Ball"
+    },
+    {
+      "id": "entry:kicker-power-measuring",
+      "document": "entry",
+      "anchor": "kicker-power-measuring",
+      "title": "Appendix B: Kicker Power Measuring Procedures",
+      "number": "",
+      "depth": 0,
+      "chapter": "Appendix B: Kicker Power Measuring Procedures"
+    },
+    {
+      "id": "entry:motor-whitelist",
+      "document": "entry",
+      "anchor": "motor-whitelist",
+      "title": "Appendix C: Motor Whitelist",
+      "number": "",
+      "depth": 0,
+      "chapter": "Appendix C: Motor Whitelist"
+    },
+    {
+      "id": "entry:footnotes",
+      "document": "entry",
+      "anchor": "footnotes",
+      "title": "Footnotes & references",
+      "number": "",
+      "depth": 0,
+      "chapter": "Footnotes & references"
+    }
+  ]
+}

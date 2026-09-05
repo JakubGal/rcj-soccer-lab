@@ -18,7 +18,7 @@ const RULES_URL =
   'https://robocup-junior.github.io/soccer-rules/master/rules.html';
 const RULE_2_4_URL = `${RULES_URL}#scoring`;
 const RULE_2_5_URL = `${RULES_URL}#ball-movement`;
-const RULE_2_6_URL = `${RULES_URL}#inside-the-penalty-area-pushing-and-multiple-defense`;
+const RULE_2_6_URL = `${RULES_URL}#inside-penalty-area`;
 
 const PI = Math.PI;
 const ROBOT_CONTACT_CLEARANCE = 0.002;
@@ -687,7 +687,7 @@ export const SCENARIOS: ScenarioDefinition[] = [
       "Count defenders using position, then compare each robot's distance from the ball before selecting the robot to move.",
     duration: 12,
     actors: [
-      robot('blue-1', 'Blue 1', 'blue', pose(-0.18, -0.96, 0), 1),
+      robot('blue-1', 'Blue 1', 'blue', pose(-0.18, -0.89, 0), 1),
       robot('blue-2', 'Blue 2', 'blue', pose(0.2, -0.88, 0.2), 2),
       robot('yellow-1', 'Yellow 1', 'yellow', pose(0.18, -0.42, PI), 1),
       ball(pose(-0.14, -0.77, 0)),
@@ -699,7 +699,7 @@ export const SCENARIOS: ScenarioDefinition[] = [
       const time = clamp(timeSeconds, 0, 12);
       const entering = smoothProgress(time, 1, 3);
       const relocation = smoothProgress(time, 6.4, 9.2);
-      const blue1 = pose(-0.18, -0.96, 0);
+      const blue1 = pose(-0.18, -0.89, 0);
       const blue2Inside = mixPose(
         pose(0.24, -0.66, -0.1),
         pose(0.2, -0.88, 0.2),
@@ -709,7 +709,7 @@ export const SCENARIOS: ScenarioDefinition[] = [
         blue2Inside,
         pose(
           RCJ_FIELD_DERIVED.neutralSpotX,
-          -RCJ_FIELD_DERIVED.neutralSpotZ,
+          RCJ_FIELD_DERIVED.neutralSpotZ,
           PI,
         ),
         relocation,
@@ -876,7 +876,7 @@ export const SCENARIOS: ScenarioDefinition[] = [
     ruleRef: {
       section: 'Rule 2.6',
       url: RULE_2_6_URL,
-      note: 'The exercise demonstrates decision sequencing; committee guidance should confirm the exact event procedure.',
+      note: 'The 2026 rule explicitly resolves pushing before multiple defense when both occur together.',
     },
     category: 'contact',
     publicSummary:
@@ -955,7 +955,7 @@ export const SCENARIOS: ScenarioDefinition[] = [
         },
         {
           kind: 'policy',
-          text: 'This training rubric resolves the pushing judgment before reassessing multiple defense.',
+          text: 'The 2026 rule resolves pushing before multiple defense when both occur together.',
         },
       ];
       return frame(
