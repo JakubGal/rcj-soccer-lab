@@ -227,6 +227,10 @@ export class RefereeMatch {
   private lastSampledMatchTime = Number.NEGATIVE_INFINITY;
   private readonly recordMatchReplay: boolean;
   private invalidGoalPassage: { robot: string; team: MatchTeam } | null = null;
+  // Teams whose awarded/disallowed goal is still being adjudicated: while the
+  // ball has not left the goal pocket, a repeated pendingEvent for the same
+  // team is the same passage bouncing back, not a fresh incident.
+  private openGoalTeams = new Set<MatchTeam>();
   private multipleDefenseOffenses: Record<MatchTeam, number> = {
     blue: 0,
     yellow: 0,
@@ -1544,6 +1548,14 @@ export class RefereeMatch {
   }
 
   private detectLiveIncident() {
+    // Once the ball has actually left the goal pocket, an earlier goal
+    // passage is over; a later pendingEvent for that team is a fresh one.
+    if (
+      this.mode === 'continuous' &&
+      this.openGoalTeams.size &&
+      Math.abs(this.match.state.actors.ball.z) < FIELD.goalMouthZ - 0.03
+    )
+      this.openGoalTeams.clear();
     if (this.mode === 'continuous' && this.match.stationarySeconds >= 1) {
       for (const item of this.observations.values())
         if (
@@ -1584,6 +1596,17 @@ export class RefereeMatch {
       ]),
     );
     if (pending) {
+      // The ball bouncing inside the goal keeps re-triggering the same
+      // pendingEvent while it never actually leaves; treat every repeat as
+      // the one ongoing passage instead of a new incident each time.
+      if (
+        this.mode === 'continuous' &&
+        pending.kind === 'goal' &&
+        this.openGoalTeams.has(pending.team)
+      ) {
+        this.match.state.pendingEvent = null;
+        return this.motionHeld;
+      }
       const liveScoringOffender =
         pending.kind === 'goal'
           ? MATCH_ROBOTS.find(
@@ -1712,7 +1735,10 @@ export class RefereeMatch {
             'The live ball has remained within a small area for several seconds. Assess the lack of progress and give a count.',
           ),
         );
-      if (this.mode === 'continuous') this.match.state.pendingEvent = null;
+      if (this.mode === 'continuous') {
+        if (pending.kind === 'goal') this.openGoalTeams.add(pending.team);
+        this.match.state.pendingEvent = null;
+      }
       this.syncMotion();
       return this.motionHeld;
     }
