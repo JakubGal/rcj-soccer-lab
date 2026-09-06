@@ -229,9 +229,10 @@ The legacy `/?mode=manual` link opens this editor inside Play.
 Play uses an independent 120 Hz planar model with swept robot collisions,
 ball contact and damping, kicks, and goal-panel collisions. A goal counts when
 the ball contacts the inside back wall. Goals restart automatically; stalled
-AI play resets after 8 seconds. This is a practice game, without ball height,
-ramp physics, or automatic referee penalties. Scripted rule lessons are in
-Rules; manual arrangement and live driving share the Play field.
+AI play moves the ball to the nearest neutral spot after 8 seconds. This is a
+practice game, without ball height, ramp physics, or automatic referee
+penalties. Scripted rule lessons are in Rules; manual arrangement and live
+driving share the Play field.
 
 ## Referee the AI teams
 

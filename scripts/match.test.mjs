@@ -43,6 +43,9 @@ const { SoccerMatch, MATCH_ROBOTS, MATCH_STEP, NO_DRIVE } =
   await import('../lib/simulator/match.ts');
 const { clampRobotToField, robotTouchesFieldWall, robotWallClearance } =
   await import('../lib/simulator/referee-geometry.ts');
+const { RCJ_FIELD_DERIVED: FIELD } = await import(
+  '../lib/simulator/field-spec.ts'
+);
 const settings = (controls = { blue: 'manual', yellow: 'off' }) => ({
   controls,
   selectedRobot: 'blue-1',
@@ -165,9 +168,9 @@ for (const end of [-1, 1]) {
     advance(match, 2, config);
     assert.equal(match.state.score.blue + match.state.score.yellow, 1);
     assert.equal(match.state.phase, 'playing');
-    const receiving = match.state.actors[end === 1 ? 'yellow-1' : 'blue-1'];
-    assert.equal(match.state.actors.ball.x, receiving.x);
-    assert.ok(Math.abs(match.state.actors.ball.z - receiving.z) < 0.15);
+    // Rule 2.3: the restart kickoff places the ball at the field centre.
+    assert.equal(match.state.actors.ball.x, 0);
+    assert.equal(match.state.actors.ball.z, 0);
   });
   test(`outside back-wall shots do not score (end ${end})`, () => {
     const match = new SoccerMatch();
@@ -178,6 +181,97 @@ for (const end of [-1, 1]) {
     assert.ok(match.state.actors.ball.z * end >= 1.17);
   });
 }
+
+test('kickoff places the ball at the centre with the non-kickoff team clear of it', () => {
+  const assertLegalKickoff = (match, kickoffTeam) => {
+    assert.equal(match.state.actors.ball.x, 0);
+    assert.equal(match.state.actors.ball.z, 0);
+    for (const robot of MATCH_ROBOTS) {
+      const pose = match.state.actors[robot.id];
+      if (robot.team !== kickoffTeam) {
+        assert.ok(
+          Math.hypot(pose.x, pose.z) >= 0.4,
+          `${robot.id} is within 0.4m of centre at ${kickoffTeam} kickoff`,
+        );
+      }
+      const ownHalfSign = robot.team === 'blue' ? -1 : 1;
+      assert.ok(
+        pose.z * ownHalfSign >= 0,
+        `${robot.id} is not on its own half at ${kickoffTeam} kickoff`,
+      );
+    }
+  };
+  const match = new SoccerMatch();
+  assertLegalKickoff(match, 'blue');
+  const config = settings({ blue: 'off', yellow: 'off' });
+  match.state.actors.ball = { x: 0.04, z: 1.06, yaw: 0 };
+  match.state.ballVelocity = { x: 0, z: 1.2 };
+  advance(match, 0.125, config);
+  assert.equal(match.state.score.blue, 1, 'blue scores at the positive end');
+  advance(match, 2, config);
+  assert.equal(match.state.phase, 'playing');
+  assertLegalKickoff(match, 'yellow');
+});
+
+test('lack of progress moves only the ball to the nearest neutral spot', () => {
+  const match = new SoccerMatch();
+  const config = {
+    controls: { blue: 'ai', yellow: 'ai' },
+    selectedRobot: 'blue-1',
+    duration: 120,
+    disabledRobots: MATCH_ROBOTS.map((robot) => robot.id),
+  };
+  match.state.actors.ball = { x: 0.6, z: 0.95, yaw: 0 };
+  match.state.ballVelocity = { x: 0, z: 0 };
+  const before = Object.fromEntries(
+    MATCH_ROBOTS.map((robot) => [robot.id, { ...match.state.actors[robot.id] }]),
+  );
+  advance(match, 8.5, config);
+  assert.equal(match.state.actors.ball.x, FIELD.neutralSpotX);
+  assert.equal(match.state.actors.ball.z, FIELD.neutralSpotZ);
+  assert.deepEqual(match.state.ballVelocity, { x: 0, z: 0 });
+  assert.equal(match.state.ballOwner, null);
+  for (const robot of MATCH_ROBOTS) {
+    assert.deepEqual(match.state.actors[robot.id], before[robot.id]);
+  }
+});
+
+test('the match clock keeps advancing during a goal pause and finishes on time', () => {
+  const match = new SoccerMatch();
+  const config = settings({ blue: 'off', yellow: 'off' });
+  match.state.actors.ball = { x: 0.04, z: 1.06, yaw: 0 };
+  match.state.ballVelocity = { x: 0, z: 1.2 };
+  advance(match, 0.125, config);
+  assert.equal(match.state.phase, 'goal');
+  let previous = match.state.elapsed;
+  let steps = 0;
+  while (match.state.phase === 'goal' && steps++ < 500) {
+    match.step(config);
+    assert.ok(
+      Math.abs(match.state.elapsed - previous - MATCH_STEP) < 1e-9,
+      `elapsed did not advance by one step at ${match.state.elapsed}`,
+    );
+    previous = match.state.elapsed;
+  }
+  assert.equal(match.state.phase, 'playing');
+});
+
+test('first lack-of-progress placement can use the current free spot; a repeat uses a different spot', () => {
+  const match = new SoccerMatch();
+  const config = {
+    controls: { blue: 'ai', yellow: 'ai' },
+    selectedRobot: 'blue-1',
+    duration: 120,
+    disabledRobots: MATCH_ROBOTS.map((robot) => robot.id),
+  };
+  match.state.actors.ball = { x: 0, z: 0, yaw: 0 };
+  advance(match, 8.1, config);
+  assert.deepEqual(match.state.actors.ball, { x: 0, z: 0, yaw: 0 });
+  advance(match, 8.1, config);
+  assert.ok(Math.hypot(match.state.actors.ball.x, match.state.actors.ball.z) > 0.1);
+  match.place(match.state.actors);
+  assert.equal(match.lastProgressRelocation, null);
+});
 
 test('goal sides and field walls bounce the ball without awarding a goal', () => {
   const match = new SoccerMatch();
