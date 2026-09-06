@@ -783,7 +783,7 @@ export const SCENARIOS: ScenarioDefinition[] = [
       'Separate facts from judgment: observe contact, drive directions and ball access, then decide whether one robot caused a material disadvantage.',
     duration: 10,
     actors: [
-      robot('blue-1', 'Blue 1', 'blue', pose(-0.12, -1.02, 0), 1),
+      robot('blue-1', 'Blue 1', 'blue', pose(-0.12, -0.9, 0), 1),
       robot('yellow-1', 'Yellow 1', 'yellow', pose(0.1, -0.56, PI), 1),
       ball(pose(0.02, -0.84, 0)),
     ],
@@ -812,13 +812,13 @@ export const SCENARIOS: ScenarioDefinition[] = [
         PI + 0.14,
       );
       const blueRaw = mixPose(
-        mixPose(pose(-0.12, -1.02, 0), blueContact, approach),
+        mixPose(pose(-0.12, -0.9, 0), blueContact, approach),
         pose(-0.2, -0.65, -0.28),
         separation,
       );
       const yellowRaw = mixPose(
         mixPose(pose(0.1, -0.56, PI), yellowContact, approach),
-        pose(0.22, -0.98, PI - 0.2),
+        pose(0.22, -0.9, PI - 0.2),
         separation,
       );
       const [blue, yellow] = separateRobotPairEqually(blueRaw, yellowRaw);
@@ -885,7 +885,7 @@ export const SCENARIOS: ScenarioDefinition[] = [
       'Read the timeline, not one frozen frame. Decide the pushing question first, then reassess which objective conditions remain.',
     duration: 12,
     actors: [
-      robot('blue-1', 'Blue 1', 'blue', pose(-0.26, -0.98, 0), 1),
+      robot('blue-1', 'Blue 1', 'blue', pose(-0.26, -0.87, 0), 1),
       robot('blue-2', 'Blue 2', 'blue', pose(0.22, -0.62, PI), 2),
       robot('yellow-1', 'Yellow 1', 'yellow', pose(0.24, -0.34, PI), 1),
       ball(pose(0.1, -0.84, 0)),
@@ -904,7 +904,7 @@ export const SCENARIOS: ScenarioDefinition[] = [
       const approach = smoothProgress(time, 1.2, 3.4);
       const push = smoothProgress(time, 3.4, 6.3);
       const release = smoothProgress(time, 8.2, 10.3);
-      const blue1 = pose(-0.26, -0.98, 0);
+      const blue1 = pose(-0.26, -0.87, 0);
       const blue2Start = pose(0.22, -0.62, PI);
       const blue2 = mixPose(blue2Start, pose(0.2, -0.88, PI), push);
       const yellowApproach = mixPose(
@@ -1005,7 +1005,7 @@ export const SCENARIOS: ScenarioDefinition[] = [
     duration: 10,
     actors: [
       robot('blue-1', 'Blue 1', 'blue', pose(-0.08, 0.38, 0), 1),
-      robot('yellow-1', 'Yellow 1', 'yellow', pose(0.28, 0.92, PI), 1),
+      robot('yellow-1', 'Yellow 1', 'yellow', pose(0.28, 0.87, PI), 1),
       ball(pose(-0.08, 0.5, 0)),
     ],
     overlays: [
@@ -1022,7 +1022,7 @@ export const SCENARIOS: ScenarioDefinition[] = [
       const shot = smoothProgress(time, 1.2, 6.9);
       const rebound = smoothProgress(time, 7, 8.4);
       const blue = pose(-0.08, 0.38 + 0.08 * smoothProgress(time, 0.5, 1.2), 0);
-      const yellow = pose(0.28 - 0.09 * smoothProgress(time, 2.5, 5), 0.92, PI);
+      const yellow = pose(0.28 - 0.09 * smoothProgress(time, 2.5, 5), 0.87, PI);
       const forwardZ = mix(
         0.5,
         RCJ_FIELD_DERIVED.goalBackContactBallCenterZ,
