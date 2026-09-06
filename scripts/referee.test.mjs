@@ -1897,6 +1897,31 @@ test('every allowed authored answer has a clause-specific rule reference', () =>
     }
 });
 
+test('the holding decision notes that the 6.2.1 capture-depth inspection does not by itself satisfy rule 2.5 access', () => {
+  const refs = rulesForDecision(definition('holding'), 'holding');
+  const compliance = refs.find((rule) => rule.id === 'compliance');
+  assert.ok(compliance.note.includes('6.2.1'));
+  assert.ok(compliance.note.includes('2.5'));
+  assert.match(
+    compliance.note,
+    /capture depth alone does not establish legal holding/i,
+  );
+  // The note is specific to the holding decision's inspection stop, not
+  // every other reference to the compliance (3.6) provision.
+  assert.equal(
+    rulesForDecision(definition('inspection'), 'inspect').find(
+      (rule) => rule.id === 'compliance',
+    ).note,
+    undefined,
+  );
+  assert.equal(
+    rulesForDecision(definition('return-ready'), 'return', {
+      returnReason: 'Inspection',
+    }).find((rule) => rule.id === 'compliance').note,
+    undefined,
+  );
+});
+
 test('lack-of-progress placement keeps a nearby free center spot eligible', () => {
   const session = new RefereeMatch(1);
   session.match.state.actors.ball = { x: 0.03, z: 0, yaw: 0 };

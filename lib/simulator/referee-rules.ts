@@ -67,7 +67,11 @@ const provisions = {
 } as const;
 type Provision = keyof typeof provisions;
 
-function reference(key: Provision): AppliedRule {
+// Inspection must check both the mechanism and its observed ball control.
+const HOLDING_INSPECTION_NOTE =
+  'Inspect both ball control under rule 2.5 and the 1.5 cm ball-capturing-zone limit under rule 6.2.1. A compliant capture depth alone does not establish legal holding behavior: check freedom of movement, opponent access and the permitted dribbler exception.';
+
+function reference(key: Provision, note?: string): AppliedRule {
   const [anchor, provision] = provisions[key];
   const section = RULE_SECTIONS.find(
     (item) => item.document === 'soccer' && item.anchor === anchor,
@@ -84,11 +88,13 @@ function reference(key: Provision): AppliedRule {
     ...(key === 'multiple'
       ? { quote: 'at least partially in a penalty area' }
       : {}),
-    ...(key === 'outGoal'
-      ? { note: COMMITTEE_TRAINING_POLICY.outCarrierPassage }
-      : key === 'pushed'
-        ? { note: COMMITTEE_TRAINING_POLICY.pushedOut }
-        : {}),
+    ...(note
+      ? { note }
+      : key === 'outGoal'
+        ? { note: COMMITTEE_TRAINING_POLICY.outCarrierPassage }
+        : key === 'pushed'
+          ? { note: COMMITTEE_TRAINING_POLICY.pushedOut }
+          : {}),
   };
 }
 function penaltyLine(): AppliedRule {
@@ -240,5 +246,9 @@ export function rulesForDecision(
       else keys = ['referee']; // A general live whistle has no established infringement.
       break;
   }
-  return [...new Set(keys)].map(reference).concat(line ? [penaltyLine()] : []);
+  const notes: Partial<Record<Provision, string>> =
+    action === 'holding' ? { compliance: HOLDING_INSPECTION_NOTE } : {};
+  return [...new Set(keys)]
+    .map((key) => reference(key, notes[key]))
+    .concat(line ? [penaltyLine()] : []);
 }

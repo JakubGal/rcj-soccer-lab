@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-09-06T16:20:13.548Z",
+  "generatedAt": "2026-09-06T17:38:40.052Z",
   "locales": {
     "sk": {
       "exact": {
@@ -1056,6 +1056,7 @@
         "inset": "vložka",
         "Inside the Penalty Area (Pushing and Multiple defense)": "Vnútri oblasti trestov (Pushing a Multiple defense)",
         "inspect": "kontrolovať",
+        "Inspect both ball control under rule 2.5 and the 1.5 cm ball-capturing-zone limit under rule 6.2.1. A compliant capture depth alone does not establish legal holding behavior: check freedom of movement, opponent access and the permitted dribbler exception.": "Skontrolujte ovládanie loptičky podľa pravidla 2.5 aj limit zóny zachytenia loptičky 1,5 cm podľa pravidla 6.2.1. Samotná vyhovujúca hĺbka zachytenia neznamená, že holding je dovolený: skontrolujte voľnosť pohybu loptičky, prístup súpera a povolenú výnimku pre dribbler.",
         "Inspect the mechanism": "Skontrolujte mechanizmus",
         "inspection": "inšpekcia",
         "Inspection": "Inšpekcia",
@@ -4213,6 +4214,7 @@
         "inset": "Einschub",
         "Inside the Penalty Area (Pushing and Multiple defense)": "Innerhalb der Strafzone (Pushing und Multiple defense)",
         "inspect": "inspizieren",
+        "Inspect both ball control under rule 2.5 and the 1.5 cm ball-capturing-zone limit under rule 6.2.1. A compliant capture depth alone does not establish legal holding behavior: check freedom of movement, opponent access and the permitted dribbler exception.": "Prüfen Sie sowohl die Ballkontrolle nach Regel 2.5 als auch die Grenze von 1,5 cm für die Ballfangzone nach Regel 6.2.1. Eine zulässige Fangtiefe allein macht holding nicht erlaubt: Prüfen Sie die Bewegungsfreiheit des Balls, den Zugang für Gegner und die erlaubte Ausnahme für dribbler.",
         "Inspect the mechanism": "Überprüfen Sie den Mechanismus",
         "inspection": "Inspektion",
         "Inspection": "Inspektion",
@@ -7370,6 +7372,7 @@
         "inset": "差し込み",
         "Inside the Penalty Area (Pushing and Multiple defense)": "ペナルティエリア内 (Pushing および Multiple defense)",
         "inspect": "検査する",
+        "Inspect both ball control under rule 2.5 and the 1.5 cm ball-capturing-zone limit under rule 6.2.1. A compliant capture depth alone does not establish legal holding behavior: check freedom of movement, opponent access and the permitted dribbler exception.": "ルール2.5のボール制御と、ルール6.2.1のボール捕捉ゾーンの上限1.5 cmの両方を確認してください。捕捉の深さが適合しているだけではholdingが認められるわけではありません。ボールの運動の自由度、相手ロボットの接触可能性、dribblerに認められた例外を確認してください。",
         "Inspect the mechanism": "メカニズムを検査する",
         "inspection": "検査",
         "Inspection": "検査",

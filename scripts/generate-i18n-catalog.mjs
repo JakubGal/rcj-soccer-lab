@@ -118,6 +118,8 @@ const PRESERVED_SENTENCES = new Set([
 
 const MANUAL = {
   sk: {
+    'Inspect both ball control under rule 2.5 and the 1.5 cm ball-capturing-zone limit under rule 6.2.1. A compliant capture depth alone does not establish legal holding behavior: check freedom of movement, opponent access and the permitted dribbler exception.':
+      'Skontrolujte ovládanie loptičky podľa pravidla 2.5 aj limit zóny zachytenia loptičky 1,5 cm podľa pravidla 6.2.1. Samotná vyhovujúca hĺbka zachytenia neznamená, že holding je dovolený: skontrolujte voľnosť pohybu loptičky, prístup súpera a povolenú výnimku pre dribbler.',
     'Fail; a passing rebound must not hit the starting goal’s back wall':
       'Test nevyhovel; pri úspešnom teste sa odrazená loptička nesmie dotknúť zadnej steny bránky, z ktorej sa kopalo',
     'Yes; continual entry or out of bounds is listed as a damaged-robot example, with the referee deciding':
@@ -273,6 +275,8 @@ const MANUAL = {
       'Úplný vstup robota znamená out of bounds. Odstráňte robota na jednu minútu alebo do skoršieho kick-off.',
   },
   de: {
+    'Inspect both ball control under rule 2.5 and the 1.5 cm ball-capturing-zone limit under rule 6.2.1. A compliant capture depth alone does not establish legal holding behavior: check freedom of movement, opponent access and the permitted dribbler exception.':
+      'Prüfen Sie sowohl die Ballkontrolle nach Regel 2.5 als auch die Grenze von 1,5 cm für die Ballfangzone nach Regel 6.2.1. Eine zulässige Fangtiefe allein macht holding nicht erlaubt: Prüfen Sie die Bewegungsfreiheit des Balls, den Zugang für Gegner und die erlaubte Ausnahme für dribbler.',
     'Fail; a passing rebound must not hit the starting goal’s back wall':
       'Test nicht bestanden; bei einem bestandenen Test darf der zurückprallende Ball die Rückwand des Ausgangstores nicht treffen',
     'Yes; continual entry or out of bounds is listed as a damaged-robot example, with the referee deciding':
@@ -422,6 +426,8 @@ const MANUAL = {
       'Das vollständige Einfahren gilt als out of bounds. Entfernen Sie den Roboter für eine Minute oder bis zu einem früheren kick-off.',
   },
   ja: {
+    'Inspect both ball control under rule 2.5 and the 1.5 cm ball-capturing-zone limit under rule 6.2.1. A compliant capture depth alone does not establish legal holding behavior: check freedom of movement, opponent access and the permitted dribbler exception.':
+      'ルール2.5のボール制御と、ルール6.2.1のボール捕捉ゾーンの上限1.5 cmの両方を確認してください。捕捉の深さが適合しているだけではholdingが認められるわけではありません。ボールの運動の自由度、相手ロボットの接触可能性、dribblerに認められた例外を確認してください。',
     '2.4 GHz at no more than 100 mW EIRP; spectrum availability is not guaranteed':
       '2.4 GHz 帯で 100 mW EIRP 以下。周波数帯の利用可能性は保証されません',
     'Fail; a passing rebound must not hit the starting goal’s back wall':

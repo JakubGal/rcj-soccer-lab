@@ -106,6 +106,26 @@ test('every main gameplay subsection has multiple distinct animations', () => {
   );
 });
 
+test('match-halves is anchored to its actual §2.2 side-swap content but also covers §2.1', () => {
+  const halves = clip('match-halves');
+  assert.equal(halves.anchor, 'pre-match-meeting');
+  assert.deepEqual(halves.alsoAnchors, ['game-procedure-and-length-of-a-game']);
+  assert.ok(
+    clipsFor('pre-match-meeting').some((item) => item.id === 'match-halves'),
+  );
+  assert.ok(
+    clipsFor('game-procedure-and-length-of-a-game').some(
+      (item) => item.id === 'match-halves',
+    ),
+  );
+  // A clip never counts twice toward the same section's coverage.
+  assert.equal(
+    clipsFor('pre-match-meeting').filter((item) => item.id === 'match-halves')
+      .length,
+    1,
+  );
+});
+
 test('every animation has a valid source, answer, ordered timeline and finite poses', () => {
   for (const item of RULE_CLIPS) {
     assert.ok(
@@ -114,6 +134,14 @@ test('every animation has a valid source, answer, ordered timeline and finite po
           section.document === 'soccer' && section.anchor === item.anchor,
       ),
     );
+    for (const anchor of item.alsoAnchors ?? [])
+      assert.ok(
+        RULE_SECTIONS.some(
+          (section) =>
+            section.document === 'soccer' && section.anchor === anchor,
+        ),
+        `${item.id}: alsoAnchors entry ${anchor}`,
+      );
     assert.ok(item.answer >= 0 && item.answer < item.options.length);
     for (let i = 1; i < item.frames.length; i += 1)
       assert.ok(item.frames[i].at > item.frames[i - 1].at, item.id);

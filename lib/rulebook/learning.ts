@@ -14,6 +14,7 @@ export type LearningSituation = {
   kind: 'case' | 'clip' | 'scenario' | 'question';
   title: string;
   sectionId: string;
+  alsoSectionIds?: string[];
 };
 function sectionFor(url: string) {
   const anchor = url.split('#')[1];
@@ -35,6 +36,7 @@ export const LEARNING_SITUATIONS: LearningSituation[] = [
     kind: 'clip' as const,
     title: item.title,
     sectionId: sectionFor(`#${item.anchor}`),
+    alsoSectionIds: item.alsoAnchors?.map((anchor) => sectionFor(`#${anchor}`)),
   })),
   ...SCENARIOS.map((item) => ({
     id: `scenario:${item.id}`,
@@ -51,6 +53,15 @@ export const LEARNING_SITUATIONS: LearningSituation[] = [
     sectionId: sectionFor(`#${item.anchor}`),
   })),
 ];
+export function situationCoversSection(
+  item: LearningSituation,
+  sectionId: string,
+) {
+  return (
+    item.sectionId === sectionId ||
+    Boolean(item.alsoSectionIds?.includes(sectionId))
+  );
+}
 export const LEARNING_PROGRESS_KEY = 'rcj-rule-checks-2026-v1';
 export function validLearningProgress(value: unknown): string[] {
   return Array.isArray(value)

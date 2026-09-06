@@ -370,6 +370,7 @@ export function CaseLesson({
                   <li key={rule.id}>
                     {rule.document} §{rule.number} · {rule.provision}
                     {rule.quote && <blockquote>“{rule.quote}”</blockquote>}
+                    {rule.note && <p>{rule.note}</p>}
                   </li>
                 ))}
               </ul>

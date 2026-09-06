@@ -48,6 +48,7 @@ import {
   LEARNING_SITUATIONS,
   LEARNING_PROGRESS_KEY,
   validLearningProgress,
+  situationCoversSection,
 } from '@/lib/rulebook/learning';
 import { REFEREE_CASES } from '@/lib/simulator/referee-cases';
 import { SCENARIOS } from '@/lib/simulator/scenarios';
@@ -87,7 +88,10 @@ export function Rulebook({
   const requestedSituation = LEARNING_SITUATIONS.find(
     (item) => item.id === situationId,
   );
-  const selectedId = requestedSituation?.sectionId ?? sectionId;
+  const selectedId =
+    requestedSituation && !situationCoversSection(requestedSituation, sectionId)
+      ? requestedSituation.sectionId
+      : sectionId;
   const [library, setLibrary] = useState<'situations' | 'sections'>(
     'situations',
   );
@@ -214,8 +218,8 @@ export function Rulebook({
     },
     [select],
   );
-  const sectionSituations = LEARNING_SITUATIONS.filter(
-    (item) => item.sectionId === selected.id,
+  const sectionSituations = LEARNING_SITUATIONS.filter((item) =>
+    situationCoversSection(item, selected.id),
   );
   const situation =
     requestedSituation ??
@@ -223,7 +227,10 @@ export function Rulebook({
     sectionSituations[0];
   const chooseSituation = (id: string) => {
     const item = LEARNING_SITUATIONS.find((item) => item.id === id)!;
-    onSelect(item.sectionId, item.id);
+    onSelect(
+      situationCoversSection(item, selected.id) ? selected.id : item.sectionId,
+      item.id,
+    );
   };
   const passSituation = () => {
     if (!situation) return;

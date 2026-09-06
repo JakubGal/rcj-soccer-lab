@@ -37,8 +37,12 @@ registerHooks({
   },
 });
 
-const { LEARNING_SITUATIONS, lessonChoices, validLearningProgress } =
-  await import('../lib/rulebook/learning.ts');
+const {
+  LEARNING_SITUATIONS,
+  lessonChoices,
+  validLearningProgress,
+  situationCoversSection,
+} = await import('../lib/rulebook/learning.ts');
 const { RULE_DOCUMENTS, RULE_SECTIONS, sectionUrl, sectionReference } =
   await import('../lib/rulebook/catalog.ts');
 const { RULE_CLIPS, sampleClip } =
@@ -63,6 +67,25 @@ const { practiceLayout, preparePracticeMatch } =
   await import('../lib/simulator/practice-layout.ts');
 
 const callKey = (call) => call.action + ':' + (call.target ?? '');
+test('secondary rule sources appear in the real lesson selector without duplicate exam questions', () => {
+  const item = LEARNING_SITUATIONS.find(
+    (entry) => entry.id === 'clip:match-halves',
+  );
+  assert.equal(item.sectionId, 'soccer:pre-match-meeting');
+  for (const section of [
+    'soccer:pre-match-meeting',
+    'soccer:game-procedure-and-length-of-a-game',
+  ])
+    assert.equal(
+      LEARNING_SITUATIONS.filter(
+        (entry) =>
+          entry.id === item.id && situationCoversSection(entry, section),
+      ).length,
+      1,
+    );
+  assert.equal(situationCoversSection(item, 'soccer:scoring'), false);
+  assert.equal(LEARNING_SITUATIONS.length, 105);
+});
 const accepted = (feedback) =>
   feedback && ['correct', 'supported'].includes(feedback.verdict);
 const settings = (duration = 120) => ({
