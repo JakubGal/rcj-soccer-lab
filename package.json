@@ -14,6 +14,7 @@
     "test:match": "node --test scripts/match.test.mjs",
     "test:rules": "node --test scripts/rulebook.test.mjs",
     "test:referee": "node --test scripts/referee.test.mjs",
+    "test:learning": "node --test scripts/learning.test.mjs",
     "start": "wrangler dev --config dist/server/wrangler.json",
     "lint": "oxlint",
     "format": "oxfmt"

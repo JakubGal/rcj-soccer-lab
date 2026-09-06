@@ -13,6 +13,10 @@ import {
   type RobotVisualId,
 } from '@/lib/simulator/robot-models';
 import type { ActorDefinition, Pose } from '@/lib/simulator/types';
+import type { DamageCue, DamagePlayback } from '@/lib/simulator/damage-effects';
+import { createDamageEffects } from './damage-effects';
+import { createPenaltyEvidence } from './penalty-evidence';
+import { penaltyAreaOutline } from '@/lib/simulator/referee-geometry';
 
 export type CameraPreset =
   | 'broadcast'
@@ -27,10 +31,14 @@ type ViewportProps = {
   actors: ActorDefinition[];
   poses: Record<string, Pose>;
   actorHeights?: Record<string, number>;
+  damageCue?: DamageCue | null;
+  damagePlayback?: DamagePlayback | null;
+  motionStopped?: boolean;
   cameraPreset: CameraPreset;
   showRuleGeometry: boolean;
   showBallTrail: boolean;
   showContactEvidence: boolean;
+  showPenaltyEvidence?: boolean;
   ballTrail: Pose[];
   phaseLabel: string;
   robotVisual: RobotVisualId;
@@ -68,6 +76,12 @@ type SceneHandles = {
     poses: Record<string, Pose>,
   ) => void;
   setRobotVisual: (visual: RobotVisualId) => Promise<void>;
+  setDamageCue: (cue: DamageCue | null, timing: DamagePlayback | null) => void;
+  setPenaltyEvidence: (
+    enabled: boolean,
+    poses: Record<string, Pose>,
+    visual: RobotVisualId,
+  ) => void;
 };
 
 type RobotVisualHandle = {
@@ -442,38 +456,6 @@ function addSegment(
     width,
     (Math.atan2(-dz, dx) * 180) / Math.PI,
   );
-}
-
-function penaltyAreaOutline(end: -1 | 1, arcSegments = 20) {
-  const spec = RCJ_FIELD_SPEC_2026;
-  const derived = RCJ_FIELD_DERIVED;
-  const outerHalfWidth = spec.penaltyArea.width / 2;
-  const radius = spec.penaltyArea.outerCornerRadius;
-  const points: Array<[number, number]> = [
-    [-outerHalfWidth, end * derived.playingHalfLength],
-    [-outerHalfWidth, end * derived.penaltyArcCenterZ],
-  ];
-
-  for (let index = 1; index <= arcSegments; index += 1) {
-    const angle = (index / arcSegments) * (Math.PI / 2);
-    points.push([
-      -derived.penaltyArcCenterX - radius * Math.cos(angle),
-      end * (derived.penaltyArcCenterZ - radius * Math.sin(angle)),
-    ]);
-  }
-  points.push([
-    derived.penaltyArcCenterX,
-    end * (derived.penaltyArcCenterZ - radius),
-  ]);
-  for (let index = arcSegments - 1; index >= 0; index -= 1) {
-    const angle = (index / arcSegments) * (Math.PI / 2);
-    points.push([
-      derived.penaltyArcCenterX + radius * Math.cos(angle),
-      end * (derived.penaltyArcCenterZ - radius * Math.sin(angle)),
-    ]);
-  }
-  points.push([outerHalfWidth, end * derived.playingHalfLength]);
-  return points;
 }
 
 function buildField(pc: typeof PC, app: PC.Application) {
@@ -1530,6 +1512,8 @@ function buildScene(
   const initialRect = resizeTarget.getBoundingClientRect();
   resizeRenderer(initialRect.width, initialRect.height);
 
+  const damageEffects = createDamageEffects(pc, app);
+  const penaltyEvidence = createPenaltyEvidence(pc, app);
   app.start();
   updateOrbit();
 
@@ -1547,9 +1531,14 @@ function buildScene(
     setRobotVisual,
     setCameraPreset,
     updateCameraTarget,
+    setDamageCue: (cue, timing) => damageEffects.setCue(cue, timing),
+    setPenaltyEvidence: (enabled, poses, visual) =>
+      penaltyEvidence.set(enabled, poses, visual),
     dispose: () => {
       disposed = true;
       visualRevision += 1;
+      damageEffects.dispose();
+      penaltyEvidence.dispose();
       app.off('update', updateRobotLabels);
       resizeObserver.disconnect();
       canvas.removeEventListener('pointerdown', onPointerDown);
@@ -1567,10 +1556,14 @@ export function PlayCanvasViewport({
   actors,
   poses,
   actorHeights,
+  damageCue = null,
+  damagePlayback = null,
+  motionStopped = false,
   cameraPreset,
   showRuleGeometry,
   showBallTrail,
   showContactEvidence,
+  showPenaltyEvidence = false,
   ballTrail,
   phaseLabel,
   robotVisual,
@@ -1690,7 +1683,8 @@ export function PlayCanvasViewport({
         entity.setEulerAngles(0, (pose.yaw * 180) / Math.PI, 0);
       }
     }
-    if (!editable) scene.updateCameraTarget(cameraPreset, poses);
+    if (!editable && !motionStopped)
+      scene.updateCameraTarget(cameraPreset, poses);
 
     const selectedActor = selectedActorId
       ? actors.find((actor) => actor.id === selectedActorId)
@@ -1713,10 +1707,23 @@ export function PlayCanvasViewport({
     actors,
     cameraPreset,
     editable,
+    motionStopped,
     poses,
     sceneVersion,
     selectedActorId,
   ]);
+
+  useEffect(() => {
+    sceneRef.current?.setDamageCue(damageCue, damagePlayback);
+  }, [damageCue, damagePlayback, sceneVersion]);
+
+  useEffect(() => {
+    sceneRef.current?.setPenaltyEvidence(
+      showPenaltyEvidence,
+      poses,
+      robotVisual,
+    );
+  }, [showPenaltyEvidence, poses, robotVisual, sceneVersion]);
 
   useEffect(() => {
     sceneRef.current?.setCameraPreset(cameraPreset, posesRef.current);

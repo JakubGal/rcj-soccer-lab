@@ -8,6 +8,7 @@ import {
   ArrowUp,
   Bot,
   Gamepad2,
+  Move3D,
   Pause,
   Play,
   RotateCcw,
@@ -38,7 +39,13 @@ import {
   type RobotVisualId,
 } from '@/lib/simulator/robot-models';
 import { cn } from '@/lib/utils';
-import { RefereePlay } from './RefereePlay';
+import { moveManualActor, clonePoses } from '@/lib/simulator/manual-layout';
+import type { Pose } from '@/lib/simulator/types';
+import { SCENARIOS } from '@/lib/simulator/scenarios';
+import {
+  practiceLayout,
+  preparePracticeMatch,
+} from '@/lib/simulator/practice-layout';
 
 const DRIVE_KEYS = new Set([
   'KeyW',
@@ -58,44 +65,20 @@ const clock = (seconds: number) =>
 type Props = {
   robotVisual: RobotVisualId;
   onRobotVisualChange: (value: RobotVisualId) => void;
+  active: boolean;
+  arrange: boolean;
+  onArrangeChange: (value: boolean) => void;
+  onReferee: () => void;
 };
 
-export function MatchPlay({ robotVisual, onRobotVisualChange }: Props) {
-  const [referee, setReferee] = useState(false);
-  useEffect(() => {
-    const raf = requestAnimationFrame(() =>
-      setReferee(
-        new URLSearchParams(window.location.search).get('referee') === '1',
-      ),
-    );
-    return () => cancelAnimationFrame(raf);
-  }, []);
-  const selectReferee = (enabled: boolean) => {
-    setReferee(enabled);
-    const url = new URL(window.location.href);
-    if (enabled) url.searchParams.set('referee', '1');
-    else url.searchParams.delete('referee');
-    window.history.replaceState(null, '', url);
-  };
-  return referee ? (
-    <RefereePlay
-      robotVisual={robotVisual}
-      onExit={() => selectReferee(false)}
-    />
-  ) : (
-    <StandardMatchPlay
-      robotVisual={robotVisual}
-      onRobotVisualChange={onRobotVisualChange}
-      onReferee={() => selectReferee(true)}
-    />
-  );
-}
-
-function StandardMatchPlay({
+export function MatchPlay({
   robotVisual,
   onRobotVisualChange,
+  active,
+  arrange,
+  onArrangeChange,
   onReferee,
-}: Props & { onReferee: () => void }) {
+}: Props) {
   const [engine, setEngine] = useState(() => new SoccerMatch());
   const [frame, setFrame] = useState(() => engine.snapshot());
   const [running, setRunning] = useState(false);
@@ -108,6 +91,10 @@ function StandardMatchPlay({
   const [dribble, setDribble] = useState(true);
   const [showTrail, setShowTrail] = useState(true);
   const [ready, setReady] = useState(false);
+  const [editingId, setEditingId] = useState<string | null>('blue-1');
+  const [showGeometry, setShowGeometry] = useState(true);
+  const [layoutName, setLayoutName] = useState('match');
+  const baseline = useRef<Record<string, Pose>>(clonePoses(frame.actors));
   const keyboard = useRef(new Set<string>());
   const pointers = useRef(new Map<number, string>());
   const fieldRef = useRef<HTMLElement>(null);
@@ -129,21 +116,82 @@ function StandardMatchPlay({
     clearInput();
     setRunning(false);
     const next = new SoccerMatch();
+    baseline.current = clonePoses(next.state.actors);
+    setLayoutName('match');
     setEngine(next);
     setFrame(next.snapshot());
   }, [clearInput]);
 
   const toggleRunning = useCallback(() => {
+    if (!ready) return;
     clearInput();
-    if (engine.state.phase === 'finished') {
-      const next = new SoccerMatch();
+    if (arrange) onArrangeChange(false);
+    const next = preparePracticeMatch(engine, settings.duration);
+    if (next !== engine) {
       setEngine(next);
       setFrame(next.snapshot());
     }
     setRunning((value) => !value);
     focusField();
-  }, [clearInput, engine, focusField]);
+  }, [
+    ready,
+    arrange,
+    onArrangeChange,
+    clearInput,
+    engine,
+    focusField,
+    settings.duration,
+  ]);
 
+  useEffect(() => {
+    if (active && !arrange) return;
+    clearInput();
+    const update = requestAnimationFrame(() => {
+      setRunning(false);
+      if (!active) setReady(false);
+    });
+    return () => cancelAnimationFrame(update);
+  }, [active, arrange, clearInput]);
+  const editActor = useCallback(
+    (id: string, position: { x: number; z: number }) => {
+      if (!arrange) return;
+      const pose = moveManualActor(
+        MATCH_ACTORS,
+        engine.state.actors,
+        id,
+        position,
+      );
+      if (!pose) return;
+      engine.place({ ...engine.state.actors, [id]: pose });
+      setFrame(engine.snapshot());
+    },
+    [arrange, engine],
+  );
+  const nudge = useCallback(
+    (x: number, z: number) => {
+      if (!editingId) return;
+      const pose = engine.state.actors[editingId];
+      if (pose) editActor(editingId, { x: pose.x + x, z: pose.z + z });
+    },
+    [editingId, engine, editActor],
+  );
+  const rotate = useCallback(
+    (direction: number) => {
+      if (!arrange || !editingId || editingId === 'ball') return;
+      const pose = engine.state.actors[editingId];
+      engine.place({
+        ...engine.state.actors,
+        [editingId]: { ...pose, yaw: pose.yaw + (direction * Math.PI) / 12 },
+      });
+      setFrame(engine.snapshot());
+    },
+    [arrange, editingId, engine],
+  );
+  const restoreLayout = useCallback(() => {
+    engine.place(baseline.current);
+    setFrame(engine.snapshot());
+  }, [engine]);
+  const editPose = editingId ? frame.actors[editingId] : null;
   const selectRobot = useCallback(
     (id: string) => {
       clearInput();
@@ -178,7 +226,7 @@ function StandardMatchPlay({
   };
 
   useEffect(() => {
-    if (!running) return;
+    if (!active || !running || arrange) return;
     let animationFrame = 0;
     let previous = 0;
     let accumulator = 0;
@@ -221,9 +269,10 @@ function StandardMatchPlay({
       window.cancelAnimationFrame(animationFrame);
       clearInput();
     };
-  }, [clearInput, dribble, engine, running, settings]);
+  }, [active, arrange, clearInput, dribble, engine, running, settings]);
 
   useEffect(() => {
+    if (!active) return;
     const stop = () => {
       clearInput();
       setRunning(false);
@@ -241,6 +290,29 @@ function StandardMatchPlay({
       )
         return;
       if (event.code === 'Space' && target?.closest('button, a')) return;
+      if (arrange) {
+        if (target?.closest('button, a')) return;
+        const step = event.shiftKey ? 0.05 : 0.01;
+        if (event.code.startsWith('Arrow')) {
+          event.preventDefault();
+          nudge(
+            event.code === 'ArrowLeft'
+              ? -step
+              : event.code === 'ArrowRight'
+                ? step
+                : 0,
+            event.code === 'ArrowUp'
+              ? step
+              : event.code === 'ArrowDown'
+                ? -step
+                : 0,
+          );
+        } else if (event.code === 'KeyQ') rotate(-1);
+        else if (event.code === 'KeyE') rotate(1);
+        else if (event.code === 'KeyR') restoreLayout();
+        else if (event.code === 'Escape') setEditingId(null);
+        return;
+      }
       if (DRIVE_KEYS.has(event.code)) {
         event.preventDefault();
         if (running && manual) keyboard.current.add(event.code);
@@ -268,6 +340,11 @@ function StandardMatchPlay({
       document.removeEventListener('visibilitychange', visibility);
     };
   }, [
+    active,
+    arrange,
+    nudge,
+    rotate,
+    restoreLayout,
     clearInput,
     manual,
     reset,
@@ -279,6 +356,7 @@ function StandardMatchPlay({
   ]);
 
   useEffect(() => {
+    if (!active) return;
     const target = window as Window & { snapshot?: () => unknown };
     const snapshot = () => ({
       app: 'RCJ Soccer Lab',
@@ -296,7 +374,7 @@ function StandardMatchPlay({
     return () => {
       if (target.snapshot === snapshot) delete target.snapshot;
     };
-  }, [camera, engine, frame, robotVisual, running, settings]);
+  }, [active, camera, engine, frame, robotVisual, running, settings]);
 
   const heldButton = (code: string, label: string, icon: React.ReactNode) => (
     <Button
@@ -304,7 +382,7 @@ function StandardMatchPlay({
       className="drive-button"
       aria-label={label}
       title={label}
-      disabled={!running || !manual}
+      disabled={!running || !manual || arrange}
       onPointerDown={(event) => {
         event.preventDefault();
         event.currentTarget.setPointerCapture(event.pointerId);
@@ -332,6 +410,7 @@ function StandardMatchPlay({
     </Button>
   );
 
+  if (!active) return null;
   return (
     <div className="match-workspace">
       <section
@@ -344,13 +423,17 @@ function StandardMatchPlay({
           actors={MATCH_ACTORS}
           poses={frame.actors}
           cameraPreset={camera}
-          showRuleGeometry={false}
+          showRuleGeometry={arrange && showGeometry}
           showBallTrail={showTrail}
           showContactEvidence={false}
           ballTrail={engine.ballTrail()}
           phaseLabel={frame.message}
           robotVisual={robotVisual}
-          selectedActorId={manual ? selected.id : null}
+          selectedActorId={arrange ? editingId : manual ? selected.id : null}
+          editable={arrange}
+          motionStopped={!running || arrange}
+          onActorSelect={setEditingId}
+          onActorMove={editActor}
           onReady={onReady}
         />
         <div
@@ -412,9 +495,11 @@ function StandardMatchPlay({
             <span className="hidden sm:inline">Reset</span>
           </Button>
           <span>
-            {manual
-              ? `Driving ${selected.label} · C switches teammate`
-              : 'Autonomous match · Pick a robot to take control'}
+            {arrange
+              ? 'Arrange robots and ball, then play from this layout'
+              : manual
+                ? `Driving ${selected.label} · C switches teammate`
+                : 'Autonomous match · Pick a robot to take control'}
           </span>
         </div>
       </section>
@@ -424,10 +509,154 @@ function StandardMatchPlay({
         aria-label="Match setup and robot controls"
       >
         <div className="context-scroll">
-          <h1 className="text-xl font-semibold">Play a match</h1>
+          <h1 className="text-xl font-semibold">Play & experiment</h1>
           <p className="mt-2 text-sm text-muted-foreground">
-            Drive a robot or let both teams play.
+            Arrange the field, drive a robot, or let both teams play.
           </p>
+          <Button
+            className="mt-4 w-full"
+            variant={arrange ? 'secondary' : 'outline'}
+            aria-pressed={arrange}
+            onClick={() => {
+              clearInput();
+              setRunning(false);
+              if (!arrange) baseline.current = clonePoses(frame.actors);
+              onArrangeChange(!arrange);
+            }}
+          >
+            <Move3D />
+            {arrange ? 'Finish arranging' : 'Arrange field'}
+          </Button>
+          {arrange && (
+            <section
+              className="practice-arrange"
+              aria-label="Manual field arrangement"
+            >
+              <p>
+                Drag a robot or the ball. Arrow keys move 1 cm; Shift moves 5
+                cm. Q/E rotate.
+              </p>
+              <label>
+                Starting layout
+                <NativeSelect
+                  value={layoutName}
+                  onChange={(event) => {
+                    const id = event.target.value;
+                    setLayoutName(id);
+                    const scenario = SCENARIOS.find((item) => item.id === id);
+                    const poses = scenario
+                      ? practiceLayout(scenario.sample(0).actors)
+                      : new SoccerMatch().snapshot().actors;
+                    engine.place(poses);
+                    baseline.current = clonePoses(poses);
+                    setFrame(engine.snapshot());
+                  }}
+                >
+                  <NativeSelectOption value="match">
+                    Match kickoff
+                  </NativeSelectOption>
+                  {SCENARIOS.map((item) => (
+                    <NativeSelectOption value={item.id} key={item.id}>
+                      {item.shortTitle}
+                    </NativeSelectOption>
+                  ))}
+                </NativeSelect>
+              </label>
+              <label>
+                Selected object
+                <NativeSelect
+                  value={editingId ?? ''}
+                  onChange={(event) => setEditingId(event.target.value || null)}
+                >
+                  <NativeSelectOption value="">None</NativeSelectOption>
+                  {MATCH_ACTORS.map((actor) => (
+                    <NativeSelectOption key={actor.id} value={actor.id}>
+                      {actor.label}
+                    </NativeSelectOption>
+                  ))}
+                </NativeSelect>
+              </label>
+              {editPose && editingId && (
+                <div className="practice-coordinates">
+                  {(['x', 'z'] as const).map((axis) => (
+                    <label key={axis}>
+                      {axis.toUpperCase()} (m)
+                      <input
+                        type="number"
+                        step="0.01"
+                        value={Number(editPose[axis].toFixed(3))}
+                        onChange={(event) => {
+                          const value = event.target.valueAsNumber;
+                          if (Number.isFinite(value))
+                            editActor(editingId, {
+                              x: editPose.x,
+                              z: editPose.z,
+                              [axis]: value,
+                            });
+                        }}
+                      />
+                    </label>
+                  ))}
+                </div>
+              )}
+              <div className="practice-nudges">
+                <Button
+                  variant="outline"
+                  aria-label="Nudge left"
+                  onClick={() => nudge(-0.01, 0)}
+                >
+                  <ArrowLeft />
+                </Button>
+                <Button
+                  variant="outline"
+                  aria-label="Nudge forward"
+                  onClick={() => nudge(0, 0.01)}
+                >
+                  <ArrowUp />
+                </Button>
+                <Button
+                  variant="outline"
+                  aria-label="Nudge backward"
+                  onClick={() => nudge(0, -0.01)}
+                >
+                  <ArrowDown />
+                </Button>
+                <Button
+                  variant="outline"
+                  aria-label="Nudge right"
+                  onClick={() => nudge(0.01, 0)}
+                >
+                  <ArrowRight />
+                </Button>
+                <Button
+                  variant="outline"
+                  aria-label="Rotate left 15 degrees"
+                  onClick={() => rotate(-1)}
+                >
+                  <RotateCcw />
+                </Button>
+                <Button
+                  variant="outline"
+                  aria-label="Rotate right 15 degrees"
+                  onClick={() => rotate(1)}
+                >
+                  <RotateCw />
+                </Button>
+              </div>
+              <label className="match-toggle" htmlFor="practice-geometry">
+                Show rule geometry
+                <Switch
+                  id="practice-geometry"
+                  checked={showGeometry}
+                  onCheckedChange={setShowGeometry}
+                />
+              </label>
+              <Button variant="outline" onClick={restoreLayout}>
+                <RotateCcw />
+                Reset layout
+              </Button>
+            </section>
+          )}
           <div className="match-presets">
             <Button size="sm" onClick={onReferee}>
               <Scale />

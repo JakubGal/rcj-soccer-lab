@@ -116,6 +116,8 @@ export type RefereeCase = {
   clip: string;
   start?: number;
   end: number;
+  /** First observable incident; end still preserves the interpolation keyframes. */
+  stopAt?: number;
   facts: string;
   before?: string;
   explanation: string;
@@ -149,7 +151,8 @@ export const REFEREE_CASES: RefereeCase[] = [
     clip: 'goal-contact',
     end: 4,
     before: 'Follow the ball all the way through the goal.',
-    facts: 'The shot touches the inside back wall of Yellow’s goal.',
+    facts:
+      'The shot touches the inside back wall of the goal defended by Yellow.',
     steps: one('goal', 'blue'),
     explanation:
       'Back-wall contact awards Blue one goal. Yellow takes the kickoff.',
@@ -161,7 +164,7 @@ export const REFEREE_CASES: RefereeCase[] = [
     clip: 'own-goal',
     end: 3,
     facts:
-      'Blue last touched the ball; it then touches the inside back wall of Blue’s goal.',
+      'Blue last touched the ball; it then touches the inside back wall of the goal defended by Blue.',
     steps: one('goal', 'yellow'),
     explanation:
       'The goal end decides the scoring team, regardless of who last touched the ball.',
@@ -196,6 +199,7 @@ export const REFEREE_CASES: RefereeCase[] = [
     family: 'Pushing & defense',
     clip: 'pushing-call',
     end: 2.5,
+    stopAt: 274 / 120,
     facts:
       'Opponents touch beside the penalty area and both contact the ball. Consider whether this warrants a pushing call.',
     steps: [
@@ -221,6 +225,8 @@ export const REFEREE_CASES: RefereeCase[] = [
     family: 'Pushing & defense',
     clip: 'two-defenders',
     end: 2.5,
+    // Include visible body overlap even for the shorter Open model.
+    stopAt: 185 / 120,
     facts:
       'Both Blue robots partly overlap the same penalty area. Compare their distances to the ball.',
     steps: one('multiple', 'farther'),
@@ -233,6 +239,7 @@ export const REFEREE_CASES: RefereeCase[] = [
     family: 'Pushing & defense',
     clip: 'combined-order',
     end: 2.5,
+    stopAt: 136 / 120,
     facts:
       'The penalty-area contact is judged pushing. Both Blue robots also partly overlap that area.',
     steps: [one('pushing')[0], one('multiple', 'farther')[0]],
@@ -244,9 +251,10 @@ export const REFEREE_CASES: RefereeCase[] = [
     title: 'Goal resulting from pushing',
     family: 'Pushing & defense',
     clip: 'pushing-goal',
+    start: 3,
     end: 3,
     facts:
-      'Pushing has been called in this contact. The resulting ball movement reaches Blue’s goal back wall.',
+      'Review this aftermath: pushing was called during the contact, and the resulting ball movement reached the back wall of the goal defended by Blue.',
     steps: [one('no-goal')[0], one('pushing')[0]],
     explanation:
       'A goal resulting from pushing is not granted. Resolve the pushing ball placement.',
@@ -257,6 +265,7 @@ export const REFEREE_CASES: RefereeCase[] = [
     family: 'Pushing & defense',
     clip: 'two-defenders',
     end: 2.5,
+    stopAt: 185 / 120,
     facts:
       'This is the same repeated multiple-defense violation after several earlier relocations.',
     steps: [
@@ -300,7 +309,7 @@ export const REFEREE_CASES: RefereeCase[] = [
     facts: 'Blue 1 reaches the physical wall without being pushed there.',
     steps: one('out', 'blue-1'),
     explanation:
-      'Remove Blue 1. Its 60-second penalty starts now; the remaining robots keep playing.',
+      'Remove Blue 1. Its 60-second penalty starts at removal; the training timer advances when you resume the match.',
   },
   {
     id: 'full-area',
@@ -308,6 +317,7 @@ export const REFEREE_CASES: RefereeCase[] = [
     family: 'Out of bounds',
     clip: 'full-area',
     end: 3,
+    stopAt: 215 / 120,
     facts: 'The whole Blue 1 footprint is within the penalty area.',
     steps: one('out', 'blue-1'),
     explanation:
@@ -342,7 +352,9 @@ export const REFEREE_CASES: RefereeCase[] = [
     family: 'Ball movement',
     clip: 'ball-over-wall',
     end: 3.5,
-    facts: 'Blue 1 sends the ball beyond the enclosure, over the wall.',
+    stopAt: 160 / 120,
+    facts:
+      'Blue 1 sends the ball above the wall height, outside the permitted playing volume.',
     steps: one('ball-out', 'blue-1'),
     explanation:
       'The responsible robot is deemed damaged. The bench enforces its waiting period. This trainer retrieves the ball to a neutral spot under its stated exercise procedure.',
@@ -477,6 +489,7 @@ export const REFEREE_CASES: RefereeCase[] = [
     family: 'Kickoffs',
     clip: 'kickoff-early',
     end: 2,
+    stopAt: 25 / 120,
     before: 'No start signal has been given.',
     facts: 'Blue 1 moves before any start signal.',
     kickoff: true,
@@ -637,7 +650,7 @@ export function caseScene(
 ): RuleScene {
   const scene = sampleClip(
     evidenceClip(item),
-    Math.min(item.end, (item.start ?? 0) + time),
+    Math.min(item.stopAt ?? item.end, (item.start ?? 0) + time),
   );
   return {
     poses: Object.fromEntries(
@@ -656,6 +669,19 @@ export function caseScene(
     readout: '',
     focus: null,
   };
+}
+export function evidenceDuration(item: RefereeCase) {
+  return (item.stopAt ?? item.end) - (item.start ?? 0);
+}
+
+/** §2.11: ordinary corrections/removals take place while the game continues. */
+export function requiresStoppage(item: RefereeCase) {
+  const id = item.id.replace(/^live-/, '');
+  return (
+    ['goal', 'own-goal', 'interruption', 'spectator', 'preflight'].includes(
+      id,
+    ) || Boolean(item.kickoff)
+  );
 }
 export function ruleUrl(item: RefereeCase) {
   const anchor =

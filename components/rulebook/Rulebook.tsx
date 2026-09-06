@@ -42,12 +42,41 @@ import {
   ScoringWorkbench,
 } from './RuleLabs';
 import { cn } from '@/lib/utils';
+import {
+  LEARNING_SITUATIONS,
+  LEARNING_PROGRESS_KEY,
+  validLearningProgress,
+} from '@/lib/rulebook/learning';
+import { REFEREE_CASES } from '@/lib/simulator/referee-cases';
+import { SCENARIOS } from '@/lib/simulator/scenarios';
+import { CaseLesson } from './CaseLesson';
+import { ScenarioLesson } from './ScenarioLesson';
 
 const DEFAULT_SECTION = 'soccer:inside-penalty-area';
 const PROGRESS_KEY = 'rcj-rulebook-read-2026-06-03-v1';
 
-export function Rulebook({ robotVisual }: { robotVisual: RobotVisualId }) {
-  const [selectedId, setSelectedId] = useState(DEFAULT_SECTION);
+export function Rulebook({
+  robotVisual,
+  active = true,
+  sectionId = DEFAULT_SECTION,
+  situationId = null,
+  onSelect,
+}: {
+  robotVisual: RobotVisualId;
+  active?: boolean;
+  sectionId?: string;
+  situationId?: string | null;
+  onSelect: (sectionId: string, situationId: string | null) => void;
+}) {
+  const requestedSituation = LEARNING_SITUATIONS.find(
+    (item) => item.id === situationId,
+  );
+  const selectedId = requestedSituation?.sectionId ?? sectionId;
+  const [library, setLibrary] = useState<'situations' | 'sections'>(
+    'situations',
+  );
+  const [passed, setPassed] = useState<string[]>([]);
+  const [studyAnswers, setStudyAnswers] = useState<Record<string, string>>({});
   const [query, setQuery] = useState('');
   const [layout, setLayout] = useState<'split' | 'text' | 'visual'>('split');
   const [reviewed, setReviewed] = useState<string[]>([]);
@@ -77,12 +106,15 @@ export function Rulebook({ robotVisual }: { robotVisual: RobotVisualId }) {
 
   useEffect(() => {
     const raf = requestAnimationFrame(() => {
-      const requested = new URLSearchParams(window.location.search).get('rule');
-      if (
-        requested &&
-        RULE_SECTIONS.some((section) => section.id === requested)
-      )
-        setSelectedId(requested);
+      try {
+        setPassed(
+          validLearningProgress(
+            JSON.parse(localStorage.getItem(LEARNING_PROGRESS_KEY) ?? '[]'),
+          ),
+        );
+      } catch {
+        /* Invalid quiz progress must not prevent restoring reading progress. */
+      }
       try {
         const saved: unknown = JSON.parse(
           localStorage.getItem(PROGRESS_KEY) ?? '[]',
@@ -107,18 +139,18 @@ export function Rulebook({ robotVisual }: { robotVisual: RobotVisualId }) {
     if (!restored) return;
     try {
       localStorage.setItem(PROGRESS_KEY, JSON.stringify(reviewed));
+      localStorage.setItem(LEARNING_PROGRESS_KEY, JSON.stringify(passed));
     } catch {
       /* Session-only progress is still usable. */
     }
-  }, [restored, reviewed]);
+  }, [restored, reviewed, passed]);
 
-  const select = useCallback((section: RuleSection) => {
-    setSelectedId(section.id);
-    const url = new URL(window.location.href);
-    url.searchParams.set('mode', 'rules');
-    url.searchParams.set('rule', section.id);
-    window.history.replaceState(null, '', url);
-  }, []);
+  const select = useCallback(
+    (section: RuleSection) => {
+      onSelect(section.id, null);
+    },
+    [onSelect],
+  );
   const selectDocument = useCallback(
     (id: string) => {
       const first = RULE_SECTIONS.find((section) => section.document === id);
@@ -141,6 +173,45 @@ export function Rulebook({ robotVisual }: { robotVisual: RobotVisualId }) {
     },
     [select],
   );
+  const sectionSituations = LEARNING_SITUATIONS.filter(
+    (item) => item.sectionId === selected.id,
+  );
+  const situation =
+    requestedSituation ??
+    sectionSituations.find((item) => item.kind === 'case') ??
+    sectionSituations[0];
+  const chooseSituation = (id: string) => {
+    const item = LEARNING_SITUATIONS.find((item) => item.id === id)!;
+    onSelect(item.sectionId, item.id);
+  };
+  const passSituation = () => {
+    if (situation)
+      setPassed((current) => [...new Set([...current, situation.id])]);
+  };
+  const filteredSituations = LEARNING_SITUATIONS.filter((item) => {
+    const section = RULE_SECTIONS.find(
+      (section) => section.id === item.sectionId,
+    )!;
+    return (
+      !query ||
+      (item.title + ' ' + section.title + ' ' + section.number)
+        .toLowerCase()
+        .includes(query.toLowerCase())
+    );
+  });
+  const situationIndex = filteredSituations.findIndex(
+    (item) => item.id === situation?.id,
+  );
+  const navigatingSituations = library === 'situations' && situationIndex >= 0;
+  const studyResults = SCENARIOS.flatMap((item) => {
+    const answer = item.choices.find(
+      (choice) => choice.id === studyAnswers[item.id],
+    );
+    return answer ? [answer.score] : [];
+  });
+  const studyScore = studyResults.length
+    ? `Detailed study score: ${Math.round((studyResults.reduce((sum, score) => sum + score, 0) / studyResults.length) * 100)}% · ${studyResults.length} / ${SCENARIOS.length} studies answered this session`
+    : undefined;
   const onSoccerRule = useCallback(
     (anchor: string) => onRule('soccer', anchor),
     [onRule],
@@ -196,15 +267,35 @@ export function Rulebook({ robotVisual }: { robotVisual: RobotVisualId }) {
     </section>
   );
 
+  if (!active) return null;
   return (
     <div className="rulebook-shell">
       <aside className="rulebook-nav" aria-label="Complete rulebook contents">
         <div className="rulebook-nav-top">
-          <p className="rule-kicker">RULEBOOK / 2026</p>
+          <p className="rule-kicker">RULES & SITUATIONS / 2026</p>
+          <div className="learning-library-switch">
+            <Button
+              size="sm"
+              variant={library === 'situations' ? 'secondary' : 'ghost'}
+              onClick={() => setLibrary('situations')}
+            >
+              Situations
+            </Button>
+            <Button
+              size="sm"
+              variant={library === 'sections' ? 'secondary' : 'ghost'}
+              onClick={() => setLibrary('sections')}
+            >
+              All rules
+            </Button>
+          </div>
           <NativeSelect
             aria-label="Official rule document"
             value={document.id}
-            onChange={(event) => selectDocument(event.target.value)}
+            onChange={(event) => {
+              setLibrary('sections');
+              selectDocument(event.target.value);
+            }}
           >
             {RULE_DOCUMENTS.map((item) => (
               <NativeSelectOption key={item.id} value={item.id}>
@@ -216,18 +307,28 @@ export function Rulebook({ robotVisual }: { robotVisual: RobotVisualId }) {
             <Search aria-hidden="true" />
             <Input
               aria-label="Search rule sections and numbers"
-              placeholder="Find a section or rule number"
+              placeholder="Find a situation or rule number"
               value={query}
               onChange={(event) => setQuery(event.target.value)}
             />
           </div>
           <div className="rule-reading-progress">
             <span>
-              {readCount} / {documentSections.length} reviewed
+              {library === 'situations'
+                ? `${passed.length} / ${LEARNING_SITUATIONS.length} checks passed`
+                : `${readCount} / ${documentSections.length} reviewed`}
             </span>
             <Progress
-              value={(readCount / documentSections.length) * 100}
-              aria-label="Reading progress in this document"
+              value={
+                library === 'situations'
+                  ? (passed.length / LEARNING_SITUATIONS.length) * 100
+                  : (readCount / documentSections.length) * 100
+              }
+              aria-label={
+                library === 'situations'
+                  ? 'Situation checks passed'
+                  : 'Reading progress in this document'
+              }
             />
           </div>
         </div>
@@ -239,53 +340,104 @@ export function Rulebook({ robotVisual }: { robotVisual: RobotVisualId }) {
               : `${document.title} sections`
           }
         >
-          {query && (
-            <p className="rule-small">
-              {matches.length} matches across all documents
-            </p>
-          )}
-          {matches.map((section) => (
-            <button
-              key={section.id}
-              className={cn(
-                'rule-toc-item',
-                selected.id === section.id && 'rule-toc-active',
-                section.depth === 0 && 'rule-toc-chapter',
-              )}
-              onClick={() => select(section)}
-              aria-current={selected.id === section.id ? 'page' : undefined}
-              style={{
-                paddingLeft: `${12 + Math.min(2, section.depth) * 9}px`,
-              }}
-            >
-              <span className="rule-toc-number">
-                {reviewed.includes(section.id) ? (
-                  <Check aria-label="Reviewed" />
-                ) : (
-                  section.number || '•'
-                )}
-              </span>
-              <span>
-                {section.title}
-                {query && (
-                  <small>
-                    {
-                      RULE_DOCUMENTS.find(
-                        (item) => item.id === section.document,
-                      )?.title
+          {library === 'situations' && (
+            <>
+              {filteredSituations.map((item) => {
+                const section = RULE_SECTIONS.find(
+                  (section) => section.id === item.sectionId,
+                )!;
+                return (
+                  <button
+                    key={item.id}
+                    className={cn(
+                      'rule-toc-item',
+                      situation?.id === item.id && 'rule-toc-active',
+                    )}
+                    aria-current={
+                      situation?.id === item.id ? 'page' : undefined
                     }
-                  </small>
-                )}
-              </span>
-            </button>
-          ))}
-          {!matches.length && (
-            <div className="rule-no-results">
-              <p>No matching section.</p>
-              <Button variant="ghost" onClick={() => setQuery('')}>
-                Clear search
-              </Button>
-            </div>
+                    onClick={() => chooseSituation(item.id)}
+                  >
+                    <span className="rule-toc-number">
+                      {passed.includes(item.id) ? (
+                        <Check aria-label="Check passed" />
+                      ) : (
+                        section.number
+                      )}
+                    </span>
+                    <span>
+                      {item.title}
+                      <small>
+                        {item.kind === 'case'
+                          ? 'Referee decisions'
+                          : item.kind === 'scenario'
+                            ? 'Explore & judge'
+                            : 'Replay & question'}{' '}
+                        · §{section.number}
+                      </small>
+                    </span>
+                  </button>
+                );
+              })}
+              {!filteredSituations.length && (
+                <p className="rule-small">
+                  No matching situation. Use All rules to search every
+                  paragraph.
+                </p>
+              )}
+            </>
+          )}
+          {library === 'sections' && (
+            <>
+              {query && (
+                <p className="rule-small">
+                  {matches.length} matches across all documents
+                </p>
+              )}
+              {matches.map((section) => (
+                <button
+                  key={section.id}
+                  className={cn(
+                    'rule-toc-item',
+                    selected.id === section.id && 'rule-toc-active',
+                    section.depth === 0 && 'rule-toc-chapter',
+                  )}
+                  onClick={() => select(section)}
+                  aria-current={selected.id === section.id ? 'page' : undefined}
+                  style={{
+                    paddingLeft: `${12 + Math.min(2, section.depth) * 9}px`,
+                  }}
+                >
+                  <span className="rule-toc-number">
+                    {reviewed.includes(section.id) ? (
+                      <Check aria-label="Reviewed" />
+                    ) : (
+                      section.number || '•'
+                    )}
+                  </span>
+                  <span>
+                    {section.title}
+                    {query && (
+                      <small>
+                        {
+                          RULE_DOCUMENTS.find(
+                            (item) => item.id === section.document,
+                          )?.title
+                        }
+                      </small>
+                    )}
+                  </span>
+                </button>
+              ))}
+              {!matches.length && (
+                <div className="rule-no-results">
+                  <p>No matching section.</p>
+                  <Button variant="ghost" onClick={() => setQuery('')}>
+                    Clear search
+                  </Button>
+                </div>
+              )}
+            </>
           )}
         </nav>
         <div className="rulebook-nav-footer">
@@ -335,19 +487,33 @@ export function Rulebook({ robotVisual }: { robotVisual: RobotVisualId }) {
             <Button
               size="sm"
               variant="ghost"
-              disabled={documentIndex <= 0}
-              onClick={() => select(documentSections[documentIndex - 1])}
+              disabled={
+                navigatingSituations ? situationIndex <= 0 : documentIndex <= 0
+              }
+              onClick={() =>
+                navigatingSituations
+                  ? chooseSituation(filteredSituations[situationIndex - 1].id)
+                  : select(documentSections[documentIndex - 1])
+              }
             >
               <ArrowLeft />
-              Previous
+              {navigatingSituations ? 'Previous situation' : 'Previous rule'}
             </Button>
             <Button
               size="sm"
               variant="ghost"
-              disabled={documentIndex >= documentSections.length - 1}
-              onClick={() => select(documentSections[documentIndex + 1])}
+              disabled={
+                navigatingSituations
+                  ? situationIndex >= filteredSituations.length - 1
+                  : documentIndex >= documentSections.length - 1
+              }
+              onClick={() =>
+                navigatingSituations
+                  ? chooseSituation(filteredSituations[situationIndex + 1].id)
+                  : select(documentSections[documentIndex + 1])
+              }
             >
-              Next
+              {navigatingSituations ? 'Next situation' : 'Next rule'}
               <ArrowRight />
             </Button>
           </div>
@@ -409,19 +575,102 @@ export function Rulebook({ robotVisual }: { robotVisual: RobotVisualId }) {
                   ) : (
                     <Wrench />
                   )}
-                  Interactive guide
+                  Situation & checking questions
                 </span>
                 {guide === 'animation' && (
                   <small>{clips.length} examples</small>
                 )}
               </div>
               <div className="rule-guide-scroll">
-                {guide === 'animation' && clips.length > 0 && (
-                  <RuleAnimationPlayer
-                    key={selected.anchor}
-                    clips={clips}
+                {sectionSituations.length > 0 && (
+                  <section className="learning-situation-picker">
+                    <label htmlFor="learning-situation">
+                      Situations for this rule
+                    </label>
+                    <NativeSelect
+                      id="learning-situation"
+                      value={situation?.id ?? ''}
+                      onChange={(event) => chooseSituation(event.target.value)}
+                    >
+                      {sectionSituations.map((item) => (
+                        <NativeSelectOption key={item.id} value={item.id}>
+                          {passed.includes(item.id) ? '✓ ' : ''}
+                          {item.title} ·{' '}
+                          {item.kind === 'case'
+                            ? 'decision practice'
+                            : item.kind === 'scenario'
+                              ? 'detailed study'
+                              : 'guided replay'}
+                        </NativeSelectOption>
+                      ))}
+                    </NativeSelect>
+                    <p>
+                      {
+                        sectionSituations.filter((item) =>
+                          passed.includes(item.id),
+                        ).length
+                      }{' '}
+                      / {sectionSituations.length} situation checks passed ·{' '}
+                      {sectionSituations.every((item) =>
+                        passed.includes(item.id),
+                      )
+                        ? 'All checks complete'
+                        : 'Answer each situation to check your understanding'}
+                    </p>
+                  </section>
+                )}
+                {situation?.kind === 'case' && (
+                  <CaseLesson
+                    key={situation.id}
+                    item={REFEREE_CASES.find(
+                      (item) => item.id === situation.sourceId,
+                    )!}
                     robotVisual={robotVisual}
+                    onPassed={passSituation}
                   />
+                )}
+                {situation?.kind === 'scenario' && (
+                  <ScenarioLesson
+                    key={situation.id}
+                    scenario={SCENARIOS.find(
+                      (item) => item.id === situation.sourceId,
+                    )!}
+                    initialAnswer={studyAnswers[situation.sourceId]}
+                    onAnswer={(id) =>
+                      setStudyAnswers((current) => ({
+                        ...current,
+                        [situation.sourceId]: id,
+                      }))
+                    }
+                    studyScore={studyScore}
+                    robotVisual={robotVisual}
+                    onPassed={passSituation}
+                  />
+                )}
+                {situation?.kind === 'clip' && (
+                  <RuleAnimationPlayer
+                    key={situation.id}
+                    clips={[
+                      RULE_CLIPS.find(
+                        (item) => item.id === situation.sourceId,
+                      )!,
+                    ]}
+                    robotVisual={robotVisual}
+                    onPassed={passSituation}
+                  />
+                )}
+                {guide === 'animation' && !situation && clips.length > 0 && (
+                  <div className="rule-example-list">
+                    {clips.map((clip) => (
+                      <Button
+                        key={clip.id}
+                        variant="outline"
+                        onClick={() => chooseSituation(`clip:${clip.id}`)}
+                      >
+                        {clip.title}
+                      </Button>
+                    ))}
+                  </div>
                 )}
                 {guide === 'inspection' && (
                   <InspectionWorkbench onRule={onSoccerRule} />

@@ -20,6 +20,7 @@ export type MatchSettings = {
   selectedRobot: string;
   duration: number;
   referee?: boolean;
+  disabledRobots?: string[];
 };
 export type MatchEvent =
   | { kind: 'goal'; team: MatchTeam }
@@ -136,6 +137,12 @@ const GOAL_PANELS = ([-1, 1] as const).flatMap((end) => {
 /** Small fixed-step match model, independent of React, rendering, and wall time. */
 export class SoccerMatch {
   state: MatchState;
+  blueAttackDirection: 1 | -1 = 1;
+  attackDirection(team: MatchTeam) {
+    return team === 'blue'
+      ? this.blueAttackDirection
+      : -this.blueAttackDirection;
+  }
   private cooldown = 0;
   private goalPause = 0;
   private kickoffTeam: MatchTeam = 'blue';
@@ -184,6 +191,7 @@ export class SoccerMatch {
 
   /** Referee/training placements reset the physics caches as one operation. */
   place(actors: Record<string, Pose>) {
+    this.heldVelocity = null;
     this.state.actors = Object.fromEntries(
       Object.entries(actors).map(([id, value]) => [id, { ...value }]),
     );
@@ -218,8 +226,9 @@ export class SoccerMatch {
         if (!this.state.actors[robot.id]) continue;
         this.state.actors[robot.id] = {
           x: robot.number === 1 ? -0.28 : 0.28,
-          z: robot.team === 'blue' ? -0.38 : 0.38,
-          yaw: robot.team === 'blue' ? 0 : Math.PI,
+          z: -this.attackDirection(robot.team as MatchTeam) * 0.38,
+          yaw:
+            this.attackDirection(robot.team as MatchTeam) === 1 ? 0 : Math.PI,
         };
       }
     } else this.kickoff(team);
@@ -233,7 +242,22 @@ export class SoccerMatch {
     this.state.message = `${team === 'blue' ? 'Blue' : 'Yellow'} +1`;
   }
 
+  private heldVelocity: { x: number; z: number } | null = null;
+
+  /** Hold physics at its exact current pose, retaining momentum only for resume. */
+  holdMotion() {
+    this.heldVelocity ??= { ...this.state.ballVelocity };
+    this.state.ballVelocity = { x: 0, z: 0 };
+    this.state.phase = 'referee';
+  }
+
   releaseReferee() {
+    if (this.state.pendingEvent?.kind === 'lack-progress') {
+      this.stalledFor = 0;
+      this.ballAnchor = { ...this.state.actors.ball };
+    }
+    if (this.heldVelocity) this.state.ballVelocity = this.heldVelocity;
+    this.heldVelocity = null;
     this.state.pendingEvent = null;
     this.state.phase = 'playing';
   }
@@ -248,16 +272,16 @@ export class SoccerMatch {
         (actor) => actor.team === sourceTeam && actor.number === robot.number,
       )!;
       this.state.actors[robot.id] = {
-        x: source.initial.x * mirror,
-        z: source.initial.z * mirror,
-        yaw: robot.team === 'blue' ? 0 : Math.PI,
+        x: source.initial.x * mirror * this.blueAttackDirection,
+        z: source.initial.z * mirror * this.blueAttackDirection,
+        yaw: this.attackDirection(robot.team as MatchTeam) === 1 ? 0 : Math.PI,
       };
     }
     const kicker = this.state.actors[`${team}-1`] ??
       this.state.actors[`${team}-2`] ?? { x: 0, z: -mirror * 0.14 };
     this.state.actors.ball = {
       x: kicker.x,
-      z: kicker.z + mirror * 0.14,
+      z: kicker.z + mirror * this.blueAttackDirection * 0.14,
       yaw: 0,
     };
     this.state.ballVelocity = { x: 0, z: 0 };
@@ -272,7 +296,7 @@ export class SoccerMatch {
   private aiInput(robot: ActorDefinition, striker: string): DriveInput {
     const pose = this.state.actors[robot.id];
     const ball = this.state.actors.ball;
-    const direction = robot.team === 'blue' ? 1 : -1;
+    const direction = this.attackDirection(robot.team as MatchTeam);
     const goal = {
       x: -ball.x * 0.12,
       z: direction * FIELD.goalBackInnerFaceZ,
@@ -378,7 +402,7 @@ export class SoccerMatch {
       Math.abs(ball.z) >= FIELD.goalBackContactBallCenterZ &&
       Math.abs(ball.z) < FIELD.goalBackInnerFaceZ + BALL_RADIUS
     ) {
-      return ball.z > 0 ? 'blue' : 'yellow';
+      return ball.z * this.blueAttackDirection > 0 ? 'blue' : 'yellow';
     }
     const width = FIELD.floorHalfWidth - BALL_RADIUS;
     const length = FIELD.floorHalfLength - BALL_RADIUS;
@@ -509,7 +533,10 @@ export class SoccerMatch {
     const ball = this.state.actors.ball;
     const strikers = {} as Record<MatchTeam, string>;
     for (const team of ['blue', 'yellow'] as const) {
-      const robots = activeRobots.filter((robot) => robot.team === team);
+      const robots = activeRobots.filter(
+        (robot) =>
+          robot.team === team && !settings.disabledRobots?.includes(robot.id),
+      );
       strikers[team] =
         settings.controls[team] === 'manual' &&
         robots.some((robot) => robot.id === settings.selectedRobot)
@@ -523,10 +550,15 @@ export class SoccerMatch {
     const commands: Record<string, DriveInput> = {};
     const velocities: Record<string, { x: number; z: number }> = {};
     for (const robot of activeRobots) {
+      if (settings.disabledRobots?.includes(robot.id)) {
+        commands[robot.id] = { ...NO_DRIVE, dribble: false };
+        velocities[robot.id] = { x: 0, z: 0 };
+        continue;
+      }
       const team = robot.team as MatchTeam;
       const control = settings.controls[team];
       const command =
-        control === 'off'
+        control === 'off' || settings.disabledRobots?.includes(robot.id)
           ? { ...NO_DRIVE, dribble: false }
           : control === 'manual' && robot.id === settings.selectedRobot
             ? manualInput

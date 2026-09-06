@@ -23,9 +23,11 @@ import { cn } from '@/lib/utils';
 export function RuleAnimationPlayer({
   clips,
   robotVisual,
+  onPassed,
 }: {
   clips: RuleClip[];
   robotVisual: RobotVisualId;
+  onPassed?: () => void;
 }) {
   const [clipId, setClipId] = useState(clips[0].id);
   const clip = clips.find((item) => item.id === clipId) ?? clips[0];
@@ -202,7 +204,10 @@ export function RuleAnimationPlayer({
               key={option}
               variant="outline"
               aria-pressed={answer === index}
-              onClick={() => setAnswer(index)}
+              onClick={() => {
+                setAnswer(index);
+                if (index === clip.answer) onPassed?.();
+              }}
               className={cn(
                 answer === index &&
                   (index === clip.answer

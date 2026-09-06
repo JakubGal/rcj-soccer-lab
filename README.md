@@ -16,7 +16,10 @@ Live application: <https://jakubgal.github.io/rcj-soccer-lab/>
   entries, including appendices and footnotes.
 - 32 additional gameplay animations with timelines, camera choices and questions,
   plus interactive inspection, kicker, field, ball and scoring workbenches.
-- Explore, Learn, and Referee modes.
+- Three unified tabs: **Rules**, **Play**, and **Referee**.
+- A situation library combining all 73 decision exercises, guided replays and
+  detailed studies with their matching official sections, questions and saved
+  completion checks.
 - A Play mode with live 2v2 matches, manual driving, autonomous teams, and a
   scoreboard with timed games and automatic kickoffs.
 - Referee AI match practice with 35 shuffled incidents, scored calls, real
@@ -62,6 +65,7 @@ pnpm typecheck
 pnpm test:match
 pnpm test:rules
 pnpm test:referee
+pnpm test:learning
 pnpm lint
 pnpm build
 ```
@@ -87,19 +91,26 @@ only one robot is directly driven at a time. Start the match to begin.
 The manual robot's dribbler can be switched off. Match length is 1, 2, or 5
 minutes; changing it resets the match. Input clears when paused, when switching
 robots or control modes, or when the window loses focus. Backgrounding the page
-pauses the game. Leaving Play ends the current match.
+pauses the game. Switching tabs pauses and preserves the current match.
+
+Use **Arrange field** to drag robots or the ball, enter coordinates, rotate
+robots, or choose an existing lesson layout. Start the match directly from
+that arrangement. Arrow keys move the selected object 1 cm (5 cm with Shift),
+Q/E rotate, and **Reset layout** restores the arrangement before editing.
+The legacy `/?mode=manual` link opens this editor inside Play.
 
 Play uses an independent 120 Hz planar model with swept robot collisions,
 ball contact and damping, kicks, and goal-panel collisions. A goal counts when
 the ball contacts the inside back wall. Goals restart automatically; stalled
 AI play resets after 8 seconds. This is a practice game, without ball height,
-ramp physics, or automatic referee penalties. Scripted rule lessons and the
-Manual layout editor keep their separate behavior.
+ramp physics, or automatic referee penalties. Scripted rule lessons are in
+Rules; manual arrangement and live driving share the Play field.
 
 ## Referee the AI teams
 
-In **Play**, select **Referee AI match**, or open
-`/?mode=play&referee=1`. Both teams play autonomously. Press **Whistle** (Space)
+Open **Referee** in the top bar, select **Referee AI match** from Play, or open
+`/?mode=referee`. The legacy `/?mode=play&referee=1` link still works. Both teams
+play autonomously. Press **Whistle** (Space)
 when you want to make a call, select the affected robot where relevant, and
 choose your action. Goal buttons identify the scoring team directly. **P**
 pauses playback. Other actions are available through the action-category menu.
@@ -117,7 +128,9 @@ events and stalled play are held for assessment; whistling also evaluates live
 pushing and multiple-defense geometry. Authored evidence stops before the
 lesson's referee action and hides its answer captions. Observation notes
 supply facts such as a reported power failure or unauthorized human contact.
-Replay is available for an authored incident before its first resolved call.
+Replay preserves the last situation, including its lead-up and decision
+endpoint, without changing the live match. Rule links open the matching
+section inside Rules; returning to Referee keeps the paused match.
 
 Correct calls apply to the match: remove robots with their motors off, move the
 ball or the relevant defender to a clear neutral spot, award/disallow goals,
@@ -154,6 +167,16 @@ Open **Rules** in the top bar, or visit `/?mode=rules`. The contents cover the
 complete main Soccer rules, field specification, ball specification, scoring
 and judging guidelines, SuperTeam rules, and Entry rules. The federation
 conduct policy incorporated by the rules is linked in the contents footer.
+
+The **Situations** library combines the former Explore, Learn and scenario
+Referee modes. Each entry opens its official section beside a replay and a
+checking question. Multi-step incidents ask each decision in order, including
+counts and return requests. Hints support practice, and successful final
+answers mark a check as passed. These checks persist separately from reading
+progress. **Previous situation** and **Next situation** follow the library;
+the rule picker groups alternate situations for the same section. **All rules**
+keeps the full document index and technical workbenches available. Existing
+scenario links and embeds remain supported.
 
 The official-text pane loads the original document, including every paragraph,
 table, note and appendix. It requires internet access and has an **Open original**

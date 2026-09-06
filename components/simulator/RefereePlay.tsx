@@ -3,10 +3,13 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   ArrowLeft,
+  BookOpen,
   Check,
   ChevronRight,
   ExternalLink,
   Flag,
+  Flame,
+  Lightbulb,
   Pause,
   Play,
   RotateCcw,
@@ -23,6 +26,11 @@ import { Progress } from '@/components/ui/progress';
 import { PlayCanvasViewport, type CameraPreset } from './PlayCanvasViewport';
 import { MATCH_ACTORS, MATCH_ROBOTS, MATCH_STEP } from '@/lib/simulator/match';
 import { RefereeMatch } from '@/lib/simulator/referee-match';
+import { PreMatchToss } from './PreMatchToss';
+import {
+  sampleSituation,
+  type SituationReplay,
+} from '@/lib/simulator/situation-replay';
 import {
   REFEREE_ACTIONS,
   REFEREE_CASES,
@@ -30,6 +38,7 @@ import {
   type RefereeCall,
 } from '@/lib/simulator/referee-cases';
 import type { RobotVisualId } from '@/lib/simulator/robot-models';
+import { robotPenaltyOverlap } from '@/lib/simulator/referee-geometry';
 import { cn } from '@/lib/utils';
 
 const clock = (seconds: number) =>
@@ -50,11 +59,17 @@ const COMMON = new Set([
 export function RefereePlay({
   robotVisual,
   onExit,
+  active = true,
+  onOpenRule,
 }: {
   robotVisual: RobotVisualId;
   onExit: () => void;
+  active?: boolean;
+  onOpenRule?: (sectionId: string) => void;
 }) {
-  const [session, setSession] = useState(() => new RefereeMatch(randomSeed()));
+  const [session, setSession] = useState(
+    () => new RefereeMatch(randomSeed(), { preMatch: true, robotVisual }),
+  );
   const [frame, setFrame] = useState(() => session.snapshot());
   const [running, setRunning] = useState(false);
   const [ready, setReady] = useState(false);
@@ -64,32 +79,92 @@ export function RefereePlay({
   const [group, setGroup] = useState('common');
   const [topic, setTopic] = useState('random');
   const [seed, setSeed] = useState(String(session.seed));
+  const [replay, setReplay] = useState<SituationReplay | null>(null);
+  const [replayTime, setReplayTime] = useState(0);
+  const [replayRunning, setReplayRunning] = useState(false);
+  const replayCursor = useRef(0);
+  const seekReplay = useCallback((time: number) => {
+    replayCursor.current = time;
+    setReplayTime(time);
+  }, []);
+  const toggleReplay = useCallback(() => {
+    if (!replay) return;
+    const finished = replayCursor.current >= replay.duration;
+    if (finished) seekReplay(0);
+    setReplayRunning((value) => finished || !value);
+  }, [replay, seekReplay]);
   const field = useRef<HTMLElement>(null);
   const onReady = useCallback(() => setReady(true), []);
   const sync = useCallback(() => setFrame(session.snapshot()), [session]);
-  const reset = useCallback((value: number) => {
-    const next = new RefereeMatch(value);
-    setSession(next);
-    setFrame(next.snapshot());
-    setSeed(String(value));
+  useEffect(() => {
+    session.setRobotVisual(robotVisual);
+    const update = requestAnimationFrame(sync);
+    return () => cancelAnimationFrame(update);
+  }, [session, robotVisual, sync]);
+  const pause = useCallback(() => {
+    if (replay) {
+      setReplayRunning(false);
+      setRunning(false);
+      return;
+    }
+    session.match.holdMotion();
     setRunning(false);
-  }, []);
-  const whistle = useCallback(() => {
-    session.whistle();
     sync();
-  }, [session, sync]);
+  }, [session, sync, replay]);
+  useEffect(() => {
+    if (active) return;
+    const update = requestAnimationFrame(() => {
+      pause();
+      setReady(false);
+    });
+    return () => cancelAnimationFrame(update);
+  }, [active, pause]);
+  const toggleRunning = useCallback(() => {
+    if (!ready) return;
+    if (running) {
+      pause();
+      return;
+    }
+    if (!session.canAdvance) return;
+    session.resumeMotion();
+    setRunning(true);
+    sync();
+  }, [ready, running, pause, session, sync]);
+  const reset = useCallback(
+    (value: number) => {
+      setReplay(null);
+      const next = new RefereeMatch(value, { preMatch: true, robotVisual });
+      setSession(next);
+      setFrame(next.snapshot());
+      setSeed(String(value));
+      setRunning(false);
+    },
+    [robotVisual],
+  );
+  const whistle = useCallback(() => {
+    if (replay) return;
+    session.whistle();
+    setRunning(false);
+    sync();
+  }, [session, sync, replay]);
   const submit = (call: RefereeCall) => {
     session.submit(frame.decisionKey, call);
+    setRunning(session.canAdvance);
     sync();
   };
 
   useEffect(() => {
-    if (!running) return;
+    if (!active || !running || replay) return;
     let raf = 0,
       previous = 0,
       accumulator = 0,
       publish = 0;
     const animate = (now: number) => {
+      if (!session.canAdvance) {
+        sync();
+        setRunning(false);
+        return;
+      }
       const delta = previous ? Math.min((now - previous) / 1000, 0.1) : 0;
       previous = now;
       accumulator += delta * speed;
@@ -97,6 +172,11 @@ export function RefereePlay({
       while (accumulator >= MATCH_STEP) {
         session.step();
         accumulator -= MATCH_STEP;
+        if (!session.canAdvance) {
+          sync();
+          setRunning(false);
+          return;
+        }
       }
       if (publish >= 1 / 30) {
         sync();
@@ -106,10 +186,30 @@ export function RefereePlay({
     };
     raf = requestAnimationFrame(animate);
     return () => cancelAnimationFrame(raf);
-  }, [running, session, speed, sync]);
+  }, [active, running, session, speed, sync, replay]);
 
   useEffect(() => {
-    const stop = () => setRunning(false);
+    if (!active || !replay || !replayRunning) return;
+    let raf = 0,
+      previous = 0;
+    const animate = (now: number) => {
+      const delta = previous ? Math.min((now - previous) / 1000, 0.1) : 0;
+      previous = now;
+      const time = Math.min(replay.duration, replayCursor.current + delta);
+      seekReplay(time);
+      if (time >= replay.duration) {
+        setReplayRunning(false);
+        return;
+      }
+      raf = requestAnimationFrame(animate);
+    };
+    raf = requestAnimationFrame(animate);
+    return () => cancelAnimationFrame(raf);
+  }, [active, replay, replayRunning, seekReplay]);
+
+  useEffect(() => {
+    if (!active) return;
+    const stop = pause;
     const visibility = () => {
       if (document.hidden) stop();
     };
@@ -130,7 +230,8 @@ export function RefereePlay({
       }
       if (event.code === 'KeyP') {
         event.preventDefault();
-        setRunning((value) => !value);
+        if (replay) toggleReplay();
+        else toggleRunning();
       }
     };
     window.addEventListener('blur', stop);
@@ -141,16 +242,18 @@ export function RefereePlay({
       window.removeEventListener('keydown', keydown);
       document.removeEventListener('visibilitychange', visibility);
     };
-  }, [whistle]);
+  }, [active, whistle, pause, toggleRunning, replay, toggleReplay]);
 
   useEffect(() => {
+    if (!active) return;
     const host = window as Window & { snapshot?: () => unknown };
     const snapshot = () => ({
       app: 'RCJ Soccer Lab',
-      mode: 'play',
+      mode: 'referee',
       referee: true,
       ...session.snapshot(),
-      playing: running,
+      playing: !replay && running && !session.motionHeld,
+      replaying: Boolean(replay),
       speed,
       seed: session.seed,
       selectedActor: target,
@@ -159,11 +262,21 @@ export function RefereePlay({
     return () => {
       if (host.snapshot === snapshot) delete host.snapshot;
     };
-  }, [session, running, speed, target]);
+  }, [active, session, running, speed, target, replay]);
 
-  const canNext =
-    frame.phase === 'live' && !frame.bench.length && !frame.kickoffDue;
-  const blocked = !ready || frame.phase === 'feedback';
+  const canNext = frame.canStartCase;
+  const replayPlaying = Boolean(
+    replay && replayRunning && replayTime < replay.duration,
+  );
+  const moving = replay ? replayPlaying : running && !frame.motionHeld;
+  const replayView = replay ? sampleSituation(replay, replayTime) : null;
+  const view = replayView ?? { ...frame, ballTrail: session.match.ballTrail() };
+  const blocked =
+    !ready ||
+    Boolean(replay) ||
+    Boolean(frame.opening) ||
+    frame.resolving ||
+    frame.phase === 'feedback';
   const supported =
     frame.feedback && ['correct', 'supported'].includes(frame.feedback.verdict);
   const actions = REFEREE_ACTIONS.filter(
@@ -179,54 +292,86 @@ export function RefereePlay({
     const definition = REFEREE_CASES.find((item) => item.id === topic);
     if (definition ? session.beginCase(definition) : session.nextCase()) {
       sync();
-      setRunning(true);
+      setRunning(session.canAdvance);
     }
   };
 
+  if (!active) return null;
   return (
     <div className="match-workspace referee-workspace">
       <section
         ref={field}
         tabIndex={-1}
-        className="viewport-panel match-field referee-field"
+        className={cn(
+          'viewport-panel match-field referee-field',
+          replay && 'referee-field-replay',
+        )}
         aria-label="AI match for referee training"
       >
         <PlayCanvasViewport
           actors={MATCH_ACTORS}
-          poses={frame.actors}
-          actorHeights={frame.heights}
+          poses={view.actors}
+          actorHeights={view.heights}
+          damageCue={view.damage}
+          damagePlayback={replayView?.damagePlayback ?? null}
+          motionStopped={!moving}
           cameraPreset={camera}
           showRuleGeometry
           showBallTrail
           showContactEvidence={false}
-          ballTrail={session.match.ballTrail()}
-          phaseLabel={frame.facts}
+          showPenaltyEvidence={frame.penaltyEvidence && !replay}
+          ballTrail={view.ballTrail}
+          phaseLabel={replay ? replay.facts : frame.facts}
           robotVisual={robotVisual}
-          selectedActorId={frame.actors[target] ? target : null}
+          selectedActorId={view.actors[target] ? target : null}
           onReady={onReady}
         />
+        {frame.opening && !replay && (
+          <PreMatchToss
+            key={session.seed}
+            meeting={frame.opening}
+            ready={ready}
+            onToss={() => {
+              session.tossCoin();
+              sync();
+            }}
+            onKickoff={() => {
+              session.chooseFirstKickoff();
+              sync();
+            }}
+            onEnd={(end) => {
+              session.chooseOpeningEnd(end);
+              sync();
+            }}
+            onStart={() => submit({ action: 'start' })}
+          />
+        )}
         <div
           className="match-scoreboard"
-          aria-label={`Blue ${frame.score.blue}, Yellow ${frame.score.yellow}`}
+          aria-label={`Blue ${view.score.blue}, Yellow ${view.score.yellow}`}
         >
           <span className="text-sky-300">
-            BLUE <strong>{frame.score.blue}</strong>
+            BLUE <strong>{view.score.blue}</strong>
           </span>
           <div>
             <Timer className="size-3.5" />
-            {clock(frame.elapsed)}
+            {clock(view.elapsed)}
             <small>
-              {frame.phase === 'live' && running
-                ? 'AI vs AI'
-                : frame.phase === 'decision'
-                  ? 'YOUR CALL'
-                  : frame.phase === 'feedback'
-                    ? 'REVIEW'
-                    : 'PRACTICE'}
+              {replay
+                ? 'REPLAY'
+                : moving && frame.phase !== 'evidence'
+                  ? 'AI vs AI'
+                  : frame.phase === 'decision'
+                    ? 'YOUR CALL'
+                    : frame.phase === 'feedback'
+                      ? 'REVIEW'
+                      : !moving
+                        ? 'STOPPED'
+                        : 'PRACTICE'}
             </small>
           </div>
           <span className="text-amber-300">
-            <strong>{frame.score.yellow}</strong> YELLOW
+            <strong>{view.score.yellow}</strong> YELLOW
           </span>
         </div>
         <div className="match-camera">
@@ -247,77 +392,155 @@ export function RefereePlay({
             <NativeSelectOption value="free">Free orbit</NativeSelectOption>
           </NativeSelect>
         </div>
-        {frame.count !== null && (
+        {!replay && frame.count !== null && (
           <output className="referee-count" aria-live="polite">
             <strong>{frame.count}</strong>Visible count · watch for progress
           </output>
         )}
-        <div
-          className={cn(
-            'referee-observation',
-            frame.phase === 'decision' && 'referee-observation-held',
-          )}
-        >
-          <span>
-            <Flag className="size-3.5" />
-            {frame.phase === 'live'
-              ? 'Live passage of play'
-              : frame.phase === 'evidence'
-                ? 'Watch the evidence'
-                : frame.phase === 'feedback'
-                  ? 'Decision review'
-                  : 'Your decision'}
-          </span>
-          <p>{frame.facts}</p>
-          {frame.phase === 'decision' && (
-            <small>
-              Training pause: the match and penalty clocks are held while you
-              decide.
-            </small>
-          )}
-        </div>
+        {!frame.opening && (
+          <div
+            className={cn(
+              'referee-observation',
+              !moving && 'referee-observation-held',
+            )}
+          >
+            <span>
+              <Flag className="size-3.5" />
+              {replay
+                ? `Replay · ${replay.title}`
+                : frame.phase === 'live' && frame.kickoffDue
+                  ? 'Awaiting kickoff'
+                  : frame.phase === 'live'
+                    ? 'Live passage of play'
+                    : frame.phase === 'evidence'
+                      ? 'Watch the evidence'
+                      : frame.phase === 'feedback'
+                        ? 'Decision review'
+                        : frame.motionHeld
+                          ? 'Your decision · training paused'
+                          : 'Your decision · play continues'}
+            </span>
+            <p>{replay ? replay.facts : frame.facts}</p>
+            {frame.penaltyEvidence && !replay && (
+              <div
+                className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs"
+                aria-label="Penalty area body evidence"
+              >
+                <span className="text-white/85">
+                  Body outline ·{' '}
+                  <b className="text-rose-300">red = inside the area</b>
+                </span>
+                {MATCH_ROBOTS.filter((robot) => view.actors[robot.id]).map(
+                  (robot) => {
+                    const overlaps = [-1, 1].some((end) =>
+                      robotPenaltyOverlap(
+                        view.actors[robot.id],
+                        end,
+                        robotVisual,
+                      ),
+                    );
+                    return (
+                      <span
+                        key={robot.id}
+                        className={overlaps ? 'text-rose-300' : 'text-white/65'}
+                      >
+                        {robot.label}: {overlaps ? 'overlapping' : 'outside'}
+                      </span>
+                    );
+                  },
+                )}
+              </div>
+            )}
+            {replay ? (
+              <small>
+                Recorded situation. Back to match returns to the unchanged live
+                game.
+              </small>
+            ) : (
+              !moving && (
+                <small>
+                  All robots and the ball are stopped in place.{' '}
+                  {frame.decisionPaused
+                    ? 'Training timers are paused while you complete the decision.'
+                    : 'Movement resumes only after your action.'}
+                </small>
+              )
+            )}
+            {view.damage && !view.damage.removed && (
+              <small className="referee-damage-note">
+                <Flame className="size-3.5" />
+                {
+                  MATCH_ROBOTS.find((robot) => robot.id === view.damage?.robot)
+                    ?.label
+                }{' '}
+                · damage effect
+              </small>
+            )}
+          </div>
+        )}
         {!ready && (
           <div className="renderer-loader">Loading referee field…</div>
         )}
         <div className="transport-panel referee-transport">
-          <Button
-            disabled={!ready || frame.phase === 'feedback'}
-            onClick={() => {
-              setRunning((value) => !value);
-              field.current?.focus({ preventScroll: true });
-            }}
-          >
-            {running ? <Pause /> : <Play />}
-            {running ? 'Pause' : 'Run'}
-          </Button>
-          <Button variant="outline" disabled={blocked} onClick={whistle}>
-            <Flag />
-            Whistle <kbd>Space</kbd>
-          </Button>
-          <Button
-            variant="ghost"
-            disabled={!frame.canReplay}
-            onClick={() => {
-              if (session.replay()) {
-                sync();
-                setRunning(true);
-              }
-            }}
-          >
-            <RotateCcw />
-            Replay
-          </Button>
-          <NativeSelect
-            size="sm"
-            value={speed}
-            aria-label="Simulation speed"
-            onChange={(e) => setSpeed(Number(e.target.value))}
-          >
-            <NativeSelectOption value={0.5}>0.5×</NativeSelectOption>
-            <NativeSelectOption value={1}>1×</NativeSelectOption>
-            <NativeSelectOption value={2}>2×</NativeSelectOption>
-            <NativeSelectOption value={4}>4×</NativeSelectOption>
-          </NativeSelect>
+          {replay ? (
+            <>
+              <Button onClick={toggleReplay}>
+                {replayPlaying ? <Pause /> : <Play />}
+                {replayPlaying ? 'Pause replay' : 'Play replay'}
+              </Button>
+              <input
+                className="referee-replay-timeline"
+                type="range"
+                min="0"
+                max={replay.duration}
+                step="0.033333"
+                value={replayTime}
+                aria-label="Replay timeline"
+                onChange={(e) => seekReplay(Number(e.target.value))}
+              />
+              <output className="referee-replay-time">
+                {replayTime.toFixed(1)} / {replay.duration.toFixed(1)} s
+              </output>
+              <Button
+                variant="outline"
+                onClick={() => {
+                  setReplay(null);
+                  setReplayRunning(false);
+                  sync();
+                }}
+              >
+                <ArrowLeft /> Back to match
+              </Button>
+            </>
+          ) : (
+            <>
+              <Button
+                disabled={!ready || !frame.canAdvance}
+                onClick={() => {
+                  toggleRunning();
+                  field.current?.focus({ preventScroll: true });
+                }}
+              >
+                {running ? <Pause /> : <Play />}
+                {!frame.canAdvance ? 'Stopped' : running ? 'Pause' : 'Run'}
+              </Button>
+              <Button variant="outline" disabled={blocked} onClick={whistle}>
+                <Flag />
+                Whistle <kbd>Space</kbd>
+              </Button>
+              <NativeSelect
+                size="sm"
+                value={speed}
+                aria-label="Simulation speed"
+                onChange={(e) => setSpeed(Number(e.target.value))}
+              >
+                <NativeSelectOption value={0.5}>0.5×</NativeSelectOption>
+                <NativeSelectOption value={1}>1×</NativeSelectOption>
+                <NativeSelectOption value={2}>2×</NativeSelectOption>
+                <NativeSelectOption value={4}>4×</NativeSelectOption>
+              </NativeSelect>
+            </>
+          )}
         </div>
       </section>
 
@@ -325,7 +548,7 @@ export function RefereePlay({
         className="context-panel match-panel referee-panel"
         aria-label="Live referee console"
       >
-        <div className="context-scroll">
+        <div className="context-scroll" inert={Boolean(replay)}>
           <div className="referee-heading">
             <div>
               <p className="rule-kicker">AI MATCH / REFEREE</p>
@@ -344,9 +567,9 @@ export function RefereePlay({
           <div className="referee-stats">
             <span>
               <strong>
-                {frame.correct} / {frame.assessed}
+                {frame.correct} / {frame.assessed - frame.assisted}
               </strong>
-              First-try decisions
+              First try, without hints
             </span>
             <span>
               <strong>
@@ -355,6 +578,173 @@ export function RefereePlay({
               Different situations
             </span>
           </div>
+          <p className="referee-assistance-note">
+            {frame.assisted} assisted · hints are unlimited
+          </p>
+          {!frame.opening && (
+            <p className="referee-end-note">
+              Blue → {frame.blueAttackDirection === 1 ? 'yellow' : 'blue'} goal
+              · Yellow → {frame.blueAttackDirection === 1 ? 'blue' : 'yellow'}{' '}
+              goal
+            </p>
+          )}
+
+          <Button
+            className="referee-replay-button"
+            variant="outline"
+            disabled={!ready || !frame.canReplayLast}
+            onClick={() => {
+              const recording = session.getLastReplay();
+              if (recording) {
+                setReplay(recording);
+                seekReplay(0);
+                setReplayRunning(true);
+              }
+            }}
+          >
+            <RotateCcw /> Replay last situation
+          </Button>
+
+          {frame.help && !frame.opening && (
+            <section className="referee-help" aria-label="Decision help">
+              <div className="referee-help-heading">
+                <Lightbulb className="size-4" />
+                <strong>{frame.help.title}</strong>
+                <small>
+                  Step {frame.help.step} / {frame.help.steps}
+                </small>
+              </div>
+              <div className="referee-help-actions">
+                <Button
+                  variant="outline"
+                  disabled={!ready || frame.resolving}
+                  onClick={() => {
+                    session.requestHint();
+                    sync();
+                  }}
+                >
+                  <Lightbulb /> {frame.help.level ? 'More help' : 'Hint'}
+                </Button>
+                <Button
+                  variant="outline"
+                  disabled={!ready || frame.resolving}
+                  onClick={() => {
+                    session.requestHint(true);
+                    sync();
+                  }}
+                >
+                  Show answer
+                </Button>
+                <Button
+                  disabled={!ready || frame.resolving}
+                  onClick={() => {
+                    session.resolveForMe();
+                    sync();
+                    setRunning(session.canAdvance);
+                  }}
+                >
+                  {frame.resolving ? 'Resolving…' : 'Resolve for me'}
+                </Button>
+              </div>
+              {frame.resolving && (
+                <output>
+                  I’ll finish this situation’s decisions for you. Watching the
+                  evidence or count…
+                </output>
+              )}
+              {frame.help.level > 0 && (
+                <div className="referee-hint-content" aria-live="polite">
+                  <p>{frame.help.clue}</p>
+                  <a
+                    href={frame.help.rule}
+                    onClick={(event) => {
+                      if (
+                        onOpenRule &&
+                        !event.ctrlKey &&
+                        !event.metaKey &&
+                        !event.shiftKey
+                      ) {
+                        event.preventDefault();
+                        pause();
+                        onOpenRule(
+                          'soccer:' + new URL(frame.help!.rule).hash.slice(1),
+                        );
+                      }
+                    }}
+                  >
+                    Read the relevant rule <ExternalLink className="size-3" />
+                  </a>
+                  {frame.help.level >= 2 && <p>{frame.help.explanation}</p>}
+                  {frame.help.level >= 3 &&
+                    frame.help.choices.map((choice, i) => (
+                      <Button
+                        key={`${choice.action}:${choice.target}`}
+                        variant="outline"
+                        disabled={blocked || frame.resolving}
+                        onClick={() => submit(choice)}
+                      >
+                        {i > 0 ? 'Or: ' : ''}
+                        {choice.label}
+                      </Button>
+                    ))}
+                </div>
+              )}
+            </section>
+          )}
+
+          {((frame.drillReady && canNext) || frame.canArrangeKickoff) && (
+            <section className="referee-checkpoint" aria-live="polite">
+              <h2>
+                {frame.canArrangeKickoff
+                  ? 'Kickoff needs your signal'
+                  : 'Next practice situation is ready'}
+              </h2>
+              <p>
+                {frame.canArrangeKickoff
+                  ? 'Check any return requests, then arrange the kickoff. The field stays here until you press the button.'
+                  : 'The match keeps playing. Start another situation when you want to load a new practice layout.'}
+              </p>
+              <Button
+                disabled={!ready}
+                onClick={() => {
+                  if (frame.canArrangeKickoff) {
+                    if (session.arrangeKickoff()) {
+                      sync();
+                      setRunning(false);
+                      setGroup('restart');
+                    }
+                  } else startNext();
+                }}
+              >
+                {frame.canArrangeKickoff ? <Flag /> : <Shuffle />}
+                {frame.canArrangeKickoff
+                  ? `Arrange ${frame.kickoffTeam} kickoff`
+                  : 'Start next situation'}
+              </Button>
+            </section>
+          )}
+
+          {frame.canResumeEvidence && (
+            <section className="referee-checkpoint">
+              <h2>Observation paused</h2>
+              <p>
+                The scene is held at your whistle. Resume to continue observing
+                from this exact point.
+              </p>
+              <Button
+                variant="outline"
+                disabled={!ready}
+                onClick={() => {
+                  if (session.resumeEvidence()) {
+                    sync();
+                    setRunning(true);
+                  }
+                }}
+              >
+                <Play /> Resume observation
+              </Button>
+            </section>
+          )}
 
           {frame.feedback && (
             <section
@@ -370,20 +760,85 @@ export function RefereePlay({
               </h2>
               <p>{frame.feedback.detail}</p>
               <div>{frame.feedback.effect}</div>
-              <a href={frame.feedback.rule} target="_blank" rel="noreferrer">
-                Read the official rule <ExternalLink className="size-3" />
-              </a>
+              {supported && frame.feedback.appliedRules?.length > 0 ? (
+                <div className="referee-applied-rules">
+                  <h3>
+                    <BookOpen className="size-4" /> Rules applied to this answer
+                  </h3>
+                  <ul>
+                    {frame.feedback.appliedRules.map((rule) => (
+                      <li key={rule.id}>
+                        <small>
+                          {rule.document} · §{rule.number}
+                        </small>
+                        <h4>{rule.provision}</h4>
+                        <span>{rule.title}</span>
+                        {rule.quote && <blockquote>“{rule.quote}”</blockquote>}
+                        {rule.note && <p>{rule.note}</p>}
+                        <div className="referee-rule-links">
+                          <a
+                            href={rule.lessonUrl}
+                            onClick={(event) => {
+                              if (
+                                onOpenRule &&
+                                !event.ctrlKey &&
+                                !event.metaKey &&
+                                !event.shiftKey
+                              ) {
+                                event.preventDefault();
+                                pause();
+                                onOpenRule(rule.sectionId);
+                              }
+                            }}
+                          >
+                            Open rule & situations{' '}
+                            <BookOpen className="size-3" />
+                          </a>
+                        </div>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              ) : (
+                <a
+                  href={frame.feedback.rule}
+                  onClick={(event) => {
+                    if (
+                      onOpenRule &&
+                      !event.ctrlKey &&
+                      !event.metaKey &&
+                      !event.shiftKey
+                    ) {
+                      event.preventDefault();
+                      pause();
+                      onOpenRule(
+                        'soccer:' + new URL(frame.feedback!.rule).hash.slice(1),
+                      );
+                    }
+                  }}
+                >
+                  Read the official rule <ExternalLink className="size-3" />
+                </a>
+              )}
               <Button
                 onClick={() => {
                   session.continue();
                   sync();
-                  setRunning(true);
+                  setRunning(session.canAdvance);
                 }}
               >
                 {frame.feedback.final
-                  ? 'Continue match'
+                  ? frame.pendingDecisions > 0
+                    ? 'Next referee decision'
+                    : frame.kickoffDue
+                      ? 'Continue to kickoff'
+                      : frame.motionHeld
+                        ? 'Resume match'
+                        : 'Dismiss feedback'
                   : supported
-                    ? 'Continue decision'
+                    ? frame.count !== null
+                      ? 'Resume count'
+                      : 'Continue decision'
                     : 'Try again'}
                 <ChevronRight />
               </Button>
@@ -507,9 +962,12 @@ export function RefereePlay({
           <details className="referee-details">
             <summary>Practice setup & coverage</summary>
             <p>
-              Live AI play alternates with shuffled drills. Each round includes
-              every drill before repeating, with mirrored layouts and swapped
-              teams. Evidence notes supply facts that motion alone cannot show.
+              The whole field pauses for every referee decision. AI play
+              continues while the next drill is ready. Goals, kickoffs and
+              official interruptions stop the game. Press Start next situation
+              to load a practice layout. Each round includes every drill before
+              repeating, with mirrored layouts and swapped teams. Evidence notes
+              supply facts that motion alone cannot show.
             </p>
             <label htmlFor="referee-topic">Next situation</label>
             <NativeSelect

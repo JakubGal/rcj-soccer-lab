@@ -1,12 +1,6 @@
 /** Shared, serialisable contracts for the browser simulator and referee trainer. */
 
-export type SimulatorMode =
-  | 'rules'
-  | 'explore'
-  | 'learn'
-  | 'manual'
-  | 'play'
-  | 'referee';
+export type SimulatorMode = 'rules' | 'play' | 'referee';
 
 export type CameraPreset =
   | 'broadcast'

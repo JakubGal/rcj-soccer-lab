@@ -450,6 +450,157 @@ a {
   flex: 1;
   min-height: 0;
 }
+.learning-library-switch {
+  display: flex;
+  gap: 4px;
+  margin-bottom: 12px;
+}
+.learning-situation-picker {
+  padding-bottom: 15px;
+  margin-bottom: 15px;
+  border-bottom: 1px solid #304657;
+  display: grid;
+  gap: 8px;
+}
+.learning-situation-picker label {
+  font-size: 0.875rem;
+  font-weight: 600;
+}
+.learning-situation-picker p {
+  font-size: 0.75rem;
+  color: #9bb7c9;
+}
+.learning-situation-picker [data-slot='native-select-wrapper'] {
+  width: 100%;
+}
+.lesson-observation {
+  margin: 15px 0;
+  font-size: 0.875rem;
+  line-height: 1.65;
+  color: #d3e7f2;
+}
+.lesson-feedback {
+  padding: 14px;
+  background: #382b1d;
+  border: 1px solid #af8351;
+  border-radius: 8px;
+  margin-top: 12px;
+}
+.lesson-feedback-good {
+  background: #123c35;
+  border-color: #579c88;
+}
+.lesson-feedback h4 {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-weight: 600;
+}
+.lesson-feedback p,
+.lesson-feedback li {
+  font-size: 0.8rem;
+  line-height: 1.6;
+  margin-top: 8px;
+}
+.lesson-feedback ul {
+  list-style: none;
+  padding: 0;
+  margin: 12px 0;
+}
+.lesson-feedback blockquote {
+  margin: 5px 0;
+  border-left: 2px solid #79ceb5;
+  padding-left: 9px;
+}
+.lesson-hint {
+  padding: 12px;
+  font-size: 0.8rem;
+  line-height: 1.6;
+  background: #17364a;
+  border-radius: 7px;
+}
+.lesson-tools {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+  font-size: 0.8rem;
+  padding-top: 12px;
+}
+.lesson-tools input {
+  accent-color: #8eddff;
+  margin-right: 5px;
+}
+.lesson-evidence {
+  border-top: 1px solid #304657;
+  padding-top: 12px;
+}
+.lesson-evidence dl {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  font-size: 0.75rem;
+}
+.lesson-evidence dt {
+  color: #91abc0;
+}
+.lesson-evidence dd {
+  color: #d9ebf7;
+}
+.lesson-evidence ul {
+  padding: 12px 0 12px 16px;
+  font-size: 0.8rem;
+  line-height: 1.6;
+}
+.practice-arrange {
+  display: grid;
+  gap: 12px;
+  padding: 15px 0;
+  border-bottom: 1px solid #304657;
+}
+.practice-arrange p {
+  font-size: 0.8rem;
+  line-height: 1.5;
+  color: #a7c2d3;
+}
+.practice-arrange > label {
+  display: grid;
+  gap: 6px;
+  font-size: 0.8rem;
+}
+.practice-arrange [data-slot='native-select-wrapper'] {
+  width: 100%;
+}
+.practice-coordinates {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+.practice-coordinates label {
+  display: grid;
+  gap: 4px;
+  font-size: 0.75rem;
+}
+.practice-coordinates input {
+  min-width: 0;
+  width: 100%;
+  border: 1px solid #365368;
+  border-radius: 6px;
+  padding: 8px;
+  background: #112332;
+}
+.practice-nudges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+}
+.lesson-embed {
+  overflow: auto;
+}
+.lesson-embed .rule-animation {
+  max-width: 1100px;
+  margin: auto;
+  padding: 16px;
+}
 .rulebook-nav {
   display: flex;
   min-height: 0;
@@ -792,6 +943,17 @@ a {
   width: 32px;
   padding-inline: 0;
   flex-shrink: 0;
+}
+.rule-player-controls.rule-case-controls {
+  flex-wrap: wrap;
+}
+.rule-player-controls.rule-case-controls > button {
+  width: auto;
+  max-width: 100%;
+  height: auto;
+  min-height: 32px;
+  padding: 6px 10px;
+  white-space: normal;
 }
 .rule-story-steps {
   display: grid;
@@ -1417,6 +1579,183 @@ a {
   border-radius: 10px;
   margin-bottom: 18px;
 }
+
+.referee-assistance-note,
+.referee-end-note {
+  color: #aec3d2;
+  font-size: 0.875rem;
+  margin: 8px 0 12px;
+}
+.referee-help {
+  margin: 14px 0 18px;
+  padding: 14px;
+  border: 1px solid #426880;
+  border-radius: 10px;
+  background: #102b3a;
+}
+.referee-help-heading {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 7px;
+  margin-bottom: 12px;
+  color: #c6ecff;
+  font-size: 0.875rem;
+}
+.referee-help-heading small {
+  margin-left: auto;
+  font-size: 0.875rem;
+}
+.referee-help-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+}
+.referee-help-actions button {
+  flex: 1 1 auto;
+  font-size: 0.875rem;
+}
+.referee-help p,
+.referee-help > output {
+  display: block;
+  font-size: 1rem;
+  line-height: 1.5;
+  margin-top: 12px;
+  color: #d9e8ef;
+}
+.referee-hint-content {
+  display: grid;
+  gap: 10px;
+}
+.referee-hint-content > button {
+  height: auto;
+  min-height: 40px;
+  white-space: normal;
+  text-align: left;
+  justify-content: flex-start;
+}
+.referee-hint-content a {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  color: #9bdeff;
+  font-size: 0.875rem;
+}
+.referee-meeting {
+  position: absolute;
+  z-index: 12;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: min(430px, calc(100% - 32px));
+  max-height: calc(100% - 132px);
+  overflow-y: auto;
+  padding: 24px;
+  border: 1px solid #506b83;
+  border-radius: 16px;
+  background: #102232f5;
+  box-shadow: 0 20px 70px #0009;
+  text-align: center;
+}
+.referee-meeting h2 {
+  font-size: 1.5rem;
+  font-weight: 650;
+  margin: 8px 0;
+}
+.referee-meeting p:not(.rule-kicker) {
+  font-size: 1rem;
+  color: #c9dae7;
+  line-height: 1.5;
+}
+.referee-meeting-actions {
+  display: grid;
+  gap: 12px;
+  margin-top: 18px;
+}
+.referee-meeting-actions small {
+  color: #adcfbe;
+  font-size: 0.875rem;
+  line-height: 1.5;
+}
+.referee-end-options {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+.referee-end-options button {
+  white-space: normal;
+  height: auto;
+  min-height: 44px;
+}
+.referee-coin-stage {
+  height: 100px;
+  display: grid;
+  place-items: center;
+  perspective: 550px;
+}
+.referee-coin {
+  width: 72px;
+  height: 72px;
+  position: relative;
+  transform-style: preserve-3d;
+}
+.referee-coin > span {
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  backface-visibility: hidden;
+  border: 5px double #e4d494;
+  font-size: 2rem;
+  font-weight: 800;
+  box-shadow: 0 4px 18px #0005;
+}
+.referee-coin-blue {
+  background: #1785c4;
+  color: white;
+}
+.referee-coin-yellow {
+  background: #efc747;
+  color: #302910;
+  transform: rotateY(180deg);
+}
+.referee-coin.lands-yellow {
+  transform: rotateY(180deg);
+}
+.referee-coin.is-tossing {
+  animation: referee-coin-toss-blue 1.8s cubic-bezier(0.22, 0.65, 0.36, 1) both;
+}
+.referee-coin.is-tossing.lands-yellow {
+  animation-name: referee-coin-toss-yellow;
+}
+@keyframes referee-coin-toss-blue {
+  0% {
+    transform: translateY(20px) rotateY(0) scale(0.8);
+  }
+  45% {
+    transform: translateY(-20px) rotateY(900deg) scale(1.15);
+  }
+  100% {
+    transform: translateY(0) rotateY(1800deg) scale(1);
+  }
+}
+@keyframes referee-coin-toss-yellow {
+  0% {
+    transform: translateY(20px) rotateY(0) scale(0.8);
+  }
+  45% {
+    transform: translateY(-20px) rotateY(900deg) scale(1.15);
+  }
+  100% {
+    transform: translateY(0) rotateY(1980deg) scale(1);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .referee-coin.is-tossing {
+    animation-duration: 0.01ms;
+  }
+}
 .referee-feedback-retry {
   border-color: #ae8040;
   background: #3d2c19;
@@ -1457,6 +1796,95 @@ a {
 }
 .referee-feedback > button {
   width: 100%;
+}
+.referee-applied-rules {
+  margin-bottom: 16px;
+}
+.referee-applied-rules h3 {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  color: #e0f6f1;
+  font-weight: 600;
+  margin-bottom: 10px;
+}
+.referee-applied-rules ul {
+  display: grid;
+  gap: 10px;
+  list-style: none;
+  padding: 0;
+}
+.referee-applied-rules li {
+  padding: 12px;
+  background: #081e2580;
+  border: 1px solid #87bcb72b;
+  border-radius: 8px;
+}
+.referee-applied-rules small {
+  color: #91ddff;
+  font-size: 0.72rem;
+}
+.referee-applied-rules h4 {
+  color: #effbfa;
+  font-weight: 600;
+  margin: 3px 0;
+}
+.referee-applied-rules li > span {
+  display: block;
+  color: #b5c9c8;
+  font-size: 0.75rem;
+}
+.referee-applied-rules blockquote {
+  border-left: 2px solid #8de2ca;
+  padding-left: 10px;
+  margin: 10px 0;
+  color: #edfcf6;
+}
+.referee-applied-rules li > p {
+  margin-top: 8px;
+  font-size: 0.8rem;
+}
+.referee-rule-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 16px;
+  margin-top: 10px;
+}
+.referee-rule-links a {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  color: #90dfff;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  font-size: 0.75rem;
+}
+.referee-rule-links a:focus-visible {
+  outline: 2px solid #90dfff;
+  outline-offset: 4px;
+}
+.referee-checkpoint {
+  display: grid;
+  gap: 10px;
+  padding: 16px;
+  margin-bottom: 18px;
+  border: 1px solid #b49755;
+  border-radius: 10px;
+  background: #2b271b;
+}
+.referee-checkpoint h2 {
+  font-weight: 600;
+}
+.referee-checkpoint p {
+  color: #d2c9ae;
+  font-size: 0.8125rem;
+  line-height: 1.6;
+}
+.referee-observation .referee-damage-note {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: #ffb268;
 }
 .referee-observation {
   position: absolute;
@@ -1516,6 +1944,42 @@ a {
 }
 .referee-transport {
   gap: 8px;
+}
+.referee-replay-timeline {
+  min-width: 60px;
+  flex: 1;
+  accent-color: #68d5ff;
+}
+.referee-replay-button {
+  width: 100%;
+  margin-bottom: 18px;
+}
+.referee-field-replay .referee-transport {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+}
+.referee-field-replay .referee-transport > button:first-child {
+  grid-area: 1 / 1;
+  justify-self: start;
+}
+.referee-field-replay .referee-transport > button:last-child {
+  grid-area: 1 / 2;
+}
+.referee-replay-timeline {
+  grid-area: 2 / 1;
+  width: 100%;
+}
+.referee-replay-time {
+  grid-area: 2 / 2;
+  text-align: right;
+}
+.referee-field-replay .referee-observation {
+  bottom: 110px;
+}
+.referee-replay-time {
+  font-size: 0.75rem;
+  color: #adcadc;
+  white-space: nowrap;
 }
 .referee-transport kbd {
   font-size: 0.625rem;
