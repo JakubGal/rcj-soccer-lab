@@ -255,6 +255,52 @@ test('out-and-back remains actionable, is missed once, and a late correction ear
   assert.equal(session.snapshot().report.assessed, 1);
 });
 
+test('an unserved out penalty survives leaving the boundary and any reaction-window expiry', () => {
+  // PR #11 identified this lifecycle; the response deadline only scores the
+  // trainee. Rule 2.8 starts the penalty at removal, not at wall clearance.
+  for (const kind of ['wall', 'full-area'])
+    for (const leaveBoundary of [false, true])
+      for (const elapsed of [3, 20, 90]) {
+        const session = continuous({ topics: ['out', 'scoring'] });
+        const label = `${kind}, left=${leaveBoundary}, elapsed=${elapsed}`;
+        session.match.state.actors['blue-1'] =
+          kind === 'wall'
+            ? wallPose(session.robotVisual, -0.2)
+            : { x: 0, z: 0.99, yaw: 0 };
+        session.detectLiveIncident();
+        assert.equal(session.active.definition.id, `live-${kind}`, label);
+        if (leaveBoundary)
+          session.match.state.actors['blue-1'] = { x: 0, z: -0.3, yaw: 0 };
+        session.clock += elapsed;
+        session.detectLiveIncident();
+        assert.ok(session.outRobots.has('blue-1'), label);
+        deliverGoal(session, 'blue');
+        const incident = [session.active, ...session.pending].find(
+          (item) => item?.definition.id === 'live-out-goal',
+        );
+        assert.ok(incident, label);
+        assert.deepEqual(incident.definition.steps[incident.step], [
+          { action: 'no-goal' },
+        ]);
+        correct(session, 'no-goal');
+        session.continue();
+        correct(session, 'out', 'blue-1');
+        session.continue();
+        assert.equal(session.snapshot().score.blue, 0, label);
+        assert.equal(session.match.state.actors['blue-1'], undefined, label);
+        assert.equal(session.outRobots.has('blue-1'), false, label);
+        assert.equal(session.bench['blue-1'].removedAt, elapsed, label);
+        assert.equal(session.bench['blue-1'].eligibleAt, elapsed + 60, label);
+        // A new, unrelated passage after removal is allowed. The dismissed
+        // goal does not poison all future goals, nor does leaving a wall
+        // silently substitute for the removal itself.
+        session.match.place({ ball: { x: 0, z: 0, yaw: 0 } });
+        deliverGoal(session, 'blue');
+        correct(session, 'goal', 'blue');
+        assert.equal(session.snapshot().score.blue, 1, label);
+      }
+});
+
 test('opponent pressure at the wall becomes pushed out and keeps the robot in play', () => {
   const session = continuous({ topics: ['out'] });
   const radius = RCJ_SIMULATOR_GUIDES.robotCollisionRadius;

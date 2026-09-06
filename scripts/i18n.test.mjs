@@ -420,6 +420,23 @@ test('dynamic templates retain their values after translation', () => {
   );
 });
 
+test('holding inspection feedback is translated and retains both governing rule numbers', async () => {
+  const { rulesForDecision } =
+    await import('../lib/simulator/referee-rules.ts');
+  const item = REFEREE_CASES.find((entry) => entry.id === 'holding');
+  const note = rulesForDecision(item, 'holding').find((rule) =>
+    rule.note?.startsWith('Inspect both ball control'),
+  )?.note;
+  assert.ok(note);
+  for (const locale of ['sk', 'de', 'ja']) {
+    const result = translateText(note, locale);
+    assert.notEqual(result, note, locale);
+    assert.match(result, /2\.5/, locale);
+    assert.match(result, /6\.2\.1/, locale);
+    assert.doesNotMatch(result, /Inspect both|compliant capture depth/, locale);
+  }
+});
+
 test('nested referee feedback translates its generated explanation', () => {
   const source =
     'Expected Out of bounds · remove (Blue 1). Full entry is out of bounds. Remove the robot for one minute or until an earlier kickoff.';
