@@ -1547,7 +1547,8 @@ a {
   font-size: 0.75rem;
   flex-direction: column;
   gap: 0;
-  height: 40px;
+  min-height: 44px;
+  height: 44px;
 }
 .referee-target small {
   font-size: 0.625rem;
@@ -1947,8 +1948,41 @@ a {
 }
 .referee-replay-timeline {
   min-width: 60px;
-  flex: 1;
+  width: 100%;
   accent-color: #68d5ff;
+}
+.referee-replay-track {
+  position: relative;
+  min-width: 80px;
+  flex: 1;
+}
+.referee-replay-markers {
+  position: absolute;
+  inset: 1px 8px auto;
+  height: 8px;
+  pointer-events: none;
+}
+.referee-replay-marker {
+  position: absolute;
+  width: 3px;
+  height: 8px;
+  transform: translateX(-1px);
+  border-radius: 2px;
+  background: #fb7185;
+  box-shadow: 0 0 0 1px #07121a;
+}
+.referee-replay-marker-correct,
+.referee-replay-marker-supported {
+  background: #34d399;
+}
+.referee-replay-marker-correction {
+  background: #67e8f9;
+}
+.referee-replay-marker-assisted {
+  background: #fbbf24;
+}
+.referee-replay-marker-not-scored {
+  background: #94a3b8;
 }
 .referee-replay-button {
   width: 100%;
@@ -1965,13 +1999,44 @@ a {
 .referee-field-replay .referee-transport > button:last-child {
   grid-area: 1 / 2;
 }
-.referee-replay-timeline {
+.referee-replay-track {
   grid-area: 2 / 1;
   width: 100%;
 }
 .referee-replay-time {
   grid-area: 2 / 2;
   text-align: right;
+}
+.referee-replay-stepper {
+  grid-area: 3 / 1 / 3 / 3;
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+}
+.referee-action-receipt {
+  display: grid;
+  gap: 4px;
+  margin: 14px 0 18px;
+  padding: 12px 14px;
+  border: 1px solid #345b70;
+  border-radius: 10px;
+  background: #0b2634;
+}
+.referee-action-receipt small {
+  color: #7bdcff;
+  font-size: 0.6875rem;
+  font-variant-numeric: tabular-nums;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+.referee-action-receipt strong {
+  color: #e2f4fc;
+  font-size: 0.8125rem;
+}
+.referee-action-receipt p {
+  color: #a8c4d5;
+  font-size: 0.75rem;
+  line-height: 1.5;
 }
 .referee-field-replay .referee-observation {
   bottom: 110px;
@@ -2100,6 +2165,134 @@ a {
 .referee-history p {
   margin-bottom: 0;
 }
+.referee-match-review {
+  margin: 18px 0;
+  padding: 16px;
+  border: 1px solid #36566a;
+  border-radius: 12px;
+  background: linear-gradient(180deg, #102534, #0a1924);
+}
+.referee-match-review-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 10px;
+}
+.referee-match-review-heading h2 {
+  color: #edf9ff;
+  font-size: 1rem;
+  font-weight: 650;
+}
+.referee-match-review > p {
+  color: #9db9ca;
+  font-size: 0.75rem;
+  line-height: 1.55;
+  margin-bottom: 14px;
+}
+.referee-review-list {
+  display: grid;
+  gap: 9px;
+}
+.referee-review-event {
+  overflow: hidden;
+  border: 1px solid #3f5666;
+  border-left: 4px solid #fb7185;
+  border-radius: 9px;
+  background: #0a1720;
+}
+.referee-review-event-correct,
+.referee-review-event-supported {
+  border-left-color: #34d399;
+}
+.referee-review-event-correction {
+  border-left-color: #67e8f9;
+}
+.referee-review-event-assisted {
+  border-left-color: #fbbf24;
+}
+.referee-review-event-not-scored {
+  border-left-color: #94a3b8;
+}
+.referee-review-event-selected {
+  border-color: #7bdcff;
+  border-left-width: 4px;
+  box-shadow: 0 0 0 1px #7bdcff33;
+}
+.referee-review-event > button {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 5px 10px;
+  width: 100%;
+  min-height: 44px;
+  padding: 12px;
+  color: #cfe2ed;
+  text-align: left;
+  cursor: pointer;
+}
+.referee-review-event > button:hover {
+  background: #122936;
+}
+.referee-review-event > button:focus-visible {
+  outline: 2px solid #7bdcff;
+  outline-offset: -2px;
+}
+.referee-review-event strong,
+.referee-review-event
+  > button
+  > span:not(.referee-review-time, .referee-review-verdict),
+.referee-review-event small {
+  grid-column: 1 / -1;
+}
+.referee-review-event strong {
+  color: #edf8fd;
+  font-size: 0.8125rem;
+}
+.referee-review-event > button > span {
+  font-size: 0.75rem;
+  line-height: 1.45;
+}
+.referee-review-event small {
+  color: #91afc0;
+  line-height: 1.45;
+}
+.referee-review-time {
+  color: #c9e9f7;
+  font-family: var(--font-geist-mono), monospace;
+  font-size: 0.75rem;
+  font-variant-numeric: tabular-nums;
+}
+.referee-review-verdict {
+  justify-self: end;
+  color: #ff9bac;
+  font-size: 0.6875rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.referee-review-event-correct .referee-review-verdict,
+.referee-review-event-supported .referee-review-verdict {
+  color: #6ee7b7;
+}
+.referee-review-event-correction .referee-review-verdict {
+  color: #67e8f9;
+}
+.referee-review-event-assisted .referee-review-verdict {
+  color: #fcd34d;
+}
+.referee-review-event-not-scored .referee-review-verdict {
+  color: #b6c2d0;
+}
+.referee-review-event > a {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 5px;
+  padding: 8px 12px;
+  border-top: 1px solid #243947;
+  color: #7bdcff;
+  font-size: 0.6875rem;
+}
 @media (max-width: 1100px) {
   .referee-workspace {
     grid-template-columns: minmax(0, 1fr) 350px;
@@ -2133,6 +2326,27 @@ a {
   .referee-transport button {
     font-size: 0.75rem;
     padding-inline: 8px;
+  }
+  .referee-match-review {
+    padding: 12px;
+  }
+  .referee-match-review-heading {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+  .referee-match-review-heading > button {
+    width: 100%;
+  }
+  .referee-review-event > button {
+    grid-template-columns: 1fr;
+  }
+  .referee-review-event strong,
+  .referee-review-event > button > span,
+  .referee-review-event small {
+    grid-column: 1;
+  }
+  .referee-review-verdict {
+    justify-self: start;
   }
 }
 

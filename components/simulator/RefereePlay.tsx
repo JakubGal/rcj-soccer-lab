@@ -49,6 +49,32 @@ import { cn } from '@/lib/utils';
 
 const clock = (seconds: number) =>
   `${Math.floor(seconds / 60)}:${String(Math.floor(seconds % 60)).padStart(2, '0')}`;
+const callLabel = (call: RefereeCall) => {
+  const action =
+    REFEREE_ACTIONS.find((entry) => entry.id === call.action)?.label ??
+    call.action;
+  const target = call.target
+    ? (MATCH_ROBOTS.find((robot) => robot.id === call.target)?.label ??
+      (call.target === 'blue'
+        ? 'Blue'
+        : call.target === 'yellow'
+          ? 'Yellow'
+          : call.target))
+    : '';
+  return target ? `${action} · ${target}` : action;
+};
+const assessmentLabel = (assessment: string) =>
+  ({
+    correct: 'Correct',
+    supported: 'Supported judgment',
+    'wrong-action': 'Wrong action',
+    'wrong-target': 'Wrong target',
+    premature: 'Too early',
+    correction: 'Corrective action',
+    assisted: 'Assisted',
+    missed: 'Missed call',
+    'not-scored': 'Not scored',
+  })[assessment] ?? assessment;
 const randomSeed = () => Math.floor(Math.random() * 4294967295) + 1;
 const COMMON = new Set([
   'play-on',
@@ -98,7 +124,12 @@ export function RefereePlay({
   const [replay, setReplay] = useState<SituationReplay | null>(null);
   const [replayTime, setReplayTime] = useState(0);
   const [replayRunning, setReplayRunning] = useState(false);
+  const [replayKind, setReplayKind] = useState<'situation' | 'match' | null>(
+    null,
+  );
+  const [reviewEventId, setReviewEventId] = useState<number | null>(null);
   const replayCursor = useRef(0);
+  const resultsHeading = useRef<HTMLHeadingElement>(null);
   const seekReplay = useCallback((time: number) => {
     replayCursor.current = time;
     setReplayTime(time);
@@ -117,6 +148,11 @@ export function RefereePlay({
     const update = requestAnimationFrame(sync);
     return () => cancelAnimationFrame(update);
   }, [session, robotVisual, sync]);
+  useEffect(() => {
+    if (!frame.sessionFinished) return;
+    const focus = requestAnimationFrame(() => resultsHeading.current?.focus());
+    return () => cancelAnimationFrame(focus);
+  }, [frame.sessionFinished]);
   const pause = useCallback(() => {
     if (replay) {
       setReplayRunning(false);
@@ -148,6 +184,8 @@ export function RefereePlay({
   const reset = useCallback(
     (value: number) => {
       setReplay(null);
+      setReplayKind(null);
+      setReviewEventId(null);
       const next = new RefereeMatch(value, {
         preMatch: true,
         robotVisual,
@@ -174,6 +212,20 @@ export function RefereePlay({
     setRunning(session.canAdvance);
     sync();
   };
+
+  const openMatchReplay = useCallback(
+    (at = 0, eventId: number | null = null) => {
+      const recording = session.getMatchReplay();
+      if (!recording) return;
+      setReplay(recording);
+      setReplayKind('match');
+      setReviewEventId(eventId);
+      seekReplay(Math.max(0, Math.min(at, recording.duration)));
+      setReplayRunning(false);
+      setRunning(false);
+    },
+    [session, seekReplay],
+  );
 
   useEffect(() => {
     if (!active || !running || replay) return;
@@ -293,13 +345,19 @@ export function RefereePlay({
   const moving = replay ? replayPlaying : running && !frame.motionHeld;
   const replayView = replay ? sampleSituation(replay, replayTime) : null;
   const view = replayView ?? { ...frame, ballTrail: session.match.ballTrail() };
+  const selectedReview = frame.review.find(
+    (event) => event.id === reviewEventId,
+  );
+  const selectedReviewIndex = frame.review.findIndex(
+    (event) => event.id === reviewEventId,
+  );
   const blocked =
     frame.sessionFinished ||
     !ready ||
     Boolean(replay) ||
     Boolean(frame.opening) ||
     frame.resolving ||
-    frame.phase === 'feedback';
+    (frame.trainingMode === 'step' && frame.phase === 'feedback');
   const supported =
     frame.feedback && ['correct', 'supported'].includes(frame.feedback.verdict);
   const revealReplay = frame.trainingMode === 'step' || frame.sessionFinished;
@@ -349,11 +407,13 @@ export function RefereePlay({
           showPenaltyEvidence={frame.penaltyEvidence && !replay}
           ballTrail={view.ballTrail}
           phaseLabel={
-            replay
-              ? revealReplay
-                ? replay.facts
-                : 'Review the recorded play and make your own assessment.'
-              : frame.facts
+            replay && selectedReview
+              ? `${selectedReview.situation}. ${selectedReview.detail}`
+              : replay
+                ? revealReplay
+                  ? replay.facts
+                  : 'Review the recorded play and make your own assessment.'
+                : frame.facts
           }
           robotVisual={robotVisual}
           selectedActorId={view.actors[target] ? target : null}
@@ -442,14 +502,14 @@ export function RefereePlay({
             <span>
               <Flag className="size-3.5" />
               {replay
-                ? revealReplay
-                  ? `Replay · ${replay.title}`
-                  : 'Replay recent play'
+                ? selectedReview
+                  ? `${clock(selectedReview.at)} · ${selectedReview.assessment.replace('-', ' ')}`
+                  : revealReplay
+                    ? `Replay · ${replay.title}`
+                    : 'Replay recent play'
                 : frame.sessionFinished
                   ? 'Match complete'
-                  : frame.trainingMode === 'continuous' &&
-                      !frame.feedback &&
-                      !frame.kickoffDue
+                  : frame.trainingMode === 'continuous' && !frame.kickoffDue
                     ? frame.motionHeld
                       ? 'Paused for your decision'
                       : 'Continuous observation'
@@ -467,9 +527,13 @@ export function RefereePlay({
             </span>
             <p>
               {replay
-                ? revealReplay
-                  ? replay.facts
-                  : 'Review the recorded play and make your own assessment.'
+                ? selectedReview
+                  ? selectedReview.actual
+                    ? `${selectedReview.effect} The expected decision is shown in the review timeline.`
+                    : `${selectedReview.detail} Select another event or continue replaying the match.`
+                  : revealReplay
+                    ? replay.facts
+                    : 'Review the recorded play and make your own assessment.'
                 : frame.sessionFinished
                   ? 'Review your referee results, replay the final passage, or start a new match from Match setup.'
                   : frame.facts}
@@ -506,8 +570,9 @@ export function RefereePlay({
             )}
             {replay ? (
               <small>
-                Recorded situation. Back to match returns to the unchanged live
-                game.
+                {replayKind === 'match'
+                  ? 'Full-match recording. Timeline selections change only the replay view.'
+                  : 'Recorded situation. Back to match returns to the unchanged live game.'}
               </small>
             ) : (
               !moving && (
@@ -541,28 +606,83 @@ export function RefereePlay({
                 {replayPlaying ? <Pause /> : <Play />}
                 {replayPlaying ? 'Pause replay' : 'Play replay'}
               </Button>
-              <input
-                className="referee-replay-timeline"
-                type="range"
-                min="0"
-                max={replay.duration}
-                step="0.033333"
-                value={replayTime}
-                aria-label="Replay timeline"
-                onChange={(e) => seekReplay(Number(e.target.value))}
-              />
+              <div className="referee-replay-track">
+                <input
+                  className="referee-replay-timeline"
+                  type="range"
+                  min="0"
+                  max={replay.duration}
+                  step="0.002"
+                  value={replayTime}
+                  aria-label="Replay timeline"
+                  aria-valuetext={
+                    selectedReview
+                      ? `${clock(replayTime)}, ${selectedReview.assessment.replace('-', ' ')}: ${selectedReview.situation}`
+                      : clock(replayTime)
+                  }
+                  onChange={(e) => {
+                    setReviewEventId(null);
+                    seekReplay(Number(e.target.value));
+                  }}
+                />
+                {replayKind === 'match' && (
+                  <div className="referee-replay-markers" aria-hidden="true">
+                    {frame.review.map((event) => (
+                      <i
+                        key={event.id}
+                        className={`referee-replay-marker referee-replay-marker-${event.assessment}`}
+                        style={{
+                          left: `${Math.min(100, (100 * event.replayAt) / replay.duration)}%`,
+                        }}
+                      />
+                    ))}
+                  </div>
+                )}
+              </div>
               <output className="referee-replay-time">
                 {replayTime.toFixed(1)} / {replay.duration.toFixed(1)} s
               </output>
+              {replayKind === 'match' && frame.review.length > 0 && (
+                <div className="referee-replay-stepper">
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    disabled={selectedReviewIndex <= 0}
+                    onClick={() => {
+                      const event = frame.review[selectedReviewIndex - 1];
+                      if (event) openMatchReplay(event.replayAt, event.id);
+                    }}
+                  >
+                    <ArrowLeft /> Previous
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    disabled={
+                      selectedReviewIndex < 0 ||
+                      selectedReviewIndex >= frame.review.length - 1
+                    }
+                    onClick={() => {
+                      const event = frame.review[selectedReviewIndex + 1];
+                      if (event) openMatchReplay(event.replayAt, event.id);
+                    }}
+                  >
+                    Next <ChevronRight />
+                  </Button>
+                </div>
+              )}
               <Button
                 variant="outline"
                 onClick={() => {
                   setReplay(null);
+                  setReplayKind(null);
+                  setReviewEventId(null);
                   setReplayRunning(false);
                   sync();
                 }}
               >
-                <ArrowLeft /> Back to match
+                <ArrowLeft />{' '}
+                {frame.sessionFinished ? 'Back to results' : 'Back to match'}
               </Button>
             </>
           ) : (
@@ -615,7 +735,10 @@ export function RefereePlay({
         className="context-panel match-panel referee-panel"
         aria-label="Live referee console"
       >
-        <div className="context-scroll" inert={Boolean(replay)}>
+        <div
+          className="context-scroll"
+          inert={Boolean(replay) && !frame.sessionFinished}
+        >
           <div className="referee-heading">
             <div>
               <p className="rule-kicker">AI MATCH / REFEREE</p>
@@ -632,30 +755,52 @@ export function RefereePlay({
             </Button>
           </div>
           <div className="referee-stats">
-            <span>
-              <strong>
-                {frame.report.correct} / {frame.report.assessed}
-              </strong>
-              Correct / assessed ·{' '}
-              {frame.report.accuracy === null
-                ? '—'
-                : `${frame.report.accuracy}%`}
-            </span>
-            <span>
-              <strong>
-                {frame.trainingMode === 'continuous'
-                  ? `${frame.report.topics.filter((t) => t.assessed || t.assisted).length} / ${frame.topics.length}`
-                  : `${frame.coverage.length} / ${REFEREE_CASES.filter((item) => frame.topics.includes(trainingTopic(item))).length}`}
-              </strong>
-              {frame.trainingMode === 'continuous'
-                ? 'Topics assessed'
-                : 'Different situations'}
-            </span>
+            {frame.trainingMode === 'continuous' && !frame.sessionFinished ? (
+              <>
+                <span>
+                  <strong>{frame.callsMade}</strong>
+                  Decisions recorded
+                </span>
+                <span>
+                  <strong>{frame.bench.length}</strong>
+                  Robots off field
+                </span>
+              </>
+            ) : (
+              <>
+                <span>
+                  <strong>
+                    {frame.report.correct} / {frame.report.assessed}
+                  </strong>
+                  Correct / assessed ·{' '}
+                  {frame.report.accuracy === null
+                    ? '—'
+                    : `${frame.report.accuracy}%`}
+                </span>
+                <span>
+                  <strong>
+                    {frame.trainingMode === 'continuous'
+                      ? `${frame.report.topics.filter((t) => t.assessed || t.assisted).length} / ${frame.topics.length}`
+                      : `${frame.coverage.length} / ${REFEREE_CASES.filter((item) => frame.topics.includes(trainingTopic(item))).length}`}
+                  </strong>
+                  {frame.trainingMode === 'continuous'
+                    ? 'Topics assessed'
+                    : 'Different situations'}
+                </span>
+              </>
+            )}
           </div>
-          <p className="referee-assistance-note">
-            {frame.report.wrong} wrong · {frame.report.missed} missed ·{' '}
-            {frame.report.assisted} assisted
-          </p>
+          {frame.trainingMode !== 'continuous' || frame.sessionFinished ? (
+            <p className="referee-assistance-note">
+              {frame.report.wrong} wrong · {frame.report.missed} missed ·{' '}
+              {frame.report.assisted} assisted
+            </p>
+          ) : (
+            <p className="referee-assistance-note">
+              Calls are applied exactly as made. Evaluation stays hidden until
+              full time.
+            </p>
+          )}
           <details
             className="referee-details referee-session-setup"
             open={Boolean(frame.opening)}
@@ -713,7 +858,7 @@ export function RefereePlay({
             </fieldset>
             <p>
               {mode === 'continuous'
-                ? 'Selected faults develop during AI play. Other natural incidents can still happen, but only your selected topics affect your score. Restarts and returns follow actual match events; administrative exercises remain in Step mode.'
+                ? 'Selected faults develop during AI play. Every call you make is applied—even a wrong removal, goal, placement or early return—and evaluated privately after the match. Other natural incidents can still happen, but only selected topics affect your score.'
                 : 'The next practice drill comes from your selected topics. Each decision pauses in place.'}
             </p>
             <Button
@@ -747,7 +892,7 @@ export function RefereePlay({
               className="referee-feedback referee-feedback-good"
               aria-label="Referee match results"
             >
-              <h2>
+              <h2 ref={resultsHeading} tabIndex={-1}>
                 Match complete ·{' '}
                 {frame.report.accuracy === null
                   ? 'No unaided decisions yet'
@@ -797,13 +942,110 @@ export function RefereePlay({
               </p>
             </section>
           )}
+          {frame.sessionFinished && frame.trainingMode === 'continuous' && (
+            <section
+              className="referee-match-review"
+              aria-label="Decision timeline"
+            >
+              <div className="referee-match-review-heading">
+                <div>
+                  <p className="rule-kicker">FULL MATCH REVIEW</p>
+                  <h2>Decision timeline</h2>
+                </div>
+                <Button
+                  size="sm"
+                  onClick={() =>
+                    openMatchReplay(
+                      frame.review[0]?.replayAt ?? 0,
+                      frame.review[0]?.id ?? null,
+                    )
+                  }
+                >
+                  <Play /> Review full match
+                </Button>
+              </div>
+              <p>
+                This is the match as your calls changed it. Select any row to
+                jump to that moment; corrections remain separate decisions.
+              </p>
+              {frame.review.length ? (
+                <div className="referee-review-list">
+                  {frame.review.map((event) => (
+                    <article
+                      key={event.id}
+                      className={cn(
+                        'referee-review-event',
+                        `referee-review-event-${event.assessment}`,
+                        event.id === reviewEventId &&
+                          'referee-review-event-selected',
+                      )}
+                    >
+                      <button
+                        type="button"
+                        aria-current={
+                          event.id === reviewEventId ? 'step' : undefined
+                        }
+                        onClick={() =>
+                          openMatchReplay(event.replayAt, event.id)
+                        }
+                      >
+                        <span className="referee-review-time">
+                          {clock(event.at)}
+                        </span>
+                        <span className="referee-review-verdict">
+                          {assessmentLabel(event.assessment)}
+                        </span>
+                        <strong>{event.situation}</strong>
+                        <span>
+                          <b>You:</b>{' '}
+                          {event.actual
+                            ? callLabel(event.actual)
+                            : 'No call within the decision window'}
+                        </span>
+                        <span>
+                          <b>Expected:</b>{' '}
+                          {event.expected.map(callLabel).join(' or ')}
+                        </span>
+                        <small>{event.effect}</small>
+                        {event.actual && event.at - event.eventAt > 0.5 && (
+                          <small>
+                            Situation first observed at {clock(event.eventAt)}.
+                          </small>
+                        )}
+                      </button>
+                      <a
+                        href={event.rule}
+                        onClick={(click) => {
+                          if (
+                            onOpenRule &&
+                            !click.ctrlKey &&
+                            !click.metaKey &&
+                            !click.shiftKey
+                          ) {
+                            click.preventDefault();
+                            onOpenRule(
+                              'soccer:' + new URL(event.rule).hash.slice(1),
+                            );
+                          }
+                        }}
+                      >
+                        Open rule <ExternalLink className="size-3" />
+                      </a>
+                    </article>
+                  ))}
+                </div>
+              ) : (
+                <p>No referee decisions or missed calls were recorded.</p>
+              )}
+            </section>
+          )}
           {frame.trainingMode === 'continuous' &&
             !frame.opening &&
             !frame.sessionFinished && (
               <p className="referee-assistance-note">
                 Use Pause or Space to think; the clock and all motion freeze.
-                You can start a visible count after one second of sustained
-                little ball movement. Placement still needs the full count.
+                Make any sequence of decisions, then resume when ready. Nothing
+                is marked right or wrong until the post-match review.
               </p>
             )}
           {!frame.opening && (
@@ -822,6 +1064,8 @@ export function RefereePlay({
               const recording = session.getLastReplay();
               if (recording) {
                 setReplay(recording);
+                setReplayKind('situation');
+                setReviewEventId(null);
                 seekReplay(0);
                 setReplayRunning(true);
               }
@@ -994,106 +1238,126 @@ export function RefereePlay({
             </section>
           )}
 
-          {frame.feedback && !frame.sessionFinished && (
-            <section
-              className={cn(
-                'referee-feedback',
-                supported ? 'referee-feedback-good' : 'referee-feedback-retry',
-              )}
-              aria-live="polite"
-            >
-              <h2>
-                {supported ? <Check /> : <Scale />}
-                {frame.feedback.title}
-              </h2>
-              <p>{frame.feedback.detail}</p>
-              <div>{frame.feedback.effect}</div>
-              {supported && frame.feedback.appliedRules?.length > 0 ? (
-                <div className="referee-applied-rules">
-                  <h3>
-                    <BookOpen className="size-4" /> Rules applied to this answer
-                  </h3>
-                  <ul>
-                    {frame.feedback.appliedRules.map((rule) => (
-                      <li key={rule.id}>
-                        <small>
-                          {rule.document} · §{rule.number}
-                        </small>
-                        <h4>{rule.provision}</h4>
-                        <span>{rule.title}</span>
-                        {rule.quote && <blockquote>“{rule.quote}”</blockquote>}
-                        {rule.note && <p>{rule.note}</p>}
-                        <div className="referee-rule-links">
-                          <a
-                            href={rule.lessonUrl}
-                            onClick={(event) => {
-                              if (
-                                onOpenRule &&
-                                !event.ctrlKey &&
-                                !event.metaKey &&
-                                !event.shiftKey
-                              ) {
-                                event.preventDefault();
-                                pause();
-                                onOpenRule(rule.sectionId);
-                              }
-                            }}
-                          >
-                            Open rule & situations{' '}
-                            <BookOpen className="size-3" />
-                          </a>
-                        </div>
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              ) : (
-                <a
-                  href={frame.feedback.rule}
-                  onClick={(event) => {
-                    if (
-                      onOpenRule &&
-                      !event.ctrlKey &&
-                      !event.metaKey &&
-                      !event.shiftKey
-                    ) {
-                      event.preventDefault();
-                      pause();
-                      onOpenRule(
-                        'soccer:' + new URL(frame.feedback!.rule).hash.slice(1),
-                      );
-                    }
+          {frame.trainingMode === 'continuous' &&
+            !frame.sessionFinished &&
+            frame.history[0] && (
+              <section
+                className="referee-action-receipt"
+                aria-live="polite"
+                aria-label="Latest referee action"
+              >
+                <small>{clock(frame.history[0].at)} · Decision recorded</small>
+                <strong>{frame.history[0].call}</strong>
+                <p>{frame.history[0].detail}</p>
+              </section>
+            )}
+
+          {frame.trainingMode === 'step' &&
+            frame.feedback &&
+            !frame.sessionFinished && (
+              <section
+                className={cn(
+                  'referee-feedback',
+                  supported
+                    ? 'referee-feedback-good'
+                    : 'referee-feedback-retry',
+                )}
+                aria-live="polite"
+              >
+                <h2>
+                  {supported ? <Check /> : <Scale />}
+                  {frame.feedback.title}
+                </h2>
+                <p>{frame.feedback.detail}</p>
+                <div>{frame.feedback.effect}</div>
+                {supported && frame.feedback.appliedRules?.length > 0 ? (
+                  <div className="referee-applied-rules">
+                    <h3>
+                      <BookOpen className="size-4" /> Rules applied to this
+                      answer
+                    </h3>
+                    <ul>
+                      {frame.feedback.appliedRules.map((rule) => (
+                        <li key={rule.id}>
+                          <small>
+                            {rule.document} · §{rule.number}
+                          </small>
+                          <h4>{rule.provision}</h4>
+                          <span>{rule.title}</span>
+                          {rule.quote && (
+                            <blockquote>“{rule.quote}”</blockquote>
+                          )}
+                          {rule.note && <p>{rule.note}</p>}
+                          <div className="referee-rule-links">
+                            <a
+                              href={rule.lessonUrl}
+                              onClick={(event) => {
+                                if (
+                                  onOpenRule &&
+                                  !event.ctrlKey &&
+                                  !event.metaKey &&
+                                  !event.shiftKey
+                                ) {
+                                  event.preventDefault();
+                                  pause();
+                                  onOpenRule(rule.sectionId);
+                                }
+                              }}
+                            >
+                              Open rule & situations{' '}
+                              <BookOpen className="size-3" />
+                            </a>
+                          </div>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                ) : (
+                  <a
+                    href={frame.feedback.rule}
+                    onClick={(event) => {
+                      if (
+                        onOpenRule &&
+                        !event.ctrlKey &&
+                        !event.metaKey &&
+                        !event.shiftKey
+                      ) {
+                        event.preventDefault();
+                        pause();
+                        onOpenRule(
+                          'soccer:' +
+                            new URL(frame.feedback!.rule).hash.slice(1),
+                        );
+                      }
+                    }}
+                  >
+                    Read the official rule <ExternalLink className="size-3" />
+                  </a>
+                )}
+                <Button
+                  onClick={() => {
+                    session.continue();
+                    sync();
+                    setRunning(session.canAdvance);
                   }}
                 >
-                  Read the official rule <ExternalLink className="size-3" />
-                </a>
-              )}
-              <Button
-                onClick={() => {
-                  session.continue();
-                  sync();
-                  setRunning(session.canAdvance);
-                }}
-              >
-                {frame.feedback.final
-                  ? frame.trainingMode === 'continuous' && !frame.kickoffDue
-                    ? 'Resume match'
-                    : frame.pendingDecisions > 0
+                  {frame.feedback.final
+                    ? frame.pendingDecisions > 0
                       ? 'Next referee decision'
                       : frame.kickoffDue
                         ? 'Continue to kickoff'
                         : frame.motionHeld
                           ? 'Resume match'
                           : 'Dismiss feedback'
-                  : supported
-                    ? frame.count !== null
-                      ? 'Resume count'
-                      : 'Continue decision'
-                    : 'Try again'}
-                <ChevronRight />
-              </Button>
-            </section>
-          )}
+                    : supported
+                      ? frame.count !== null
+                        ? 'Resume count'
+                        : 'Continue decision'
+                      : 'Try again'}
+                  <ChevronRight />
+                </Button>
+              </section>
+            )}
 
           <div className="referee-goals">
             <Button
@@ -1122,15 +1386,18 @@ export function RefereePlay({
                   size="sm"
                   variant={target === robot.id ? 'secondary' : 'outline'}
                   aria-pressed={target === robot.id}
+                  aria-label={`${robot.label}, ${frame.bench.some((item) => item.robot === robot.id) ? 'off field' : 'on field'}`}
                   onClick={() => setTarget(robot.id)}
                   className={
                     robot.team === 'blue' ? 'text-sky-300' : 'text-amber-300'
                   }
                 >
                   {robot.label}
-                  {frame.bench.some((item) => item.robot === robot.id) && (
-                    <small>OFF</small>
-                  )}
+                  <small>
+                    {frame.bench.some((item) => item.robot === robot.id)
+                      ? 'OFF'
+                      : 'ON'}
+                  </small>
                 </Button>
               ))}
             </div>
@@ -1205,13 +1472,16 @@ export function RefereePlay({
                       submit({ action: 'return', target: entry.robot })
                     }
                   >
-                    Return
+                    {frame.trainingMode === 'continuous'
+                      ? 'Return now'
+                      : 'Return'}
                   </Button>
                 </div>
               ))}
               <p>
-                Return needs your permission. Timers use simulated play time; a
-                new kickoff can allow an earlier return.
+                {frame.trainingMode === 'continuous'
+                  ? 'Return now always follows your decision, even if the robot is not yet eligible. That judgment is reviewed after full time.'
+                  : 'Return needs your permission. Timers use simulated play time; a new kickoff can allow an earlier return.'}
               </p>
             </section>
           )}
@@ -1322,12 +1592,16 @@ export function RefereePlay({
             </details>
           )}
           <details className="referee-details">
-            <summary>Recent calls ({frame.history.length})</summary>
+            <summary>Recent decisions ({frame.history.length})</summary>
             {!frame.history.length && <p>Your decisions will appear here.</p>}
             {frame.history.slice(0, 12).map((item, index) => (
               <div key={index} className="referee-history">
                 <strong>{item.call}</strong>
-                <small>{item.verdict.replace('-', ' ')}</small>
+                <small>
+                  {frame.trainingMode === 'continuous' && !frame.sessionFinished
+                    ? clock(item.at)
+                    : item.verdict.replace('-', ' ')}
+                </small>
                 <p>{item.detail}</p>
               </div>
             ))}

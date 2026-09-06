@@ -4,7 +4,11 @@ import { RCJ_FIELD_DERIVED as FIELD } from './field-spec';
 import { clonePoses } from './manual-layout';
 import type { Pose } from './types';
 import type { DamageCue } from './damage-effects';
-import { SituationRecorder, type SituationReplay } from './situation-replay';
+import {
+  SituationRecorder,
+  type ReplayFrame,
+  type SituationReplay,
+} from './situation-replay';
 import { KickoffMeeting, randomKickoff, type GoalEnd } from './kickoff';
 import { insidePenalty, robotPenaltyOverlap } from './referee-geometry';
 import { rulesForDecision, type AppliedRule } from './referee-rules';
@@ -53,6 +57,32 @@ export type CallFeedback = {
   appliedRules: AppliedRule[];
   final: boolean;
 };
+export type MatchReviewAssessment =
+  | 'correct'
+  | 'supported'
+  | 'wrong-action'
+  | 'wrong-target'
+  | 'premature'
+  | 'correction'
+  | 'assisted'
+  | 'missed'
+  | 'not-scored';
+export type MatchReviewEvent = {
+  id: number;
+  at: number;
+  eventAt: number;
+  replayAt: number;
+  incidentId: number;
+  situation: string;
+  topic: TrainingTopic;
+  actual: RefereeCall | null;
+  expected: RefereeCall[];
+  assessment: MatchReviewAssessment;
+  effect: string;
+  detail: string;
+  rule: string;
+  scored: boolean;
+};
 type ActiveIncident = {
   definition: RefereeCase;
   variant: Variant;
@@ -73,6 +103,7 @@ type ActiveIncident = {
   initial: Record<string, Pose>;
   observedAt?: number;
   lastSeen?: number;
+  replayAt?: number;
   scoreNeutral?: boolean;
   scoreTopic?: TrainingTopic;
 };
@@ -83,6 +114,7 @@ export type TrainingPhase =
   | 'feedback'
   | 'ready';
 const unchanged: Variant = { swap: false, reflect: false };
+const MATCH_REPLAY_SAMPLE = 1 / 8;
 const distance = (a: Pose, b: Pose) => Math.hypot(a.x - b.x, a.z - b.z);
 const robotName = (id: string) =>
   MATCH_ROBOTS.find((item) => item.id === id)?.label ??
@@ -122,6 +154,7 @@ export class RefereeMatch {
     call: string;
     verdict: CallFeedback['verdict'];
     detail: string;
+    at: number;
   }[] = [];
   private active: ActiveIncident | null = null;
   private serial = 0;
@@ -162,16 +195,58 @@ export class RefereeMatch {
   private score = new RefereeScore();
   private observations = new Map<string, ActiveIncident>();
   private director: ContinuousDirector;
+  private reviewEvents: MatchReviewEvent[] = [];
+  private reviewSerial = 0;
+  private reviewedNoCalls = new Set<number>();
+  private matchFrames: ReplayFrame[] = [];
+  private lastSampledMatchTime = Number.NEGATIVE_INFINITY;
 
   private assess(item: ActiveIncident, result: Assessment) {
     const topic = item.scoreTopic ?? trainingTopic(item.definition);
-    if (!item.scoreNeutral && this.topics.includes(topic))
+    const scored = !item.scoreNeutral && this.topics.includes(topic);
+    const alreadyScored = this.score.has(item.number);
+    if (scored)
       this.score.record(
         item.number,
         topic,
         item.assisted ? 'assisted' : result,
         item.definition.title,
       );
+    if (
+      this.mode === 'continuous' &&
+      result === 'missed' &&
+      !this.reviewedNoCalls.has(item.number)
+    ) {
+      this.reviewedNoCalls.add(item.number);
+      const expected = this.expectedFor(item).map(({ action, target }) => ({
+        action,
+        ...(target ? { target } : {}),
+      }));
+      if (expected.length)
+        this.reviewEvents.push({
+          id: ++this.reviewSerial,
+          at: item.replayAt ?? item.observedAt ?? this.trainingElapsed,
+          eventAt: item.replayAt ?? item.observedAt ?? this.trainingElapsed,
+          replayAt: item.replayAt ?? this.currentMatchReplayTime,
+          incidentId: item.number,
+          situation: item.definition.title,
+          topic,
+          actual: null,
+          expected,
+          assessment: item.assisted
+            ? 'assisted'
+            : scored
+              ? 'missed'
+              : 'not-scored',
+          effect: 'No referee action changed the match.',
+          detail: scored
+            ? 'No matching call was made within the available decision window.'
+            : 'This situation was recorded for review but was outside the selected scoring topics.',
+          rule: ruleUrl(item.definition),
+          scored,
+        });
+    }
+    return scored && !alreadyScored;
   }
   /** The pause is a thinking aid, not a graded call. Simulation time freezes too. */
   pauseForDecision() {
@@ -190,17 +265,44 @@ export class RefereeMatch {
       // Full time never penalizes an incident that offered less than three seconds to react.
       const seen =
         item.natural || item.time >= evidenceDuration(item.definition);
-      if (
-        ((this.mode === 'step' && seen) ||
-          (item.observedAt !== undefined &&
-            this.clock - item.observedAt >= 3)) &&
-        this.requiredIncident(item)
-      )
-        this.assess(item, item.mistakes ? 'wrong' : 'missed');
+      if (!this.requiredIncident(item)) continue;
+      const enoughTime =
+        (this.mode === 'step' && seen) ||
+        (item.observedAt !== undefined && this.clock - item.observedAt >= 3);
+      if (enoughTime) this.assess(item, item.mistakes ? 'wrong' : 'missed');
+      else if (
+        this.mode === 'continuous' &&
+        !item.mistakes &&
+        !this.reviewedNoCalls.has(item.number)
+      ) {
+        this.reviewedNoCalls.add(item.number);
+        const expected = this.expectedFor(item).map(({ action, target }) => ({
+          action,
+          ...(target ? { target } : {}),
+        }));
+        if (expected.length)
+          this.reviewEvents.push({
+            id: ++this.reviewSerial,
+            at: item.replayAt ?? this.currentMatchReplayTime,
+            eventAt: item.replayAt ?? this.currentMatchReplayTime,
+            replayAt: item.replayAt ?? this.currentMatchReplayTime,
+            incidentId: item.number,
+            situation: item.definition.title,
+            topic: item.scoreTopic ?? trainingTopic(item.definition),
+            actual: null,
+            expected,
+            assessment: 'not-scored',
+            effect: 'No referee action changed the match.',
+            detail:
+              'Not scored: the incident appeared with less than three seconds available before full time.',
+            rule: ruleUrl(item.definition),
+            scored: false,
+          });
+      }
     }
     this.sessionFinished = true;
     this.resolving = null;
-    this.capture();
+    this.capture(true);
     this.recorder.seal(
       'Final passage of play',
       'Review the final passage before full time.',
@@ -307,25 +409,49 @@ export class RefereeMatch {
   }
   resumeMotion() {
     if (!this.canResumeMotion) return;
-    if (this.mode === 'continuous' && this.phase === 'feedback')
-      this.continue();
     this.userPaused = false;
-    if (this.mode === 'continuous') this.manualHold = false;
+    if (this.mode === 'continuous') {
+      this.manualHold = false;
+      this.feedback = null;
+    }
     this.syncMotion();
   }
   getLastReplay() {
     return this.recorder.getLast();
   }
-  private capture() {
+  private get currentMatchReplayTime() {
+    return this.matchFrames.at(-1)?.at ?? this.recordingTime;
+  }
+  private capture(actionBoundary = false) {
     const state = this.match.snapshot();
-    this.recorder.capture({
+    const frame: ReplayFrame = {
       at: this.recordingTime,
       actors: state.actors,
       heights: this.heights,
       score: state.score,
       elapsed: state.elapsed,
       damage: this.damage,
-    });
+    };
+    this.recorder.capture(frame);
+    if (this.mode === 'continuous') {
+      const previous = this.matchFrames.at(-1);
+      if (
+        !actionBoundary &&
+        previous &&
+        this.recordingTime - this.lastSampledMatchTime <
+          MATCH_REPLAY_SAMPLE - 1e-8
+      )
+        return previous.at;
+      const at = actionBoundary
+        ? Math.max(this.recordingTime, (previous?.at ?? -1) + 0.002)
+        : Math.max(this.recordingTime, previous?.at ?? this.recordingTime);
+      const fullFrame = structuredClone({ ...frame, at });
+      if (!actionBoundary && previous?.at === at) this.matchFrames.pop();
+      this.matchFrames.push(fullFrame);
+      if (!actionBoundary) this.lastSampledMatchTime = this.recordingTime;
+      return at;
+    }
+    return this.recordingTime;
   }
   private recordTick() {
     this.recordingTime += MATCH_STEP;
@@ -338,6 +464,23 @@ export class RefereeMatch {
       item.definition.title,
       transformText(item.definition.facts, item.variant),
     );
+  }
+  getMatchReplay(): SituationReplay | null {
+    if (this.mode !== 'continuous' || !this.matchFrames.length) return null;
+    const frames = structuredClone(this.matchFrames);
+    const start = frames[0].at;
+    for (const frame of frames) frame.at -= start;
+    const duration = Math.max(1, frames.at(-1)!.at);
+    if (frames.at(-1)!.at < duration)
+      frames.push({ ...structuredClone(frames.at(-1)!), at: duration });
+    return {
+      id: -1,
+      title: 'Full match review',
+      facts:
+        'Replay the match exactly as your decisions changed it. Select a review event to compare your call with the expected decision.',
+      duration,
+      frames,
+    };
   }
   private noteOut(item: ActiveIncident) {
     if (
@@ -656,14 +799,13 @@ export class RefereeMatch {
       heights: { ...this.heights },
       facts:
         this.mode === 'continuous' &&
-        !this.feedback &&
         !item?.hintLevel &&
         !this.opening &&
         !this.kickoffDue
           ? 'Observe play. Pause or whistle to make a call; play continues if you do not intervene.'
           : facts,
       penaltyEvidence: Boolean(
-        (this.mode !== 'continuous' || this.feedback || item?.hintLevel) &&
+        (this.mode !== 'continuous' || item?.hintLevel) &&
         item &&
         this.phase !== 'evidence' &&
         [
@@ -694,6 +836,17 @@ export class RefereeMatch {
       assessed: this.completedCount,
       correct: this.correctCount,
       history: this.history.map((entry) => ({ ...entry })),
+      callsMade: this.reviewEvents.filter((entry) => entry.actual).length,
+      review: this.sessionFinished
+        ? [...this.reviewEvents]
+            .sort((a, b) => a.at - b.at || a.id - b.id)
+            .map((entry) => ({
+              ...entry,
+              actual: entry.actual ? { ...entry.actual } : null,
+              expected: entry.expected.map((call) => ({ ...call })),
+            }))
+        : [],
+      matchReplayDuration: this.currentMatchReplayTime,
       caseNumber: this.serial,
       count: this.countFor === null ? null : Math.floor(this.countFor) + 1,
       canReplay: Boolean(
@@ -721,14 +874,11 @@ export class RefereeMatch {
       opening: this.opening ? this.meeting.snapshot() : null,
       blueAttackDirection: this.match.blueAttackDirection,
       decisionTitle:
-        this.mode === 'continuous' && !this.feedback && !item?.hintLevel
+        this.mode === 'continuous' && !item?.hintLevel
           ? 'Watch the match'
           : (item?.definition.title ?? ''),
       assisted: this.assistedCount,
-      help:
-        this.mode === 'continuous' && !item?.hintLevel && !this.feedback
-          ? null
-          : this.help(),
+      help: this.mode === 'continuous' && !item?.hintLevel ? null : this.help(),
       resolving: this.resolving !== null,
       canReplayLast: Boolean(this.recorder.last),
       lastSituationTitle: this.recorder.last?.title ?? '',
@@ -942,7 +1092,8 @@ export class RefereeMatch {
       scoreNeutral: definition.id === 'live-dribbler',
     };
     this.noteOut(incident);
-    this.capture();
+    this.capture(true);
+    incident.replayAt = this.currentMatchReplayTime;
     incident.replay = this.recorder.seal(definition.title, definition.facts);
     if (this.mode === 'continuous') {
       this.observations.set(key, incident);
@@ -1434,24 +1585,26 @@ export class RefereeMatch {
   }
 
   private expected(): RequiredCall[] {
-    if (!this.active) return [];
-    if (this.active.progressResumed)
+    return this.active ? this.expectedFor(this.active) : [];
+  }
+  private expectedFor(item: ActiveIncident): RequiredCall[] {
+    if (item.progressResumed)
       return [
         { action: 'play-on', complete: true },
         { action: 'resume', complete: true },
       ];
-    const { definition, variant, step } = this.active;
+    const { definition, variant, step } = item;
     const current = definition.steps[step] ?? [];
     if (
       current.some((call) => call.action === 'multiple') &&
       !current.some((call) => call.action === 'pushing') &&
-      !this.multipleStillPresent(this.active)
+      !this.multipleStillPresent(item)
     )
       return [
         { action: 'play-on', complete: true },
         { action: 'resume', complete: true },
       ];
-    const returning = this.returnRequest(this.active);
+    const returning = this.returnRequest(item);
     if (returning)
       return [
         {
@@ -1723,23 +1876,255 @@ export class RefereeMatch {
     );
   }
 
+  private topicForAction(action: RefereeCall['action']): TrainingTopic {
+    if (action === 'out') return 'out';
+    if (['damaged', 'ball-out', 'early-start', 'inspect'].includes(action))
+      return 'damage';
+    if (action === 'multiple') return 'multiple';
+    if (action === 'pushing') return 'pushing';
+    if (['count', 'lack-progress'].includes(action)) return 'progress';
+    if (['goal', 'no-goal'].includes(action)) return 'scoring';
+    return 'other';
+  }
+
+  private sameRefereeAction(entry: RequiredCall, submitted: RefereeCall) {
+    return (
+      entry.action === submitted.action ||
+      (submitted.action === 'damaged' &&
+        ['ball-out', 'early-start'].includes(entry.action))
+    );
+  }
+
+  private advanceContinuous(item: ActiveIncident) {
+    this.pending = this.pending.filter((pending) => pending !== item);
+    if (this.active === item) this.active = null;
+    let next = this.pending.shift();
+    while (next) {
+      this.skipResolvedSteps(next);
+      if (!next.finished && next.step < next.definition.steps.length) break;
+      next = this.pending.shift();
+    }
+    this.active = next ?? null;
+    if (next?.replay) this.recorder.last = next.replay;
+    this.phase = next ? 'decision' : 'live';
+  }
+
+  /** Continuous mode records the judgment first, then enacts it literally. */
+  private submitContinuous(submitted: RefereeCall): boolean {
+    const original = this.active;
+    const candidates = [original, ...this.pending].filter(
+      (item): item is ActiveIncident => Boolean(item && !item.finished),
+    );
+    const matchingIncidents = candidates
+      .map((item) => ({
+        item,
+        call: this.expectedFor(item).find(
+          (call) =>
+            this.sameRefereeAction(call, submitted) &&
+            (!call.target || call.target === submitted.target),
+        ),
+      }))
+      .filter((entry): entry is { item: ActiveIncident; call: RequiredCall } =>
+        Boolean(entry.call),
+      );
+    const exact = matchingIncidents[0]?.item;
+    if (exact && exact !== original) this.focusIncident(exact);
+    if (!this.active)
+      this.beginLive(
+        this.contactDefinition() ??
+          this.liveDefinition(
+            'dribbler',
+            'No infringement has been established by the current field evidence.',
+            [[{ action: 'play-on' }, { action: 'resume' }]],
+          ),
+      );
+    const item = this.active;
+    if (!item) return false;
+
+    const expected = this.expectedFor(item).map((call) => ({ ...call }));
+    const explanation = this.explanation(item);
+    const premature = this.countFor !== null;
+    const match = expected.find(
+      (entry) =>
+        this.sameRefereeAction(entry, submitted) &&
+        (!entry.target || entry.target === submitted.target),
+    );
+    const rightAction = expected.some((entry) =>
+      this.sameRefereeAction(entry, submitted),
+    );
+    const kickoffBlocked =
+      this.kickoffDue &&
+      ['start', 'neutral'].includes(submitted.action) &&
+      this.kickoffReturns.length > 0;
+    const correct = Boolean(match) && !premature && !kickoffBlocked;
+    const alreadyAssessed = this.score.has(item.number);
+    const assessment: MatchReviewAssessment = correct
+      ? alreadyAssessed
+        ? 'correction'
+        : item.assisted
+          ? 'assisted'
+          : match?.discretionary
+            ? 'supported'
+            : 'correct'
+      : premature || kickoffBlocked
+        ? 'premature'
+        : rightAction
+          ? 'wrong-target'
+          : 'wrong-action';
+    const feedbackVerdict: CallFeedback['verdict'] = correct
+      ? match?.discretionary
+        ? 'supported'
+        : 'correct'
+      : assessment === 'premature'
+        ? 'premature'
+        : assessment === 'wrong-target'
+          ? 'wrong-target'
+          : 'incorrect';
+    const wasNeutral = Boolean(item.scoreNeutral);
+    if (!correct) {
+      item.mistakes = true;
+      if (item.scoreNeutral) {
+        item.scoreNeutral = false;
+        item.scoreTopic = this.topicForAction(submitted.action);
+      }
+      this.assess(item, 'wrong');
+    }
+    const topic = item.scoreTopic ?? trainingTopic(item.definition);
+    const scored = !item.scoreNeutral && this.topics.includes(topic);
+    const appliedRules = correct
+      ? rulesForDecision(item.definition, match!.action, {
+          kickoffDue: this.kickoffDue,
+          returnReason: submitted.target
+            ? this.bench[submitted.target]?.reason
+            : undefined,
+        })
+      : [];
+
+    const effect = this.apply(submitted);
+    const replayAt = this.capture(true);
+    if (correct) {
+      item.initial = clonePoses(this.match.state.actors);
+      item.step = match?.complete
+        ? item.definition.steps.length
+        : item.step + 1;
+      for (const resolved of matchingIncidents) {
+        if (resolved.item === item || resolved.item.finished) continue;
+        resolved.item.step = resolved.call.complete
+          ? resolved.item.definition.steps.length
+          : resolved.item.step + 1;
+        this.skipResolvedSteps(resolved.item);
+        if (resolved.item.step >= resolved.item.definition.steps.length)
+          this.finishIncident(resolved.item);
+      }
+    }
+    this.skipResolvedSteps(item);
+    const expectedScoreDecision = expected.some((call) =>
+      ['goal', 'no-goal'].includes(call.action),
+    );
+    const submittedScoreDecision = ['goal', 'no-goal'].includes(
+      submitted.action,
+    );
+    const terminalWrongDecision =
+      !correct &&
+      (wasNeutral ||
+        submitted.action === 'goal' ||
+        submitted.action === 'void' ||
+        (expectedScoreDecision && submittedScoreDecision) ||
+        (expected.some((call) => ['start', 'neutral'].includes(call.action)) &&
+          ['start', 'neutral'].includes(submitted.action)));
+    if (terminalWrongDecision) item.step = item.definition.steps.length;
+    const final = item.step >= item.definition.steps.length;
+    if (final) this.finishCase();
+
+    const detail = correct
+      ? explanation
+      : assessment === 'wrong-target'
+        ? 'The action matched the situation, but the selected robot or team did not.'
+        : assessment === 'premature'
+          ? kickoffBlocked
+            ? 'The kickoff was signalled while an eligible robot was still waiting to return.'
+            : 'The action was taken before the required observation or count was complete.'
+          : 'The selected action did not match the referee decision required by the observed situation.';
+    this.reviewEvents.push({
+      id: ++this.reviewSerial,
+      at: replayAt,
+      eventAt: item.replayAt ?? replayAt,
+      replayAt,
+      incidentId: item.number,
+      situation: item.definition.title,
+      topic,
+      actual: { ...submitted },
+      expected: expected.map(({ action, target }) => ({
+        action,
+        ...(target ? { target } : {}),
+      })),
+      assessment,
+      effect,
+      detail,
+      rule: ruleUrl(item.definition),
+      scored,
+    });
+    const label =
+      REFEREE_ACTIONS.find((action) => action.id === submitted.action)?.label ??
+      submitted.action;
+    this.history.unshift({
+      call: `${label}${submitted.target ? ` · ${robotName(submitted.target)}` : ''}`,
+      verdict: feedbackVerdict,
+      detail: effect,
+      at: replayAt,
+    });
+    this.history = this.history.slice(0, 40);
+    this.feedback = {
+      verdict: feedbackVerdict,
+      title: 'Decision recorded',
+      detail,
+      effect,
+      rule: appliedRules[0]?.url ?? ruleUrl(item.definition),
+      appliedRules,
+      final,
+    };
+    if (final) this.advanceContinuous(item);
+    else this.phase = 'decision';
+
+    this.userPaused = false;
+    this.manualHold = ![
+      'count',
+      'play-on',
+      'resume',
+      'start',
+      'neutral',
+    ].includes(submitted.action);
+    if (
+      !['count', 'play-on', 'resume', 'keep-out', 'wait'].includes(
+        submitted.action,
+      )
+    )
+      this.director.cancel();
+    this.syncMotion();
+    return true;
+  }
+
   submit(key: string, submitted: RefereeCall): boolean {
     if (this.sessionFinished) return false;
     if (this.opening && this.meeting.stage !== 'ready') return false;
-    if (key !== this.decisionKey) return false;
+    if (this.mode !== 'continuous' && key !== this.decisionKey) return false;
     const benchRequest =
       ['return', 'keep-out'].includes(submitted.action) &&
       submitted.target &&
       this.bench[submitted.target];
     if (this.phase === 'feedback') {
-      if (!benchRequest) return false;
-      this.continue();
+      if (this.mode !== 'continuous') {
+        if (!benchRequest) return false;
+        this.continue();
+      } else {
+        // Continuous sessions never quiz-gate the next call. Clear any stale
+        // receipt state (for example after restoring an older saved session)
+        // and let the submitted action be enacted immediately.
+        this.phase = this.active ? 'decision' : 'live';
+        this.feedback = null;
+      }
     }
     if (benchRequest) this.selectReturnRequest(submitted.target!);
-    if (this.mode === 'continuous' && submitted.action === 'pause') {
-      this.pauseForDecision();
-      return true;
-    }
     this.refreshProgress();
     // Counting is an observational judgment. One sustained second of near-static
     // play is enough to start observing; placement still requires the full count.
@@ -1756,29 +2141,7 @@ export class RefereeMatch {
         ),
       );
     }
-    if (this.mode === 'continuous') {
-      const original = this.active;
-      const candidates = [original, ...this.pending].filter(
-        (x): x is ActiveIncident => Boolean(x && !x.finished),
-      );
-      const chosen = candidates.find((item) => {
-        this.active = item;
-        return this.expected().some(
-          (call) =>
-            call.action === submitted.action &&
-            (!call.target || call.target === submitted.target),
-        );
-      });
-      this.active = original;
-      if (chosen && chosen !== original) {
-        this.focusIncident(chosen);
-      }
-      if (['resume', 'play-on'].includes(submitted.action) && !chosen) {
-        // Resuming observation makes no claim about unnoticed incidents.
-        this.resumeMotion();
-        return true;
-      }
-    }
+    if (this.mode === 'continuous') return this.submitContinuous(submitted);
     if (!this.active)
       this.beginLive(
         this.contactDefinition() ??
@@ -1866,16 +2229,6 @@ export class RefereeMatch {
       }
       this.assess(item, 'wrong');
     }
-    if (this.mode === 'continuous') {
-      this.userPaused = false;
-      this.manualHold =
-        !correct ||
-        !['count', 'play-on', 'resume', 'start', 'neutral'].includes(
-          submitted.action,
-        );
-      if (correct && !['count', 'play-on', 'resume'].includes(submitted.action))
-        this.director.cancel();
-    }
     const label =
       REFEREE_ACTIONS.find((action) => action.id === submitted.action)?.label ??
       submitted.action;
@@ -1915,6 +2268,7 @@ export class RefereeMatch {
       call: `${label}${submitted.target ? ` · ${robotName(submitted.target)}` : ''}`,
       verdict,
       detail: effect,
+      at: this.recordingTime,
     });
     this.history = this.history.slice(0, 40);
     this.phase = 'feedback';
@@ -1923,7 +2277,11 @@ export class RefereeMatch {
 
   private finishCase() {
     const item = this.active;
-    if (!item || item.finished) return;
+    if (item) this.finishIncident(item);
+  }
+
+  private finishIncident(item: ActiveIncident) {
+    if (item.finished) return;
     item.finished = true;
     this.assess(item, item.mistakes ? 'wrong' : 'correct');
     this.completedCount++;
@@ -1938,11 +2296,14 @@ export class RefereeMatch {
 
   continue() {
     if (this.sessionFinished) return;
-    if (this.phase !== 'feedback' || !this.active) return;
     if (this.mode === 'continuous') {
       this.userPaused = false;
       this.manualHold = false;
+      this.feedback = null;
+      this.syncMotion();
+      return;
     }
+    if (this.phase !== 'feedback' || !this.active) return;
     if (!this.feedback?.final) {
       this.feedback = null;
       this.phase = 'decision';
@@ -1975,23 +2336,6 @@ export class RefereeMatch {
     // Each bench visit starts a fresh return lifecycle, even if another removal
     // follows immediately after a return while the simulation is paused.
     this.observations.delete(`return:${id}`);
-    if (this.mode === 'continuous') {
-      for (const item of this.observations.values()) {
-        if (item === this.active || item.finished) continue;
-        const calls = item.definition.steps.slice(item.step).flat();
-        if (
-          calls.length &&
-          calls.every(
-            (call) =>
-              ['out', 'damaged'].includes(call.action) && call.target === id,
-          )
-        ) {
-          this.assess(item, item.mistakes ? 'wrong' : 'correct');
-          item.finished = true;
-          this.pending = this.pending.filter((pending) => pending !== item);
-        }
-      }
-    }
     this.outRobots.delete(id);
     if (this.damage?.robot === id)
       this.damage = { ...this.damage, removed: true };
@@ -2033,6 +2377,8 @@ export class RefereeMatch {
       return `Ball moved to the ${far ? 'furthest' : 'nearest'} available${different ? ' different' : ''} neutral spot.`;
     };
     if (action === 'goal') {
+      if (target !== 'blue' && target !== 'yellow')
+        return 'No team was selected; the goal call was recorded without changing the score.';
       const waiting = item.definition.id.endsWith('both-damaged');
       this.match.awardGoal(target as MatchTeam, false);
       if (!waiting) {
@@ -2135,6 +2481,8 @@ export class RefereeMatch {
       return `${robotName(target)} stays off the field; its timer and repair status are preserved.`;
     if (action === 'waive-out') {
       const pose = actors[target];
+      if (!pose)
+        return `${robotName(target)} is off the field; the correction was recorded without moving a robot.`;
       pose.x = Math.max(
         -FIELD.floorHalfWidth + 0.105,
         Math.min(FIELD.floorHalfWidth - 0.105, pose.x),
@@ -2164,6 +2512,8 @@ export class RefereeMatch {
     if (action === 'separate') {
       const a = transformId('blue-1', item.variant),
         b = transformId('yellow-1', item.variant);
+      if (!actors[a] || !actors[b])
+        return 'The entangled pair is not on the field; the assistance call was recorded without a position change.';
       const dx = actors[a].x - actors[b].x,
         dz = actors[a].z - actors[b].z,
         d = Math.hypot(dx, dz) || 1;

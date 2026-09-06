@@ -123,6 +123,13 @@ wall and drive back, goals bounce back into play, and penalties still require
 the referee. **Pause for decision** / Space freezes all actors, the ball,
 reaction windows and training time until you act or resume.
 
+Continuous accepts every referee decision exactly as entered. A wrong target is
+removed, a premature placement still moves the ball, a goal is awarded to the
+chosen team, and a benched robot can be returned immediately even when it is not
+eligible. The trainer does not reveal or block on correctness during the match;
+the referee may make additional corrective decisions and then resume the actual
+resulting game state.
+
 Continuous faults steer real robots through normal physics; they never load
 an authored layout. Out-of-bounds, damage/fire, multiple defense, pushing,
 stalled play and scoring opportunities are encouraged according to selected
@@ -137,7 +144,11 @@ unaided accuracy. Continuous mode allows eight seconds for a persistent robot
 penalty/goal and a short reaction window after positional contact clears;
 uncalled discretionary pushing alone is not a missed violation. Full time
 excludes new incidents with less than three seconds to react. **End match & see
-results** also ends a session explicitly. Pauses themselves earn no points.
+results** also ends a session explicitly. Pauses themselves earn no points. At
+full time, Continuous provides a chronological decision timeline containing the
+actual call, expected call, physical effect and relevant rule. Missed calls are
+placed at the moment the incident appeared, and every row can seek a detached
+full-match replay of the game as it was actually refereed.
 
 A visible count can start after one sustained second of little ball movement,
 without guessing the later automatic stall detector. This is a permissive
@@ -161,13 +172,14 @@ Replay preserves the last situation, including its lead-up and decision
 endpoint, without changing the live match. Rule links open the matching
 section inside Rules; returning to Referee keeps the paused match.
 
-Correct calls apply to the match: remove robots with their motors off, move the
-ball or the relevant defender to a clear neutral spot, award/disallow goals,
-correct setups and restart play. Wrong calls leave the match unchanged and
-explain the rule and target to reconsider. Retrying does not recover first-try
-credit. Accepted discretionary choices are labelled **Supported referee
-judgment**. Combined infringements require successive decisions using the
-updated ball position.
+In Step mode, correct calls apply to the match: remove robots with their motors
+off, move the ball or the relevant defender to a clear neutral spot,
+award/disallow goals, correct setups and restart play. Wrong calls leave the
+guided drill unchanged and explain the rule and target to reconsider. Retrying
+does not recover first-try credit. Accepted discretionary choices are labelled
+**Supported referee judgment**. Combined infringements require successive
+decisions using the updated ball position. Continuous instead applies every
+submitted call and defers its explanation to the post-match review.
 
 Benched robots stay absent from AI, collisions and new drills. Their penalty
 starts at removal; normal play continues and return requires your permission,

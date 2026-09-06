@@ -229,7 +229,7 @@ test('out-and-back remains actionable, is missed once, and a late correction ear
   assert.equal(session.snapshot().report.assessed, 1);
 });
 
-test('simultaneous out incidents can be called in either order and retries count once', () => {
+test('simultaneous outs can be called in either order and stale continuous commands are still enacted', () => {
   const session = continuous({ topics: ['out'] });
   session.match.state.actors['blue-1'] = { x: 0.81, z: -0.2, yaw: 0 };
   session.match.state.actors['yellow-1'] = { x: 0.81, z: 0.2, yaw: 0 };
@@ -243,11 +243,12 @@ test('simultaneous out incidents can be called in either order and retries count
   correct(session, 'out', 'blue-1');
   assert.equal(
     session.submit(staleKey, { action: 'out', target: 'blue-1' }),
-    false,
+    true,
   );
+  assert.match(session.feedback.effect, /already off/i);
   assert.equal(session.snapshot().report.correct, 1);
-  assert.equal(session.snapshot().report.wrong, 1);
-  assert.equal(session.snapshot().report.assessed, 2);
+  assert.equal(session.snapshot().report.wrong, 2);
+  assert.equal(session.snapshot().report.assessed, 3);
 });
 
 test('one- and two-second early counts are accepted, pause is fair, and movement cancels without a miss', () => {
@@ -273,7 +274,7 @@ test('one- and two-second early counts are accepted, pause is fair, and movement
   }
 });
 
-test('early placement remains wrong; a count must finish before the ball is relocated', () => {
+test('an early lack-of-progress decision is scored wrong but still relocates the ball', () => {
   const session = continuous({ topics: ['progress'] });
   session.match.place({ ball: { x: 0, z: 0, yaw: 0 } });
   advance(session, 1.2);
@@ -281,17 +282,111 @@ test('early placement remains wrong; a count must finish before the ball is relo
   session.continue();
   const ball = { ...session.match.state.actors.ball };
   assert.equal(submit(session, 'lack-progress').verdict, 'premature');
-  assert.deepEqual(session.match.state.actors.ball, ball);
-  session.continue();
-  assert.equal(
-    session.canAdvance,
-    true,
-    'Try again must resume the interrupted count',
-  );
-  advance(session, 3.1);
-  correct(session, 'lack-progress');
+  assert.notDeepEqual(session.match.state.actors.ball, ball);
   assert.equal(session.snapshot().report.wrong, 1);
   assert.equal(session.snapshot().report.correct, 0);
+});
+
+test('continuous mode enacts a wrong removal and an immediate early return, then reveals both at full time', () => {
+  const session = continuous({ topics: ['out', 'other'] });
+  session.match.state.actors['blue-1'] = { x: 0.81, z: -0.2, yaw: 0 };
+  session.detectLiveIncident();
+
+  assert.equal(submit(session, 'out', 'yellow-1').verdict, 'wrong-target');
+  assert.equal(session.match.state.actors['yellow-1'], undefined);
+  assert.ok(session.bench['yellow-1']);
+  assert.deepEqual(session.snapshot().review, []);
+
+  assert.equal(submit(session, 'return', 'yellow-1').verdict, 'incorrect');
+  assert.ok(session.match.state.actors['yellow-1']);
+  assert.equal(session.bench['yellow-1'], undefined);
+  assert.equal(session.snapshot().report.wrong, 2);
+
+  assert.equal(submit(session, 'out', 'blue-1').verdict, 'correct');
+  assert.equal(session.match.state.actors['blue-1'], undefined);
+  assert.equal(session.snapshot().report.wrong, 2);
+
+  session.endSession();
+  const frame = session.snapshot();
+  assert.equal(frame.review.length, 3);
+  assert.equal(frame.review[0].assessment, 'wrong-target');
+  assert.equal(frame.review[0].actual.target, 'yellow-1');
+  assert.equal(frame.review[0].expected[0].target, 'blue-1');
+  assert.equal(frame.review[1].assessment, 'wrong-action');
+  assert.equal(frame.review[1].actual.action, 'return');
+  assert.equal(frame.review[1].expected[0].action, 'keep-out');
+  assert.equal(frame.review[2].assessment, 'correction');
+  assert.equal(frame.review[2].actual.target, 'blue-1');
+
+  const replay = session.getMatchReplay();
+  assert.ok(replay);
+  assert.equal(
+    sampleSituation(replay, frame.review[0].replayAt).actors['yellow-1'],
+    undefined,
+  );
+  assert.ok(
+    sampleSituation(replay, frame.review[1].replayAt).actors['yellow-1'],
+  );
+});
+
+test('continuous mode awards a goal to the selected wrong team and reviews the real consequence', () => {
+  const session = continuous({ topics: ['scoring'] });
+  session.match.state.pendingEvent = { kind: 'goal', team: 'blue' };
+  session.match.state.phase = 'referee';
+  session.detectLiveIncident();
+
+  assert.equal(submit(session, 'goal', 'yellow').verdict, 'wrong-target');
+  assert.deepEqual(session.snapshot().score, { blue: 0, yellow: 1 });
+  assert.equal(session.snapshot().kickoffDue, true);
+  assert.equal(session.snapshot().kickoffTeam, 'blue');
+  assert.equal(session.snapshot().report.wrong, 1);
+
+  session.endSession();
+  const event = session.snapshot().review[0];
+  assert.equal(event.assessment, 'wrong-target');
+  assert.deepEqual(event.actual, { action: 'goal', target: 'yellow' });
+  assert.deepEqual(event.expected, [{ action: 'goal', target: 'blue' }]);
+  assert.match(event.effect, /Yellow \+1/);
+});
+
+test('continuous review records one missed call at the incident onset and keeps the full replay detached', () => {
+  const session = continuous({ topics: ['out'] });
+  session.match.state.actors['blue-1'] = { x: 0.81, z: -0.2, yaw: 0 };
+  session.detectLiveIncident();
+  session.clock += 9;
+  session.ageObservations();
+  assert.equal(session.snapshot().report.missed, 1);
+  assert.deepEqual(session.snapshot().review, []);
+  session.endSession();
+
+  const frame = session.snapshot();
+  const missed = frame.review.filter((event) => event.assessment === 'missed');
+  assert.equal(missed.length, 1);
+  assert.equal(missed[0].actual, null);
+  assert.equal(missed[0].expected[0].action, 'out');
+  assert.equal(missed[0].expected[0].target, 'blue-1');
+  assert.equal(missed[0].replayAt, missed[0].eventAt);
+
+  const replay = session.getMatchReplay();
+  const original = structuredClone(frame.actors);
+  replay.frames[0].actors.ball.x += 100;
+  sampleSituation(replay, replay.duration).score.blue += 100;
+  assert.deepEqual(session.snapshot().actors, original);
+});
+
+test('a ten-minute continuous replay stays at the bounded review sampling rate', () => {
+  const session = continuous({ duration: 600, topics: ['out'] });
+  advance(session, 600);
+  const replay = session.getMatchReplay();
+  assert.ok(replay.duration >= 599);
+  assert.ok(
+    replay.frames.length >= 4300,
+    `recorded ${replay.frames.length} frames`,
+  );
+  assert.ok(
+    replay.frames.length <= 5000,
+    `recorded ${replay.frames.length} frames`,
+  );
 });
 
 test('continuous feedback continuation clears a pause from reading a rule or changing tabs', () => {
@@ -444,7 +539,7 @@ test('kickoff requires every ready eligible robot to return, including during go
   }
 });
 
-test('kickoff signal rechecks newly eligible returns after arranging the field', () => {
+test('a premature kickoff signal and immediate return are enacted and scored', () => {
   const session = continuous();
   session.remove('blue-1', 'Damaged');
   session.match.state.pendingEvent = { kind: 'goal', team: 'blue' };
@@ -455,17 +550,15 @@ test('kickoff signal rechecks newly eligible returns after arranging the field',
   session.bench['blue-1'].ready = true;
   assert.equal(session.canReturn('blue-1'), true);
   assert.equal(submit(session, 'start').verdict, 'premature');
-  assert.equal(session.snapshot().kickoffDue, true);
-  correct(session, 'return', 'blue-1');
-  session.continue();
-  assert.equal(
-    session.canArrangeKickoff,
-    true,
-    'return invalidates the old kickoff layout',
-  );
-  session.arrangeKickoff();
-  correct(session, 'start');
   assert.equal(session.snapshot().kickoffDue, false);
+  assert.ok(session.bench['blue-1']);
+  assert.equal(
+    session.submit('stale-key', { action: 'return', target: 'blue-1' }),
+    true,
+  );
+  assert.ok(session.match.state.actors['blue-1']);
+  assert.equal(session.snapshot().kickoffDue, false);
+  assert.ok(session.snapshot().report.wrong >= 1);
 });
 
 test('ordinary pauses and resume signals never manufacture referee points', () => {
