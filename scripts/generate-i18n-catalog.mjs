@@ -187,9 +187,14 @@ const MANUAL = {
     'Full match review': 'Vollständige Spielauswertung',
     remove: 'entfernen',
     Ball: 'Ball',
+    different: 'anderen',
+    furthest: 'entferntesten',
+    nearest: 'nächstgelegenen',
     'Award goal': 'Tor geben',
     'Disallow goal': 'Tor aberkennen',
     'Multiple defense · relocate': 'Multiple defense · neu positionieren',
+    'Ball moved to the {0} available{1} neutral spot.':
+      'Der Ball wurde zum{1} {0} verfügbaren neutralen Punkt verschoben.',
     'Full entry is out of bounds. Remove the robot for one minute or until an earlier kickoff.':
       'Das vollständige Einfahren gilt als out of bounds. Entfernen Sie den Roboter für eine Minute oder bis zu einem früheren kick-off.',
   },
@@ -599,9 +604,25 @@ async function main() {
       ),
       patterns: source.patterns.map((key) => ({
         source: key,
-        translation: cache[locale][key],
+        translation: MANUAL[locale]?.[key] ?? cache[locale][key],
       })),
     };
+  }
+  for (const [locale, translations] of Object.entries(output.locales)) {
+    for (const pattern of translations.patterns) {
+      const sourcePlaceholders = [...pattern.source.matchAll(/\{(\d+)\}/g)]
+        .map((match) => match[1])
+        .sort((a, b) => a.localeCompare(b));
+      const translatedPlaceholders = [
+        ...pattern.translation.matchAll(/\{(\d+)\}/g),
+      ]
+        .map((match) => match[1])
+        .sort((a, b) => a.localeCompare(b));
+      if (sourcePlaceholders.join(',') !== translatedPlaceholders.join(','))
+        throw new Error(
+          `Translation placeholder mismatch for ${locale}: ${pattern.source}`,
+        );
+    }
   }
   await writeFile(OUTPUT, `${JSON.stringify(output, null, 2)}\n`);
   process.stdout.write(

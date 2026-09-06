@@ -190,6 +190,22 @@ test('generated catalogs have the same complete source keys and valid Unicode', 
   assert.notEqual(translateText('Rules', 'de'), 'Rules');
 });
 
+test('every translated template preserves each dynamic placeholder', () => {
+  for (const [locale, translations] of Object.entries(generated.locales)) {
+    for (const pattern of translations.patterns) {
+      const placeholders = (value) =>
+        [...value.matchAll(/\{(\d+)\}/g)]
+          .map((match) => match[1])
+          .sort((a, b) => a.localeCompare(b));
+      assert.deepEqual(
+        placeholders(pattern.translation),
+        placeholders(pattern.source),
+        `${locale}: ${pattern.source}`,
+      );
+    }
+  }
+});
+
 test('official rule calls and exact quotations remain in English', () => {
   const calls = [
     'Out of bounds',
@@ -264,6 +280,17 @@ test('dynamic templates retain their values after translation', () => {
     assert.doesNotMatch(result, /\{\d+\}/);
     assert.notEqual(result, 'Goal · Blue scores!');
   }
+  assert.match(
+    translateText(
+      'Ball moved to the furthest available different neutral spot.',
+      'de',
+    ),
+    /anderen entferntesten/,
+  );
+  assert.match(
+    translateText('Ball moved to the nearest available neutral spot.', 'de'),
+    /zum nächstgelegenen/,
+  );
 });
 
 test('nested referee feedback translates its generated explanation', () => {

@@ -122,7 +122,7 @@ function compiledPatterns(locale: Exclude<Locale, 'en'>) {
       let expression = '^';
       pieces.forEach((piece, index) => {
         expression += escapeRegExp(piece);
-        if (index < parameters.length) expression += '(.+?)';
+        if (index < parameters.length) expression += '(.*?)';
       });
       expression += '$';
       return { ...pattern, regex: new RegExp(expression, 'su') };

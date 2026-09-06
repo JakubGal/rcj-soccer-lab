@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-09-06T10:55:00.679Z",
+  "generatedAt": "2026-09-06T11:05:30.375Z",
   "locales": {
     "sk": {
       "exact": {
@@ -3067,7 +3067,7 @@
         "diameter": "Durchmesser",
         "Diameter": "Durchmesser",
         "Differences to 2:2 League rulesets": "Unterschiede zu den Regelsätzen der 2:2-Liga",
-        "different": "anders",
+        "different": "anderen",
         "Different situations": "Verschiedene Situationen",
         "dimensions": "Abmessungen",
         "Dimensions": "Abmessungen",
@@ -3223,7 +3223,7 @@
         "fullArea": "fullArea",
         "function": "Funktion",
         "Further information on International Competition": "Weitere Informationen zum Internationalen Wettbewerb",
-        "furthest": "am weitesten",
+        "furthest": "entferntesten",
         "Furthest unoccupied neutral spot": "Am weitesten entfernter unbesetzter neutraler Punkt",
         "g": "g",
         "Game format": "Spielformat",
@@ -3506,7 +3506,7 @@
         "Multiple defense: identify and relocate the farther robot": "Multiple defense: Identifizieren und verschieben Sie den entfernteren Roboter",
         "mW": "mW",
         "nav": "Navigation",
-        "nearest": "am nächsten",
+        "nearest": "nächstgelegenen",
         "Nearest available neutral spot": "Nächste verfügbare neutrale Stelle",
         "Nearest the ball": "Am nächsten am Ball",
         "Neither robot is ready at kickoff": "Keiner der Roboter ist bei kickoff bereit",
@@ -4773,7 +4773,7 @@
         },
         {
           "source": "Ball moved to the {0} available{1} neutral spot.",
-          "translation": "Der Ball wurde an den verfügbaren neutralen Platz {0} bewegt."
+          "translation": "Der Ball wurde zum{1} {0} verfügbaren neutralen Punkt verschoben."
         },
         {
           "source": "Ball possession requires both ball and owner \"{0}\" poses.",
