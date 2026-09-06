@@ -556,6 +556,40 @@ test('continuous review records one missed call at the incident onset and keeps 
   assert.deepEqual(session.snapshot().actors, original);
 });
 
+test('a missed multiple-defense call reports the call that applied while it was live', () => {
+  const session = continuous({ topics: ['multiple'] });
+  session.match.blueAttackDirection = 1;
+  session.match.place({
+    ball: { x: 0.3, z: 0.6, yaw: 0 },
+    'yellow-1': { x: -0.2, z: 0.8, yaw: 0 },
+    'yellow-2': { x: 0.2, z: 0.8, yaw: 0 },
+    'blue-1': { x: -0.5, z: -0.2, yaw: 0 },
+    'blue-2': { x: 0.5, z: -0.2, yaw: 0 },
+  });
+  session.detectLiveIncident();
+  assert.equal(session.active.definition.id, 'live-multiple');
+  assert.equal(session.expected()[0].action, 'multiple');
+  assert.ok(session.expected()[0].target);
+
+  // The multiple-defense geometry clears before the referee ever calls it.
+  session.match.place({
+    ball: { x: 0.3, z: 0.6, yaw: 0 },
+    'yellow-1': { x: -0.2, z: -0.1, yaw: 0 },
+    'yellow-2': { x: 0.2, z: -0.1, yaw: 0 },
+    'blue-1': { x: -0.5, z: -0.2, yaw: 0 },
+    'blue-2': { x: 0.5, z: -0.2, yaw: 0 },
+  });
+  advance(session, 15);
+
+  session.endSession();
+  const event = session
+    .snapshot()
+    .review.find((event) => event.situation === 'Two partial defenders');
+  assert.ok(event);
+  assert.equal(event.assessment, 'missed');
+  assert.equal(event.expected[0].action, 'multiple');
+});
+
 test('a ten-minute continuous replay stays at the bounded review sampling rate', () => {
   const session = continuous({ duration: 600, topics: ['out'] });
   advance(session, 600);

@@ -107,6 +107,7 @@ type ActiveIncident = {
   replayAt?: number;
   scoreNeutral?: boolean;
   scoreTopic?: TrainingTopic;
+  expectedSnapshot?: RequiredCall[];
 };
 export type TrainingPhase =
   | 'live'
@@ -222,10 +223,15 @@ export class RefereeMatch {
       !this.reviewedNoCalls.has(item.number)
     ) {
       this.reviewedNoCalls.add(item.number);
-      const expected = this.expectedFor(item).map(({ action, target }) => ({
-        action,
-        ...(target ? { target } : {}),
-      }));
+      // Use the calls captured while the incident was still live: by the time a
+      // miss is assessed, cleared geometry (e.g. multiple defense) would make
+      // expectedFor() report play-on/resume, contradicting the missed verdict.
+      const expected = (item.expectedSnapshot ?? this.expectedFor(item)).map(
+        ({ action, target }) => ({
+          action,
+          ...(target ? { target } : {}),
+        }),
+      );
       if (expected.length)
         this.reviewEvents.push({
           id: ++this.reviewSerial,
@@ -340,8 +346,17 @@ export class RefereeMatch {
       this.phase = this.active ? 'decision' : 'live';
     }
   }
+  /** Keep the missed-review snapshot current while the call is still live;
+   * stop once required geometry (e.g. multiple defense) has cleared, so a
+   * later miss still reports the call that was actually being missed. */
+  private refreshExpectedSnapshot(item: ActiveIncident) {
+    if (!this.requiredIncident(item) || !this.multipleStillPresent(item))
+      return;
+    item.expectedSnapshot = this.expectedFor(item);
+  }
   private ageObservations() {
     for (const [key, item] of this.observations) {
+      if (!item.finished) this.refreshExpectedSnapshot(item);
       const age = this.clock - (item.observedAt ?? this.clock);
       const absent = this.clock - (item.lastSeen ?? this.clock);
       const obligation = item.definition.steps
@@ -1128,6 +1143,7 @@ export class RefereeMatch {
       lastSeen: this.clock,
       scoreNeutral: definition.id === 'live-dribbler',
     };
+    incident.expectedSnapshot = this.expectedFor(incident);
     this.noteOut(incident);
     this.capture(true);
     incident.replayAt = this.currentMatchReplayTime;
