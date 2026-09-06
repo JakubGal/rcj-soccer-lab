@@ -175,6 +175,15 @@ function deliverGoal(session, team) {
   session.match.state.phase = 'referee';
   session.detectLiveIncident();
 }
+// A stale, still-unfinished incident (e.g. an old wall call) can keep
+// occupying `active` while a fresh one queues in `pending` until a matching
+// submit refocuses it. Look across both so incident-identity assertions do
+// not depend on which slot the engine currently happens to use.
+function incidentAmong(session, id) {
+  return [session.active, ...session.pending].find(
+    (item) => item?.definition.id === id,
+  );
+}
 
 test('continuous incidents never automatically freeze actors or reveal the answer', () => {
   for (const id of ['wall', 'full-area', 'multiple', 'pushing']) {
@@ -249,6 +258,81 @@ test('out-and-back remains actionable, is missed once, and a late correction ear
   session.continue();
   advance(session, 3);
   assert.equal(session.snapshot().report.assessed, 1);
+});
+
+test('a robot still touching the wall past its reaction window still disallows its team goal', () => {
+  const session = continuous({ topics: ['out', 'scoring'] });
+  session.match.state.actors['blue-1'] = wallPose(session.robotVisual, -0.2);
+  session.detectLiveIncident();
+  assert.equal(session.active.definition.id, 'live-wall');
+  // Advance well past the 8s obligation window while the robot never leaves
+  // the wall; rule 2.8 gives no automatic expiry, so the flag must persist.
+  session.clock += 20;
+  session.detectLiveIncident();
+  assert.ok(session.outRobots.has('blue-1'));
+  deliverGoal(session, 'blue');
+  const outGoal = incidentAmong(session, 'live-out-goal');
+  assert.ok(outGoal, 'a still-out robot must disallow its team goal');
+  assert.deepEqual(outGoal.definition.steps[outGoal.step], [
+    { action: 'no-goal' },
+  ]);
+  assert.equal(incidentAmong(session, 'live-goal'), undefined);
+  // The stale wall call and the fresh out-goal decision both still resolve
+  // from the same 'out' call, exactly like an ordinary out-goal sequence.
+  correct(session, 'no-goal');
+  session.continue();
+  correct(session, 'out', 'blue-1');
+  session.continue();
+  assert.equal(session.snapshot().score.blue, 0);
+  assert.equal(session.match.state.actors['blue-1'], undefined);
+});
+
+test('a robot that left the wall and let the reaction window lapse no longer disallows its team goal', () => {
+  const session = continuous({ topics: ['out', 'scoring'] });
+  session.match.state.actors['blue-1'] = wallPose(session.robotVisual, -0.2);
+  session.detectLiveIncident();
+  assert.equal(session.active.definition.id, 'live-wall');
+  // The robot drives back into play, then the 8s obligation window lapses
+  // while it stays clear of every wall and penalty area.
+  session.match.state.actors['blue-1'] = { x: 0, z: -0.3, yaw: 0 };
+  session.clock += 20;
+  session.detectLiveIncident();
+  assert.equal(session.outRobots.has('blue-1'), false);
+  deliverGoal(session, 'blue');
+  const goal = incidentAmong(session, 'live-goal');
+  assert.ok(goal, 'an ordinary goal must be judged once the flag has cleared');
+  assert.deepEqual(goal.definition.steps[goal.step], [
+    { action: 'goal', target: 'blue' },
+  ]);
+  assert.equal(incidentAmong(session, 'live-out-goal'), undefined);
+  correct(session, 'goal', 'blue');
+  assert.equal(session.snapshot().score.blue, 1);
+});
+
+test('a robot that left the wall while its reaction window is still open still disallows its team goal', () => {
+  const session = continuous({ topics: ['out', 'scoring'] });
+  session.match.state.actors['blue-1'] = wallPose(session.robotVisual, -0.2);
+  session.detectLiveIncident();
+  assert.equal(session.active.definition.id, 'live-wall');
+  // The robot drives back into play well within the 8s obligation window;
+  // the trainer's "you still have time to call it" grace must still apply.
+  session.match.state.actors['blue-1'] = { x: 0, z: -0.3, yaw: 0 };
+  session.clock += 3;
+  session.detectLiveIncident();
+  assert.ok(session.outRobots.has('blue-1'));
+  deliverGoal(session, 'blue');
+  const outGoal = incidentAmong(session, 'live-out-goal');
+  assert.ok(outGoal, 'the flag must still stand while the window is open');
+  assert.deepEqual(outGoal.definition.steps[outGoal.step], [
+    { action: 'no-goal' },
+  ]);
+  assert.equal(incidentAmong(session, 'live-goal'), undefined);
+  correct(session, 'no-goal');
+  session.continue();
+  correct(session, 'out', 'blue-1');
+  session.continue();
+  assert.equal(session.snapshot().score.blue, 0);
+  assert.equal(session.match.state.actors['blue-1'], undefined);
 });
 
 test('opponent pressure at the wall becomes pushed out and keeps the robot in play', () => {

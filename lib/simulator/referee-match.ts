@@ -602,6 +602,30 @@ export class RefereeMatch {
     }
   }
 
+  /**
+   * Rule 2.8 gives no automatic time expiry to an ignored out-of-bounds
+   * robot, so a flagged robot only leaves `outRobots` once BOTH hold: it has
+   * physically left the boundary (the same wall/penalty-area footprint test
+   * as the live `boundaries` filter), and the incident that flagged it has
+   * either finished or run past its own reaction deadline. While either
+   * condition is false the flag stays, including a robot that has already
+   * driven back into play but is still within its 8s reaction window.
+   */
+  private sweepOutRobots(boundaries: readonly { id: string }[]) {
+    if (!this.outRobots.size) return;
+    const stillTouching = new Set(boundaries.map((robot) => robot.id));
+    for (const robot of this.outRobots) {
+      if (stillTouching.has(robot)) continue;
+      const incident = this.observations.get(`out:${robot}`);
+      const windowLapsed =
+        !incident ||
+        incident.finished ||
+        (incident.reactionDeadline !== undefined &&
+          this.clock + 1e-8 >= incident.reactionDeadline);
+      if (windowLapsed) this.outRobots.delete(robot);
+    }
+  }
+
   private refreshGoalPassage() {
     const passage = this.invalidGoalPassage;
     if (!passage) return;
@@ -1583,6 +1607,7 @@ export class RefereeMatch {
         this.match.opponentPusher(robot.id),
       ]),
     );
+    if (this.mode === 'continuous') this.sweepOutRobots(boundaries);
     if (pending) {
       const liveScoringOffender =
         pending.kind === 'goal'
