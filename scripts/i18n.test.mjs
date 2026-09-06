@@ -274,6 +274,19 @@ test('scoring action buttons use reviewed football wording', () => {
   assert.equal(translateText('Ball', 'de'), 'Ball');
 });
 
+test('Slovak referee controls use football and keyboard terminology from PR 10', () => {
+  for (const [source, expected] of Object.entries({
+    '3. Goals': '3. Bránky',
+    Goals: 'Góly',
+    goals: 'góly',
+    Space: 'Medzerník',
+    'Kick ball (Space)': 'Kopnúť loptu (Medzerník)',
+    'Make the call': 'Rozhodnite',
+    'Goal resulting from pushing': 'Gól vyplývajúci z pushing',
+  })) assert.equal(translateText(source, 'sk'), expected);
+  assert.match(translateText('Call pushing whenever opposing robots touch', 'sk'), /^Vyhláste pushing/);
+});
+
 test('reviewed translations preserve the called-pushing premise and farther-robot selection', () => {
   const source = REFEREE_CASES.find((item) => item.id === 'pushing-goal').facts;
   for (const team of [

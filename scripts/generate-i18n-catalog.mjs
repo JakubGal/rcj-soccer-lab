@@ -135,6 +135,22 @@ const MANUAL = {
     'The rules examination did not meet {0} of {1} correct first answers.':
       'V skúške z pravidiel nebol dosiahnutý požadovaný počet {0} správnych prvých odpovedí z {1}.',
     'Goal not granted': 'Gól nebol uznaný',
+    '3. Goals': '3. Bránky',
+    Goals: 'Góly',
+    goals: 'góly',
+    Space: 'Medzerník',
+    'Kick ball (Space)': 'Kopnúť loptu (Medzerník)',
+    'Make the call': 'Rozhodnite',
+    'Goal resulting from pushing': 'Gól vyplývajúci z pushing',
+    'A goal resulting from pushing is not granted. Resolve the pushing ball placement.':
+      'Gól vyplývajúci z pushing sa neuzná. Vyriešte umiestnenie lopty pushing.',
+    'Call ball holding and require the mechanism to be checked':
+      'Vyhláste ball holding a požiadajte o kontrolu mechanizmu',
+    'Call pushing under the penalty-area contact conditions':
+      'Vyhláste pushing pri splnení podmienok kontaktu v pokutovom území',
+    'Call pushing whenever opposing robots touch':
+      'Vyhláste pushing vždy, keď sa dotknú súperiace roboty',
+    '{0} drove {1} {2}. {3}': '{0} zatlačil {1} {2}. {3}',
     'Relocate farther defender':
       'Premiestnite obrancu, ktorý je ďalej od loptičky',
     'The farther defender': 'Obranca vzdialenejší od loptičky',
