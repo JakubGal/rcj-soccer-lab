@@ -9,6 +9,15 @@ import { KickoffMeeting, randomKickoff, type GoalEnd } from './kickoff';
 import { insidePenalty, robotPenaltyOverlap } from './referee-geometry';
 import { rulesForDecision, type AppliedRule } from './referee-rules';
 import { DEFAULT_ROBOT_VISUAL_ID, type RobotVisualId } from './robot-models';
+import { ContinuousDirector } from './continuous-director';
+import {
+  RefereeScore,
+  TRAINING_TOPICS,
+  trainingTopic,
+  type TrainingMode,
+  type TrainingTopic,
+  type Assessment,
+} from './referee-training';
 export { insidePenalty } from './referee-geometry';
 import {
   REFEREE_CASES,
@@ -62,6 +71,10 @@ type ActiveIncident = {
   replay: SituationReplay | null;
   key: string;
   initial: Record<string, Pose>;
+  observedAt?: number;
+  lastSeen?: number;
+  scoreNeutral?: boolean;
+  scoreTopic?: TrainingTopic;
 };
 export type TrainingPhase =
   | 'live'
@@ -140,9 +153,114 @@ export class RefereeMatch {
   readonly meeting: KickoffMeeting;
   robotVisual: RobotVisualId;
   private opening = false;
+  readonly mode: TrainingMode;
+  readonly duration: number;
+  readonly topics: readonly TrainingTopic[];
+  private trainingElapsed = 0;
+  private sessionFinished = false;
+  private userPaused = false;
+  private score = new RefereeScore();
+  private observations = new Map<string, ActiveIncident>();
+  private director: ContinuousDirector;
+
+  private assess(item: ActiveIncident, result: Assessment) {
+    const topic = item.scoreTopic ?? trainingTopic(item.definition);
+    if (!item.scoreNeutral && this.topics.includes(topic))
+      this.score.record(
+        item.number,
+        topic,
+        item.assisted ? 'assisted' : result,
+        item.definition.title,
+      );
+  }
+  /** The pause is a thinking aid, not a graded call. Simulation time freezes too. */
+  pauseForDecision() {
+    if (this.sessionFinished) return;
+    this.userPaused = true;
+    this.syncMotion();
+  }
+  endSession() {
+    if (this.sessionFinished) return;
+    for (const item of new Set([
+      this.active,
+      ...this.pending,
+      ...this.observations.values(),
+    ])) {
+      if (!item || item.finished) continue;
+      // Full time never penalizes an incident that offered less than three seconds to react.
+      const seen =
+        item.natural || item.time >= evidenceDuration(item.definition);
+      if (
+        ((this.mode === 'step' && seen) ||
+          (item.observedAt !== undefined &&
+            this.clock - item.observedAt >= 3)) &&
+        this.requiredIncident(item)
+      )
+        this.assess(item, item.mistakes ? 'wrong' : 'missed');
+    }
+    this.sessionFinished = true;
+    this.resolving = null;
+    this.capture();
+    this.recorder.seal(
+      'Final passage of play',
+      'Review the final passage before full time.',
+    );
+    this.syncMotion();
+  }
+  private requiredIncident(item: ActiveIncident) {
+    const calls = item.definition.steps.slice(item.step).flat();
+    return (
+      !item.progressResumed &&
+      calls.some(
+        (c) =>
+          !['play-on', 'resume', 'wait', 'keep-out'].includes(c.action) &&
+          (!c.discretionary || c.action === 'multiple'),
+      )
+    );
+  }
+  private retireObservation(item: ActiveIncident) {
+    if (!item.finished && this.requiredIncident(item))
+      this.assess(item, item.mistakes ? 'wrong' : 'missed');
+    item.finished = true;
+    this.pending = this.pending.filter((x) => x !== item);
+    if (
+      this.active === item &&
+      this.phase !== 'feedback' &&
+      this.countFor === null
+    ) {
+      this.active = this.pending.shift() ?? null;
+      this.phase = this.active ? 'decision' : 'live';
+    }
+  }
+  private ageObservations() {
+    for (const [key, item] of this.observations) {
+      const age = this.clock - (item.observedAt ?? this.clock);
+      const absent = this.clock - (item.lastSeen ?? this.clock);
+      const obligation = item.definition.steps
+        .flat()
+        .some((c) =>
+          ['out', 'damaged', 'goal', 'no-goal', 'return'].includes(c.action),
+        );
+      if (
+        !item.finished &&
+        !this.manualHold &&
+        !this.userPaused &&
+        this.countFor === null
+      ) {
+        if (obligation) {
+          if (age >= 8) this.assess(item, item.mistakes ? 'wrong' : 'missed');
+        } else if (absent > 2.5 && age >= 3) this.retireObservation(item);
+        else if (age >= 12 && this.requiredIncident(item))
+          this.assess(item, item.mistakes ? 'wrong' : 'missed');
+      }
+      // Rearm only after a resolved condition has actually cleared.
+      if (item.finished && absent > 1) this.observations.delete(key);
+    }
+  }
 
   /** Trainer pause is separate from a stoppage required by the match rules. */
   private get decisionPaused() {
+    if (this.mode === 'continuous') return false;
     const observingCount =
       this.countFor !== null &&
       (this.phase !== 'feedback' ||
@@ -157,12 +275,15 @@ export class RefereeMatch {
 
   get motionHeld() {
     return (
+      this.userPaused ||
+      this.sessionFinished ||
       this.manualHold ||
       this.opening ||
       this.fixtureEnded ||
       this.decisionPaused ||
       (this.phase !== 'evidence' &&
-        (this.kickoffDue || Boolean(this.active?.stopsPlay)))
+        (this.kickoffDue ||
+          (this.mode !== 'continuous' && Boolean(this.active?.stopsPlay))))
     );
   }
   private syncMotion() {
@@ -170,6 +291,9 @@ export class RefereeMatch {
     else this.match.releaseReferee();
   }
   resumeMotion() {
+    if (this.sessionFinished) return;
+    this.userPaused = false;
+    if (this.mode === 'continuous') this.manualHold = false;
     this.syncMotion();
   }
   getLastReplay() {
@@ -212,6 +336,18 @@ export class RefereeMatch {
   private skipResolvedSteps(item: ActiveIncident) {
     while (item.step < item.definition.steps.length) {
       const choices = item.definition.steps[item.step];
+      if (
+        this.mode === 'continuous' &&
+        choices.every(
+          (call) =>
+            ['out', 'damaged'].includes(call.action) &&
+            call.target &&
+            !this.match.state.actors[transformId(call.target, item.variant)],
+        )
+      ) {
+        item.step++;
+        continue;
+      }
       if (
         choices.every((call) => call.action === 'multiple') &&
         !this.multipleStillPresent(item)
@@ -280,8 +416,17 @@ export class RefereeMatch {
       'interference',
     ]);
     this.pending = this.pending.filter((item) => {
-      if (positional.has(item.definition.id.replace(/^live-/, '')))
+      if (positional.has(item.definition.id.replace(/^live-/, ''))) {
+        if (this.mode === 'continuous') {
+          if (
+            this.clock - (item.observedAt ?? this.clock) >= 3 &&
+            this.requiredIncident(item)
+          )
+            this.assess(item, item.mistakes ? 'wrong' : 'missed');
+          item.finished = true;
+        }
         return false;
+      }
       this.skipResolvedSteps(item);
       if (
         ['interruption', 'spectator'].includes(
@@ -321,12 +466,17 @@ export class RefereeMatch {
           this.feedback = null;
           this.phase = 'decision';
         }
+        if (this.mode === 'continuous' && item.step > 0) {
+          this.assess(item, item.mistakes ? 'wrong' : 'correct');
+          this.retireObservation(item);
+        }
       }
     }
   }
 
   get canArrangeKickoff() {
     return (
+      !this.sessionFinished &&
       this.kickoffDue &&
       !this.active &&
       (['blue', 'yellow'] as const).every((team) =>
@@ -337,7 +487,7 @@ export class RefereeMatch {
     );
   }
   get canAdvance() {
-    if (this.opening) return false;
+    if (this.opening || this.userPaused || this.sessionFinished) return false;
     return (
       this.phase === 'evidence' ||
       !this.motionHeld ||
@@ -350,10 +500,22 @@ export class RefereeMatch {
 
   constructor(
     readonly seed: number,
-    options: { preMatch?: boolean; robotVisual?: RobotVisualId } = {},
+    options: {
+      preMatch?: boolean;
+      robotVisual?: RobotVisualId;
+      mode?: TrainingMode;
+      duration?: number;
+      topics?: readonly TrainingTopic[];
+    } = {},
   ) {
+    this.mode = options.mode ?? 'step';
+    this.duration = options.duration ?? Number.MAX_SAFE_INTEGER;
+    this.topics = options.topics?.length
+      ? [...options.topics]
+      : TRAINING_TOPICS.map((t) => t.id);
     this.robotVisual = options.robotVisual ?? DEFAULT_ROBOT_VISUAL_ID;
     this.bag = new IncidentBag(seed);
+    this.director = new ContinuousDirector(this.bag, this.topics);
     this.meeting = new KickoffMeeting(seed);
     this.opening = Boolean(options.preMatch);
     this.match.restart('neutral');
@@ -454,11 +616,25 @@ export class RefereeMatch {
     ];
     return {
       ...this.match.snapshot(),
+      trainingMode: this.mode,
+      trainingRemaining: Math.max(0, this.duration - this.trainingElapsed),
+      sessionFinished: this.sessionFinished,
+      userPaused: this.userPaused,
+      report: this.score.snapshot(),
+      topics: [...this.topics],
       phase: this.phase,
       simulationTime: this.clock,
       heights: { ...this.heights },
-      facts,
+      facts:
+        this.mode === 'continuous' &&
+        !this.feedback &&
+        !item?.hintLevel &&
+        !this.opening &&
+        !this.kickoffDue
+          ? 'Observe play. Pause or whistle to make a call; play continues if you do not intervene.'
+          : facts,
       penaltyEvidence: Boolean(
+        (this.mode !== 'continuous' || this.feedback || item?.hintLevel) &&
         item &&
         this.phase !== 'evidence' &&
         [
@@ -500,8 +676,11 @@ export class RefereeMatch {
       canAdvance: this.canAdvance,
       motionHeld: this.motionHeld,
       decisionPaused: this.decisionPaused,
-      drillReady: this.drillReady,
+      drillReady:
+        this.mode === 'step' && this.drillReady && !this.sessionFinished,
       canStartCase:
+        this.mode === 'step' &&
+        !this.sessionFinished &&
         !this.opening &&
         !item &&
         !this.pending.length &&
@@ -510,13 +689,20 @@ export class RefereeMatch {
       pendingDecisions: this.pending.length,
       opening: this.opening ? this.meeting.snapshot() : null,
       blueAttackDirection: this.match.blueAttackDirection,
-      decisionTitle: item?.definition.title ?? '',
+      decisionTitle:
+        this.mode === 'continuous' && !this.feedback && !item?.hintLevel
+          ? 'Watch the match'
+          : (item?.definition.title ?? ''),
       assisted: this.assistedCount,
-      help: this.help(),
+      help:
+        this.mode === 'continuous' && !item?.hintLevel && !this.feedback
+          ? null
+          : this.help(),
       resolving: this.resolving !== null,
       canReplayLast: Boolean(this.recorder.last),
       lastSituationTitle: this.recorder.last?.title ?? '',
       canResumeEvidence: Boolean(
+        !this.sessionFinished &&
         item &&
         !item.natural &&
         this.phase === 'decision' &&
@@ -530,6 +716,7 @@ export class RefereeMatch {
 
   /** Explicit incident selection also powers the labelled practice-topic selector. */
   beginCase(definition: RefereeCase, variant = this.bag.variant()) {
+    if (this.sessionFinished || this.mode === 'continuous') return false;
     if (
       this.opening ||
       this.active ||
@@ -539,6 +726,7 @@ export class RefereeMatch {
       return false;
     this.damage = null;
     this.manualHold = false;
+    this.userPaused = false;
     this.drillReady = false;
     this.fixtureEnded = false;
     this.outRobots.clear();
@@ -605,9 +793,15 @@ export class RefereeMatch {
   }
 
   nextCase() {
+    if (this.mode === 'continuous' || this.sessionFinished) return false;
     if (this.active || Object.keys(this.bench).length || this.kickoffDue)
       return false;
-    return this.beginCase(this.bag.next());
+    for (let i = 0; i < REFEREE_CASES.length * 2; i++) {
+      const next = this.bag.next();
+      if (this.topics.includes(trainingTopic(next)))
+        return this.beginCase(next);
+    }
+    return false;
   }
 
   /** New layouts are always an explicit user operation. */
@@ -643,7 +837,9 @@ export class RefereeMatch {
   }
 
   resumeEvidence() {
+    if (this.sessionFinished) return false;
     if (!this.snapshot().canResumeEvidence) return false;
+    this.userPaused = false;
     this.manualHold = false;
     this.phase =
       this.active &&
@@ -655,7 +851,22 @@ export class RefereeMatch {
   }
 
   private beginLive(definition: RefereeCase) {
-    const key = this.incidentKey(definition, unchanged);
+    const discrete =
+      this.mode === 'continuous' &&
+      (definition.id === 'live-dribbler' ||
+        definition.steps[0]?.some((c) =>
+          ['goal', 'no-goal'].includes(c.action),
+        ));
+    const key =
+      this.incidentKey(definition, unchanged) +
+      (discrete ? `:${this.serial + 1}` : '');
+    if (this.mode === 'continuous') {
+      const previous = this.observations.get(key);
+      if (previous) {
+        previous.lastSeen = this.clock;
+        return;
+      }
+    }
     if (
       [this.active, ...this.pending].some(
         (item) =>
@@ -684,10 +895,21 @@ export class RefereeMatch {
       replay: null,
       key,
       initial: clonePoses(this.match.state.actors),
+      observedAt: this.clock,
+      lastSeen: this.clock,
+      scoreNeutral: definition.id === 'live-dribbler',
     };
     this.noteOut(incident);
     this.capture();
     incident.replay = this.recorder.seal(definition.title, definition.facts);
+    if (this.mode === 'continuous') {
+      this.observations.set(key, incident);
+      if (!this.active || (this.active.finished && this.phase !== 'feedback')) {
+        this.active = incident;
+        this.phase = 'decision';
+      } else this.pending.push(incident);
+      return;
+    }
     if (this.active && !this.active.finished) {
       if (
         (incident.stopsPlay && !this.active.stopsPlay) ||
@@ -744,6 +966,14 @@ export class RefereeMatch {
   step() {
     this.resolveAssistedSteps();
     if (!this.canAdvance) return;
+    this.trainingElapsed = Math.min(
+      this.duration,
+      this.trainingElapsed + MATCH_STEP,
+    );
+    if (this.trainingElapsed + 1e-8 >= this.duration) {
+      this.endSession();
+      return;
+    }
     if (this.phase === 'evidence' && this.active && !this.active.natural) {
       const item = this.active;
       const duration = evidenceDuration(item.definition);
@@ -757,6 +987,7 @@ export class RefereeMatch {
       if (item.time >= duration) {
         item.initial = clonePoses(this.match.state.actors);
         this.saveSituation(item);
+        item.observedAt = this.clock;
         this.phase = 'decision';
         this.resolveAssistedSteps();
       }
@@ -810,6 +1041,7 @@ export class RefereeMatch {
       return;
     }
     if (this.detectLiveIncident()) return;
+    if (this.mode === 'continuous') this.match.state.pendingEvent = null;
     this.match.releaseReferee();
     const disabledRobots: string[] = [];
     if (this.damage && !this.damage.removed)
@@ -823,11 +1055,30 @@ export class RefereeMatch {
           transformId(id, this.active!.variant),
         ),
       );
+    const directed =
+      this.mode === 'continuous'
+        ? this.director.step(
+            this.match,
+            this.damage && !this.damage.removed ? this.damage.robot : null,
+          )
+        : null;
+    if (directed?.damage) {
+      const robot = directed.damage;
+      this.damage = {
+        id: `${this.seed}:${++this.damageSerial}`,
+        robot,
+        position: { ...this.match.state.actors[robot] },
+        removed: false,
+      };
+      disabledRobots.push(robot);
+    }
     this.match.step({
       controls: { blue: 'ai', yellow: 'ai' },
       selectedRobot: 'blue-1',
       duration: Number.MAX_SAFE_INTEGER,
       referee: true,
+      observeReferee: this.mode === 'continuous',
+      robotCommands: directed?.commands,
       disabledRobots,
     });
     if ((this.heights.ball ?? 0.022) > 0.022)
@@ -859,12 +1110,38 @@ export class RefereeMatch {
       }
     }
     if (this.detectLiveIncident()) return;
+    if (this.mode === 'continuous') {
+      this.match.state.pendingEvent = null;
+      this.ageObservations();
+    }
     this.resolveAssistedSteps();
     this.untilIncident -= MATCH_STEP;
     if (this.untilIncident <= 0) this.drillReady = true;
   }
 
   private detectLiveIncident() {
+    if (this.mode === 'continuous' && this.match.stationarySeconds >= 1) {
+      for (const item of this.observations.values())
+        if (
+          trainingTopic(item.definition) === 'progress' &&
+          !item.progressResumed
+        )
+          item.lastSeen = this.clock;
+    }
+    if (
+      this.mode === 'continuous' &&
+      this.damage &&
+      !this.damage.removed &&
+      this.match.state.actors[this.damage.robot]
+    ) {
+      this.beginLive(
+        this.liveDefinition(
+          'damaged',
+          `${robotName(this.damage.robot)} has stopped and is visibly damaged.`,
+          [[{ action: 'damaged', target: this.damage.robot }]],
+        ),
+      );
+    }
     const pending = this.match.state.pendingEvent;
     const boundaries = MATCH_ROBOTS.filter((r) => {
       const p = this.match.state.actors[r.id];
@@ -877,7 +1154,6 @@ export class RefereeMatch {
           ))
       );
     });
-    const boundary = boundaries[0];
     if (pending) {
       const scoringOffender =
         pending.kind === 'goal'
@@ -967,10 +1243,11 @@ export class RefereeMatch {
             'The live ball has remained within a small area for several seconds. Assess the lack of progress and give a count.',
           ),
         );
+      if (this.mode === 'continuous') this.match.state.pendingEvent = null;
       this.syncMotion();
       return this.motionHeld;
     }
-    if (boundary) {
+    for (const boundary of boundaries) {
       const fullyInside = [-1, 1].some((end) =>
         robotPenaltyOverlap(
           this.match.state.actors[boundary.id],
@@ -989,7 +1266,7 @@ export class RefereeMatch {
         ),
       );
       this.syncMotion();
-      return this.motionHeld;
+      if (this.motionHeld) return true;
     }
     const contact = this.contactDefinition();
     const contactKey = contact
@@ -1005,6 +1282,11 @@ export class RefereeMatch {
   }
 
   whistle() {
+    if (this.sessionFinished) return;
+    if (this.mode === 'continuous') {
+      this.pauseForDecision();
+      return;
+    }
     if (this.opening) return;
     if (this.phase === 'feedback') return;
     this.manualHold = true;
@@ -1091,6 +1373,7 @@ export class RefereeMatch {
   }
 
   replay() {
+    if (this.sessionFinished) return false;
     if (
       !this.active ||
       this.active.natural ||
@@ -1266,6 +1549,7 @@ export class RefereeMatch {
   }
 
   requestHint(answer = false) {
+    if (this.sessionFinished) return;
     if (!this.active || this.active.finished) return false;
     this.active.assisted = true;
     this.active.hintLevel = answer ? 3 : Math.min(3, this.active.hintLevel + 1);
@@ -1274,6 +1558,7 @@ export class RefereeMatch {
 
   /** Help uses exactly the same adjudication and penalties as manual calls. */
   resolveForMe() {
+    if (this.sessionFinished) return false;
     if (!this.active || this.active.finished) return false;
     this.requestHint(true);
     this.resolving = this.active.number;
@@ -1363,9 +1648,61 @@ export class RefereeMatch {
   }
 
   submit(key: string, submitted: RefereeCall): boolean {
+    if (this.sessionFinished) return false;
     if (this.opening && this.meeting.stage !== 'ready') return false;
     if (key !== this.decisionKey || this.phase === 'feedback') return false;
+    if (this.mode === 'continuous' && submitted.action === 'pause') {
+      this.pauseForDecision();
+      return true;
+    }
     this.refreshProgress();
+    // Counting is an observational judgment. One sustained second of near-static
+    // play is enough to start observing; placement still requires the full count.
+    if (
+      submitted.action === 'count' &&
+      this.match.stationarySeconds >= 1 - 1e-8 &&
+      this.countFor === null &&
+      !this.countCompleted
+    ) {
+      this.beginLive(
+        this.liveDefinition(
+          'deadlock',
+          'The ball has made very little progress. Observe a visible count before deciding on placement.',
+        ),
+      );
+    }
+    if (this.mode === 'continuous') {
+      const original = this.active;
+      const candidates = [original, ...this.pending].filter(
+        (x): x is ActiveIncident => Boolean(x && !x.finished),
+      );
+      const chosen = candidates.find((item) => {
+        this.active = item;
+        return this.expected().some(
+          (call) =>
+            call.action === submitted.action &&
+            (!call.target || call.target === submitted.target),
+        );
+      });
+      this.active = original;
+      if (chosen && chosen !== original) {
+        if (this.countFor !== null || this.countCompleted) {
+          this.countFor = null;
+          this.countCompleted = false;
+          this.countAnchor = null;
+          if (original) original.step = 0;
+        }
+        this.pending = this.pending.filter((x) => x !== chosen);
+        if (original && !original.finished) this.pending.unshift(original);
+        this.active = chosen;
+        if (chosen.replay) this.recorder.last = chosen.replay;
+      }
+      if (['resume', 'play-on'].includes(submitted.action) && !chosen) {
+        // Resuming observation makes no claim about unnoticed incidents.
+        this.resumeMotion();
+        return true;
+      }
+    }
     // Return requests can be judged directly from the bench during live play.
     if (
       !this.active &&
@@ -1398,7 +1735,8 @@ export class RefereeMatch {
             [[{ action: 'play-on' }, { action: 'resume' }]],
           ),
       );
-    const item = this.active!;
+    const item = this.active;
+    if (!item) return false;
     const premature =
       !item.natural && item.time + 1e-8 < evidenceDuration(item.definition);
     if (
@@ -1441,9 +1779,45 @@ export class RefereeMatch {
           : 'incorrect';
     let effect = 'No match change applied. Review the evidence and try again.';
     if (correct) {
+      if (
+        ['count', 'play-on', 'resume', 'start', 'neutral'].includes(
+          submitted.action,
+        )
+      )
+        this.userPaused = false;
       effect = this.apply({ ...submitted, action: match!.action });
       item.initial = clonePoses(this.match.state.actors);
-    } else item.mistakes = true;
+    } else {
+      item.mistakes = true;
+      if (item.scoreNeutral) {
+        item.scoreNeutral = false;
+        item.scoreTopic =
+          submitted.action === 'out'
+            ? 'out'
+            : submitted.action === 'damaged'
+              ? 'damage'
+              : submitted.action === 'multiple'
+                ? 'multiple'
+                : submitted.action === 'pushing'
+                  ? 'pushing'
+                  : ['count', 'lack-progress'].includes(submitted.action)
+                    ? 'progress'
+                    : ['goal', 'no-goal'].includes(submitted.action)
+                      ? 'scoring'
+                      : 'other';
+      }
+      this.assess(item, 'wrong');
+    }
+    if (this.mode === 'continuous') {
+      this.userPaused = false;
+      this.manualHold =
+        !correct ||
+        !['count', 'play-on', 'resume', 'start', 'neutral'].includes(
+          submitted.action,
+        );
+      if (correct && !['count', 'play-on', 'resume'].includes(submitted.action))
+        this.director.cancel();
+    }
     const label =
       REFEREE_ACTIONS.find((action) => action.id === submitted.action)?.label ??
       submitted.action;
@@ -1491,6 +1865,7 @@ export class RefereeMatch {
     const item = this.active;
     if (!item || item.finished) return;
     item.finished = true;
+    this.assess(item, item.mistakes ? 'wrong' : 'correct');
     this.completedCount++;
     if (item.assisted) this.assistedCount++;
     else if (!item.mistakes) this.correctCount++;
@@ -1502,6 +1877,7 @@ export class RefereeMatch {
   }
 
   continue() {
+    if (this.sessionFinished) return;
     if (this.phase !== 'feedback' || !this.active) return;
     if (!this.feedback?.final) {
       this.feedback = null;
@@ -1532,6 +1908,23 @@ export class RefereeMatch {
 
   private remove(id: string, reason: string, inspection = false) {
     if (!this.match.removeRobot(id)) return 'Robot is already off the field.';
+    if (this.mode === 'continuous') {
+      for (const item of this.observations.values()) {
+        if (item === this.active || item.finished) continue;
+        const calls = item.definition.steps.slice(item.step).flat();
+        if (
+          calls.length &&
+          calls.every(
+            (call) =>
+              ['out', 'damaged'].includes(call.action) && call.target === id,
+          )
+        ) {
+          this.assess(item, item.mistakes ? 'wrong' : 'correct');
+          item.finished = true;
+          this.pending = this.pending.filter((pending) => pending !== item);
+        }
+      }
+    }
     this.outRobots.delete(id);
     if (this.damage?.robot === id)
       this.damage = { ...this.damage, removed: true };

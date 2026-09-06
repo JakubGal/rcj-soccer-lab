@@ -2,6 +2,12 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
+  TRAINING_TOPICS,
+  trainingTopic,
+  type TrainingMode,
+  type TrainingTopic,
+} from '@/lib/simulator/referee-training';
+import {
   ArrowLeft,
   BookOpen,
   Check,
@@ -68,7 +74,17 @@ export function RefereePlay({
   onOpenRule?: (sectionId: string) => void;
 }) {
   const [session, setSession] = useState(
-    () => new RefereeMatch(randomSeed(), { preMatch: true, robotVisual }),
+    () =>
+      new RefereeMatch(randomSeed(), {
+        preMatch: true,
+        robotVisual,
+        duration: 180,
+      }),
+  );
+  const [mode, setMode] = useState<TrainingMode>('step');
+  const [duration, setDuration] = useState(180);
+  const [trainingTopics, setTrainingTopics] = useState<TrainingTopic[]>(
+    TRAINING_TOPICS.map((t) => t.id),
   );
   const [frame, setFrame] = useState(() => session.snapshot());
   const [running, setRunning] = useState(false);
@@ -107,7 +123,7 @@ export function RefereePlay({
       setRunning(false);
       return;
     }
-    session.match.holdMotion();
+    session.pauseForDecision();
     setRunning(false);
     sync();
   }, [session, sync, replay]);
@@ -125,21 +141,27 @@ export function RefereePlay({
       pause();
       return;
     }
-    if (!session.canAdvance) return;
     session.resumeMotion();
-    setRunning(true);
+    setRunning(session.canAdvance);
     sync();
   }, [ready, running, pause, session, sync]);
   const reset = useCallback(
     (value: number) => {
       setReplay(null);
-      const next = new RefereeMatch(value, { preMatch: true, robotVisual });
+      const next = new RefereeMatch(value, {
+        preMatch: true,
+        robotVisual,
+        mode,
+        duration,
+        topics: trainingTopics,
+      });
       setSession(next);
       setFrame(next.snapshot());
       setSeed(String(value));
+      setTopic('random');
       setRunning(false);
     },
-    [robotVisual],
+    [robotVisual, mode, duration, trainingTopics],
   );
   const whistle = useCallback(() => {
     if (replay) return;
@@ -272,6 +294,7 @@ export function RefereePlay({
   const replayView = replay ? sampleSituation(replay, replayTime) : null;
   const view = replayView ?? { ...frame, ballTrail: session.match.ballTrail() };
   const blocked =
+    frame.sessionFinished ||
     !ready ||
     Boolean(replay) ||
     Boolean(frame.opening) ||
@@ -279,6 +302,8 @@ export function RefereePlay({
     frame.phase === 'feedback';
   const supported =
     frame.feedback && ['correct', 'supported'].includes(frame.feedback.verdict);
+  const revealReplay = frame.trainingMode === 'step' || frame.sessionFinished;
+  const remainingSeconds = Math.ceil(frame.trainingRemaining);
   const actions = REFEREE_ACTIONS.filter(
     (action) =>
       action.id !== 'goal' &&
@@ -289,7 +314,9 @@ export function RefereePlay({
           : ['Restart', 'Field', 'Score'].includes(action.group)),
   );
   const startNext = () => {
-    const definition = REFEREE_CASES.find((item) => item.id === topic);
+    const definition = REFEREE_CASES.find(
+      (item) => item.id === topic && frame.topics.includes(trainingTopic(item)),
+    );
     if (definition ? session.beginCase(definition) : session.nextCase()) {
       sync();
       setRunning(session.canAdvance);
@@ -321,7 +348,13 @@ export function RefereePlay({
           showContactEvidence={false}
           showPenaltyEvidence={frame.penaltyEvidence && !replay}
           ballTrail={view.ballTrail}
-          phaseLabel={replay ? replay.facts : frame.facts}
+          phaseLabel={
+            replay
+              ? revealReplay
+                ? replay.facts
+                : 'Review the recorded play and make your own assessment.'
+              : frame.facts
+          }
           robotVisual={robotVisual}
           selectedActorId={view.actors[target] ? target : null}
           onReady={onReady}
@@ -357,17 +390,19 @@ export function RefereePlay({
             <Timer className="size-3.5" />
             {clock(view.elapsed)}
             <small>
-              {replay
-                ? 'REPLAY'
-                : moving && frame.phase !== 'evidence'
-                  ? 'AI vs AI'
-                  : frame.phase === 'decision'
-                    ? 'YOUR CALL'
-                    : frame.phase === 'feedback'
-                      ? 'REVIEW'
-                      : !moving
-                        ? 'STOPPED'
-                        : 'PRACTICE'}
+              {frame.sessionFinished && !replay
+                ? 'FULL TIME'
+                : replay
+                  ? 'REPLAY'
+                  : moving && frame.phase !== 'evidence'
+                    ? 'AI vs AI'
+                    : frame.phase === 'decision'
+                      ? 'YOUR CALL'
+                      : frame.phase === 'feedback'
+                        ? 'REVIEW'
+                        : !moving
+                          ? 'STOPPED'
+                          : 'PRACTICE'}
             </small>
           </div>
           <span className="text-amber-300">
@@ -407,20 +442,38 @@ export function RefereePlay({
             <span>
               <Flag className="size-3.5" />
               {replay
-                ? `Replay · ${replay.title}`
-                : frame.phase === 'live' && frame.kickoffDue
-                  ? 'Awaiting kickoff'
-                  : frame.phase === 'live'
-                    ? 'Live passage of play'
-                    : frame.phase === 'evidence'
-                      ? 'Watch the evidence'
-                      : frame.phase === 'feedback'
-                        ? 'Decision review'
-                        : frame.motionHeld
-                          ? 'Your decision · training paused'
-                          : 'Your decision · play continues'}
+                ? revealReplay
+                  ? `Replay · ${replay.title}`
+                  : 'Replay recent play'
+                : frame.sessionFinished
+                  ? 'Match complete'
+                  : frame.trainingMode === 'continuous' &&
+                      !frame.feedback &&
+                      !frame.kickoffDue
+                    ? frame.motionHeld
+                      ? 'Paused for your decision'
+                      : 'Continuous observation'
+                    : frame.phase === 'live' && frame.kickoffDue
+                      ? 'Awaiting kickoff'
+                      : frame.phase === 'live'
+                        ? 'Live passage of play'
+                        : frame.phase === 'evidence'
+                          ? 'Watch the evidence'
+                          : frame.phase === 'feedback'
+                            ? 'Decision review'
+                            : frame.motionHeld
+                              ? 'Your decision · training paused'
+                              : 'Your decision · play continues'}
             </span>
-            <p>{replay ? replay.facts : frame.facts}</p>
+            <p>
+              {replay
+                ? revealReplay
+                  ? replay.facts
+                  : 'Review the recorded play and make your own assessment.'
+                : frame.sessionFinished
+                  ? 'Review your referee results, replay the final passage, or start a new match from Match setup.'
+                  : frame.facts}
+            </p>
             {frame.penaltyEvidence && !replay && (
               <div
                 className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs"
@@ -515,14 +568,27 @@ export function RefereePlay({
           ) : (
             <>
               <Button
-                disabled={!ready || !frame.canAdvance}
+                disabled={
+                  !ready ||
+                  frame.sessionFinished ||
+                  Boolean(frame.opening) ||
+                  (!frame.canAdvance && !frame.userPaused)
+                }
                 onClick={() => {
                   toggleRunning();
                   field.current?.focus({ preventScroll: true });
                 }}
               >
                 {running ? <Pause /> : <Play />}
-                {!frame.canAdvance ? 'Stopped' : running ? 'Pause' : 'Run'}
+                {frame.sessionFinished
+                  ? 'Finished'
+                  : running
+                    ? 'Pause for decision'
+                    : frame.userPaused
+                      ? 'Resume observation'
+                      : !frame.canAdvance
+                        ? 'Stopped'
+                        : 'Run'}
               </Button>
               <Button variant="outline" disabled={blocked} onClick={whistle}>
                 <Flag />
@@ -567,20 +633,178 @@ export function RefereePlay({
           <div className="referee-stats">
             <span>
               <strong>
-                {frame.correct} / {frame.assessed - frame.assisted}
+                {frame.report.correct} / {frame.report.assessed}
               </strong>
-              First try, without hints
+              Correct / assessed ·{' '}
+              {frame.report.accuracy === null
+                ? '—'
+                : `${frame.report.accuracy}%`}
             </span>
             <span>
               <strong>
-                {frame.coverage.length} / {REFEREE_CASES.length}
+                {frame.trainingMode === 'continuous'
+                  ? `${frame.report.topics.filter((t) => t.assessed || t.assisted).length} / ${frame.topics.length}`
+                  : `${frame.coverage.length} / ${REFEREE_CASES.filter((item) => frame.topics.includes(trainingTopic(item))).length}`}
               </strong>
-              Different situations
+              {frame.trainingMode === 'continuous'
+                ? 'Topics assessed'
+                : 'Different situations'}
             </span>
           </div>
           <p className="referee-assistance-note">
-            {frame.assisted} assisted · hints are unlimited
+            {frame.report.wrong} wrong · {frame.report.missed} missed ·{' '}
+            {frame.report.assisted} assisted
           </p>
+          <details
+            className="referee-details referee-session-setup"
+            open={Boolean(frame.opening)}
+          >
+            <summary>
+              Match setup ·{' '}
+              {frame.trainingMode === 'continuous' ? 'Continuous' : 'Step mode'}
+            </summary>
+            <label htmlFor="referee-mode">Refereeing mode</label>
+            <NativeSelect
+              id="referee-mode"
+              value={mode}
+              onChange={(e) => setMode(e.target.value as TrainingMode)}
+            >
+              <NativeSelectOption value="step">
+                Step · pause at each decision
+              </NativeSelectOption>
+              <NativeSelectOption value="continuous">
+                Continuous · you decide when to stop
+              </NativeSelectOption>
+            </NativeSelect>
+            <label htmlFor="referee-duration">
+              Match length · simulated play time
+            </label>
+            <NativeSelect
+              id="referee-duration"
+              value={duration}
+              onChange={(e) => setDuration(Number(e.target.value))}
+            >
+              <NativeSelectOption value={60}>1 minute</NativeSelectOption>
+              <NativeSelectOption value={180}>3 minutes</NativeSelectOption>
+              <NativeSelectOption value={300}>5 minutes</NativeSelectOption>
+              <NativeSelectOption value={600}>10 minutes</NativeSelectOption>
+            </NativeSelect>
+            <fieldset className="my-3 grid gap-2">
+              <legend className="mb-2 font-semibold">
+                Situations to train
+              </legend>
+              {TRAINING_TOPICS.map((t) => (
+                <label key={t.id} className="flex items-center gap-2">
+                  <input
+                    type="checkbox"
+                    checked={trainingTopics.includes(t.id)}
+                    onChange={(e) =>
+                      setTrainingTopics((current) =>
+                        e.target.checked
+                          ? [...current, t.id]
+                          : current.filter((id) => id !== t.id),
+                      )
+                    }
+                  />
+                  {t.label}
+                </label>
+              ))}
+            </fieldset>
+            <p>
+              {mode === 'continuous'
+                ? 'Selected faults develop during AI play. Other natural incidents can still happen, but only your selected topics affect your score. Restarts and returns follow actual match events; administrative exercises remain in Step mode.'
+                : 'The next practice drill comes from your selected topics. Each decision pauses in place.'}
+            </p>
+            <Button
+              disabled={!trainingTopics.length}
+              onClick={() => reset(randomSeed())}
+            >
+              <Shuffle /> Start new match with these settings
+            </Button>
+            {!trainingTopics.length && <p>Select at least one topic.</p>}
+          </details>
+          <div className="my-3 flex flex-wrap items-center justify-between gap-2">
+            <strong>
+              {Math.floor(remainingSeconds / 60)}:
+              {String(remainingSeconds % 60).padStart(2, '0')} remaining
+            </strong>
+            <Button
+              size="sm"
+              variant="outline"
+              disabled={frame.sessionFinished || Boolean(frame.opening)}
+              onClick={() => {
+                session.endSession();
+                setRunning(false);
+                sync();
+              }}
+            >
+              End match & see results
+            </Button>
+          </div>
+          {frame.sessionFinished && (
+            <section
+              className="referee-feedback referee-feedback-good"
+              aria-label="Referee match results"
+            >
+              <h2>
+                Match complete ·{' '}
+                {frame.report.accuracy === null
+                  ? 'No unaided decisions yet'
+                  : `${frame.report.accuracy}% accuracy`}
+              </h2>
+              <p>
+                {frame.report.correct} correct · {frame.report.wrong} wrong ·{' '}
+                {frame.report.missed} missed · {frame.report.assisted} assisted
+              </p>
+              <p>
+                Each situation counts once. Accuracy = correct ÷ (correct +
+                wrong + missed). Hints are unlimited; assisted situations are
+                listed separately.
+              </p>
+              <div className="overflow-x-auto">
+                <table className="w-full text-left text-xs [&_th]:px-1 [&_td]:px-1">
+                  <thead>
+                    <tr>
+                      <th className="w-[42%] py-2">Situation</th>
+                      <th title="Correct decisions">OK</th>
+                      <th>Wrong</th>
+                      <th title="Missed decisions">Miss</th>
+                      <th>Help</th>
+                      <th>%</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {frame.report.topics
+                      .filter((t) => frame.topics.includes(t.id))
+                      .map((t) => (
+                        <tr key={t.id}>
+                          <th className="py-2 pr-2 font-normal">{t.label}</th>
+                          <td>{t.correct}</td>
+                          <td>{t.wrong}</td>
+                          <td>{t.missed}</td>
+                          <td>{t.assisted}</td>
+                          <td>{t.accuracy ?? '—'}</td>
+                        </tr>
+                      ))}
+                  </tbody>
+                </table>
+              </div>
+              <p>
+                Unseen situations have no percentage. A last-second incident
+                without enough reaction time is excluded. Reasonable pushing /
+                play-on judgments are supported.
+              </p>
+            </section>
+          )}
+          {frame.trainingMode === 'continuous' &&
+            !frame.opening &&
+            !frame.sessionFinished && (
+              <p className="referee-assistance-note">
+                Use Pause or Space to think; the clock and all motion freeze.
+                You can start a visible count after one second of sustained
+                little ball movement. Placement still needs the full count.
+              </p>
+            )}
           {!frame.opening && (
             <p className="referee-end-note">
               Blue → {frame.blueAttackDirection === 1 ? 'yellow' : 'blue'} goal
@@ -605,7 +829,24 @@ export function RefereePlay({
             <RotateCcw /> Replay last situation
           </Button>
 
-          {frame.help && !frame.opening && (
+          {frame.trainingMode === 'continuous' &&
+            !frame.help &&
+            !frame.opening &&
+            !frame.sessionFinished && (
+              <Button
+                variant="outline"
+                onClick={() => {
+                  session.pauseForDecision();
+                  session.whistle();
+                  session.requestHint();
+                  setRunning(false);
+                  sync();
+                }}
+              >
+                <Lightbulb /> Pause & get a hint
+              </Button>
+            )}
+          {frame.help && !frame.opening && !frame.sessionFinished && (
             <section className="referee-help" aria-label="Decision help">
               <div className="referee-help-heading">
                 <Lightbulb className="size-4" />
@@ -746,7 +987,7 @@ export function RefereePlay({
             </section>
           )}
 
-          {frame.feedback && (
+          {frame.feedback && !frame.sessionFinished && (
             <section
               className={cn(
                 'referee-feedback',
@@ -959,107 +1200,111 @@ export function RefereePlay({
             </section>
           )}
 
-          <details className="referee-details">
-            <summary>Practice setup & coverage</summary>
-            <p>
-              The whole field pauses for every referee decision. AI play
-              continues while the next drill is ready. Goals, kickoffs and
-              official interruptions stop the game. Press Start next situation
-              to load a practice layout. Each round includes every drill before
-              repeating, with mirrored layouts and swapped teams. Evidence notes
-              supply facts that motion alone cannot show.
-            </p>
-            <label htmlFor="referee-topic">Next situation</label>
-            <NativeSelect
-              id="referee-topic"
-              value={topic}
-              onChange={(e) => setTopic(e.target.value)}
-            >
-              <NativeSelectOption value="random">
-                Random · full coverage
-              </NativeSelectOption>
-              {REFEREE_CASES.map((item) => (
-                <NativeSelectOption key={item.id} value={item.id}>
-                  {item.title}
+          {frame.trainingMode === 'step' && (
+            <details className="referee-details">
+              <summary>Practice setup & coverage</summary>
+              <p>
+                The whole field pauses for every referee decision. AI play
+                continues while the next drill is ready. Goals, kickoffs and
+                official interruptions stop the game. Press Start next situation
+                to load a practice layout. Each round includes every drill
+                before repeating, with mirrored layouts and swapped teams.
+                Evidence notes supply facts that motion alone cannot show.
+              </p>
+              <label htmlFor="referee-topic">Next situation</label>
+              <NativeSelect
+                id="referee-topic"
+                value={topic}
+                onChange={(e) => setTopic(e.target.value)}
+              >
+                <NativeSelectOption value="random">
+                  Random · full coverage
                 </NativeSelectOption>
-              ))}
-            </NativeSelect>
-            <Button
-              variant="outline"
-              disabled={!canNext || !ready}
-              onClick={startNext}
-            >
-              <Shuffle />
-              Next situation
-            </Button>
-            {!canNext && (
-              <small>
-                Finish the current decision and return waiting robots first.
-              </small>
-            )}
-            <div className="referee-seed">
-              <label htmlFor="referee-seed">Repeatable shuffle seed</label>
-              <input
-                id="referee-seed"
-                type="number"
-                min="1"
-                max="4294967295"
-                value={seed}
-                onChange={(e) => setSeed(e.target.value)}
-              />
+                {REFEREE_CASES.filter((item) =>
+                  frame.topics.includes(trainingTopic(item)),
+                ).map((item) => (
+                  <NativeSelectOption key={item.id} value={item.id}>
+                    {item.title}
+                  </NativeSelectOption>
+                ))}
+              </NativeSelect>
               <Button
-                size="sm"
                 variant="outline"
-                onClick={() =>
-                  reset(
-                    Math.min(
-                      4294967295,
-                      Math.max(1, Math.floor(Number(seed) || 1)),
-                    ),
-                  )
-                }
+                disabled={!canNext || !ready}
+                onClick={startNext}
               >
-                Restart seed
+                <Shuffle />
+                Next situation
               </Button>
-              <Button
-                size="sm"
-                variant="outline"
-                onClick={() => reset(randomSeed())}
-              >
-                New shuffle
-              </Button>
-            </div>
-            <div className="referee-coverage">
-              {REFEREE_FAMILIES.map((family) => {
-                const all = REFEREE_CASES.filter(
-                  (item) => item.family === family,
-                );
-                const seen = all.filter((item) =>
-                  frame.coverage.includes(item.id),
-                ).length;
-                return (
-                  <div key={family}>
-                    <span>
-                      {family}
-                      <small>
-                        {seen} / {all.length}
-                      </small>
-                    </span>
-                    <Progress
-                      value={(seen / all.length) * 100}
-                      aria-label={`${family} coverage`}
-                    />
-                  </div>
-                );
-              })}
-            </div>
-            <p>
-              This trainer covers the main Soccer match situations, with
-              inspection prompts where needed. Physical judgment, event
-              amendments and organizer decisions still require the official
-              rules. It is not an automatic referee for real competitions.
-            </p>
-          </details>
+              {!canNext && (
+                <small>
+                  Finish the current decision and return waiting robots first.
+                </small>
+              )}
+              <div className="referee-seed">
+                <label htmlFor="referee-seed">Repeatable shuffle seed</label>
+                <input
+                  id="referee-seed"
+                  type="number"
+                  min="1"
+                  max="4294967295"
+                  value={seed}
+                  onChange={(e) => setSeed(e.target.value)}
+                />
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() =>
+                    reset(
+                      Math.min(
+                        4294967295,
+                        Math.max(1, Math.floor(Number(seed) || 1)),
+                      ),
+                    )
+                  }
+                >
+                  Restart seed
+                </Button>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => reset(randomSeed())}
+                >
+                  New shuffle
+                </Button>
+              </div>
+              <div className="referee-coverage">
+                {REFEREE_FAMILIES.map((family) => {
+                  const all = REFEREE_CASES.filter(
+                    (item) => item.family === family,
+                  );
+                  const seen = all.filter((item) =>
+                    frame.coverage.includes(item.id),
+                  ).length;
+                  return (
+                    <div key={family}>
+                      <span>
+                        {family}
+                        <small>
+                          {seen} / {all.length}
+                        </small>
+                      </span>
+                      <Progress
+                        value={(seen / all.length) * 100}
+                        aria-label={`${family} coverage`}
+                      />
+                    </div>
+                  );
+                })}
+              </div>
+              <p>
+                This trainer covers the main Soccer match situations, with
+                inspection prompts where needed. Physical judgment, event
+                amendments and organizer decisions still require the official
+                rules. It is not an automatic referee for real competitions.
+              </p>
+            </details>
+          )}
           <details className="referee-details">
             <summary>Recent calls ({frame.history.length})</summary>
             {!frame.history.length && <p>Your decisions will appear here.</p>}

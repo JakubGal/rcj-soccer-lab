@@ -66,6 +66,15 @@ const { SituationRecorder, sampleSituation } =
 const { KickoffMeeting, randomKickoff } =
   await import('../lib/simulator/kickoff.ts');
 const variant = { swap: false, reflect: false };
+function continuous(options = {}) {
+  const session = new RefereeMatch(73, {
+    mode: 'continuous',
+    duration: 180,
+    ...options,
+  });
+  session.director.delay = Infinity; // Isolate observed incidents from the fault scheduler.
+  return session;
+}
 const definition = (id) => REFEREE_CASES.find((item) => item.id === id);
 const distance = (a, b) => Math.hypot(a.x - b.x, a.z - b.z);
 function advance(session, seconds) {
@@ -144,6 +153,356 @@ function deliverGoal(session, team) {
   session.match.state.phase = 'referee';
   session.detectLiveIncident();
 }
+
+test('continuous incidents never automatically freeze actors or reveal the answer', () => {
+  for (const id of ['wall', 'full-area', 'multiple', 'pushing']) {
+    const session = continuous();
+    session.match.place(
+      caseScene(
+        REFEREE_CASES.find((x) => x.id === id),
+        999,
+        variant,
+      ).poses,
+    );
+    session.detectLiveIncident();
+    assert.equal(session.motionHeld, false, id);
+    assert.equal(session.snapshot().help, null);
+    assert.equal(session.snapshot().penaltyEvidence, false);
+    assert.match(session.snapshot().facts, /Observe play/);
+    const before = session.snapshot();
+    advance(session, 0.4);
+    assert.ok(session.clock > before.simulationTime, id);
+    assert.notDeepEqual(session.snapshot().actors, before.actors, id);
+    assert.equal(session.match.state.phase, 'playing', id);
+  }
+});
+
+test('continuous physics observes one real goal and a stall without auto-stopping or scoring', () => {
+  const session = continuous();
+  session.match.place({ ball: { x: 0, z: FIELD.goalMouthZ - 0.04, yaw: 0 } });
+  session.match.state.ballVelocity = { x: 0, z: 2 };
+  advance(session, 2);
+  assert.equal(session.motionHeld, false);
+  assert.equal(session.match.state.phase, 'playing');
+  assert.deepEqual(session.snapshot().score, { blue: 0, yellow: 0 });
+  assert.equal(
+    [...session.observations.values()].filter(
+      (x) => x.definition.id === 'live-goal',
+    ).length,
+    1,
+  );
+  session.match.place({ ball: { x: 0, z: 0, yaw: 0 } });
+  advance(session, 9);
+  assert.equal(session.motionHeld, false);
+  assert.equal(session.match.state.phase, 'playing');
+  assert.ok(session.match.stationarySeconds > 8);
+});
+
+test('continuous pause freezes physics, clock, count and reaction windows until explicit resume', () => {
+  const session = continuous();
+  session.match.state.ballVelocity = { x: 0.1, z: 0.3 };
+  const poses = structuredClone(session.match.state.actors);
+  session.pauseForDecision();
+  const before = session.snapshot();
+  advance(session, 20);
+  assert.deepEqual(session.snapshot(), before);
+  assert.deepEqual(session.match.state.ballVelocity, { x: 0, z: 0 });
+  session.resumeMotion();
+  assert.deepEqual(session.match.state.actors, poses);
+  assert.deepEqual(session.match.state.ballVelocity, { x: 0.1, z: 0.3 });
+  advance(session, 0.1);
+  assert.ok(session.clock > 0);
+});
+
+test('out-and-back remains actionable, is missed once, and a late correction earns no extra credit', () => {
+  const session = continuous({ topics: ['out'] });
+  session.match.state.actors['blue-1'] = { x: 0.81, z: -0.2, yaw: 0 };
+  session.detectLiveIncident();
+  session.match.restart('neutral');
+  advance(session, 9);
+  assert.equal(session.snapshot().report.missed, 1);
+  correct(session, 'out', 'blue-1');
+  assert.equal(session.snapshot().report.missed, 1);
+  assert.equal(session.snapshot().report.correct, 0);
+  session.continue();
+  advance(session, 3);
+  assert.equal(session.snapshot().report.assessed, 1);
+});
+
+test('simultaneous out incidents can be called in either order and retries count once', () => {
+  const session = continuous({ topics: ['out'] });
+  session.match.state.actors['blue-1'] = { x: 0.81, z: -0.2, yaw: 0 };
+  session.match.state.actors['yellow-1'] = { x: 0.81, z: 0.2, yaw: 0 };
+  session.detectLiveIncident();
+  correct(session, 'out', 'yellow-1');
+  assert.ok(session.bench['yellow-1']);
+  session.continue();
+  const staleKey = session.decisionKey;
+  assert.equal(submit(session, 'out', 'blue-2').verdict, 'wrong-target');
+  session.continue();
+  correct(session, 'out', 'blue-1');
+  assert.equal(
+    session.submit(staleKey, { action: 'out', target: 'blue-1' }),
+    false,
+  );
+  assert.equal(session.snapshot().report.correct, 1);
+  assert.equal(session.snapshot().report.wrong, 1);
+  assert.equal(session.snapshot().report.assessed, 2);
+});
+
+test('one- and two-second early counts are accepted, pause is fair, and movement cancels without a miss', () => {
+  for (const early of [1, 2]) {
+    const session = continuous({ topics: ['progress'] });
+    session.match.place({ ball: { x: 0, z: 0, yaw: 0 } });
+    advance(session, early);
+    session.pauseForDecision();
+    correct(session, 'count');
+    session.continue();
+    advance(session, 0.5);
+    session.pauseForDecision();
+    const before = session.snapshot();
+    advance(session, 10);
+    assert.deepEqual(session.snapshot(), before);
+    session.resumeMotion();
+    session.match.state.ballVelocity = { x: 1, z: 0 };
+    advance(session, 0.25);
+    assert.equal(session.snapshot().count, null);
+    advance(session, 4);
+    assert.equal(session.snapshot().report.missed, 0);
+    assert.equal(session.snapshot().report.wrong, 0);
+  }
+});
+
+test('early placement remains wrong; a count must finish before the ball is relocated', () => {
+  const session = continuous({ topics: ['progress'] });
+  session.match.place({ ball: { x: 0, z: 0, yaw: 0 } });
+  advance(session, 1.2);
+  correct(session, 'count');
+  session.continue();
+  const ball = { ...session.match.state.actors.ball };
+  assert.equal(submit(session, 'lack-progress').verdict, 'premature');
+  assert.deepEqual(session.match.state.actors.ball, ball);
+  session.continue();
+  session.resumeMotion();
+  advance(session, 3.1);
+  correct(session, 'lack-progress');
+  assert.equal(session.snapshot().report.wrong, 1);
+  assert.equal(session.snapshot().report.correct, 0);
+});
+
+test('ordinary pauses and resume signals never manufacture referee points', () => {
+  const session = continuous();
+  for (let i = 0; i < 10; i++) {
+    session.whistle();
+    session.submit(session.decisionKey, { action: 'resume' });
+  }
+  assert.equal(session.snapshot().report.assessed, 0);
+  assert.equal(session.snapshot().report.assisted, 0);
+});
+
+test('separate false calls do not crash or merge, and repeated goals remain separate occurrences', () => {
+  const session = continuous({ topics: ['out'] });
+  for (let i = 0; i < 2; i++) {
+    submit(session, 'out', 'blue-1');
+    session.continue();
+    correct(session, 'play-on');
+    session.continue();
+  }
+  assert.equal(session.snapshot().report.wrong, 2);
+  const goals = continuous({ topics: ['scoring'] });
+  for (let i = 0; i < 2; i++) {
+    goals.match.state.pendingEvent = { kind: 'goal', team: 'blue' };
+    goals.detectLiveIncident();
+    goals.clock += 9;
+    goals.ageObservations();
+  }
+  assert.equal(goals.snapshot().report.missed, 2);
+});
+
+test('goal adjudication closes old geometry and removing an out robot satisfies its pending removal once', () => {
+  const session = continuous();
+  session.match.place(caseScene(definition('multiple'), 999, variant).poses);
+  session.detectLiveIncident();
+  session.clock += 4;
+  session.match.state.pendingEvent = { kind: 'goal', team: 'blue' };
+  session.detectLiveIncident();
+  correct(session, 'goal', 'blue');
+  session.continue();
+  assert.equal(session.snapshot().pendingDecisions, 0);
+  assert.equal(
+    session.snapshot().report.topics.find((t) => t.id === 'multiple').missed,
+    1,
+  );
+  assert.equal(session.snapshot().canArrangeKickoff, true);
+  session.endSession();
+  const frozen = session.snapshot();
+  assert.equal(session.arrangeKickoff(), false);
+  assert.equal(session.resumeEvidence(), false);
+  assert.equal(session.resolveForMe(), false);
+  assert.equal(session.replay(), false);
+  assert.deepEqual(session.snapshot(), frozen);
+
+  const out = continuous();
+  out.match.state.actors['blue-1'] = { x: 0.81, z: -0.2, yaw: 0 };
+  out.detectLiveIncident();
+  out.match.state.pendingEvent = { kind: 'goal', team: 'blue' };
+  out.detectLiveIncident();
+  correct(out, 'no-goal');
+  out.continue();
+  correct(out, 'out', 'blue-1');
+  out.continue();
+  assert.equal(out.snapshot().pendingDecisions, 0);
+  assert.equal(out.snapshot().report.correct, 2); // goal decision and original robot penalty
+  assert.deepEqual(out.snapshot().score, { blue: 0, yellow: 0 });
+});
+
+test('both modes report first-attempt accuracy and assisted outcomes without retry inflation', () => {
+  for (const id of ['wall', 'damaged']) {
+    const session = prepare(id);
+    const action = id === 'wall' ? 'out' : 'damaged';
+    submit(session, action, 'yellow-1');
+    session.continue();
+    correct(session, action, 'blue-1');
+    session.endSession();
+    assert.equal(session.snapshot().report.wrong, 1);
+    assert.equal(session.snapshot().report.accuracy, 0);
+  }
+  const assisted = continuous({ topics: ['out'] });
+  assisted.match.state.actors['blue-1'] = { x: 0.81, z: -0.2, yaw: 0 };
+  assisted.detectLiveIncident();
+  assisted.requestHint();
+  correct(assisted, 'out', 'blue-1');
+  assisted.endSession();
+  assert.equal(assisted.snapshot().report.assisted, 1);
+  assert.equal(assisted.snapshot().report.accuracy, null);
+  const skipped = prepare('damaged');
+  skipped.endSession();
+  assert.equal(skipped.snapshot().report.missed, 1);
+});
+
+test('observe-only goals still collide with the solid back panel and bounce into play', () => {
+  for (const end of [-1, 1]) {
+    const match = new SoccerMatch();
+    match.place({ ball: { x: 0, z: end * (FIELD.goalMouthZ - 0.04), yaw: 0 } });
+    match.state.ballVelocity = { x: 0, z: end * 2 };
+    let goals = 0,
+      bounced = false;
+    for (let i = 0; i < 180; i++) {
+      match.step({
+        controls: { blue: 'ai', yellow: 'ai' },
+        selectedRobot: 'blue-1',
+        duration: 60,
+        observeReferee: true,
+      });
+      if (match.state.pendingEvent?.kind === 'goal') goals++;
+      assert.ok(
+        match.state.actors.ball.z * end <=
+          FIELD.goalBackContactBallCenterZ + 1e-7,
+      );
+      bounced ||= match.state.ballVelocity.z * end < 0;
+    }
+    assert.equal(goals, 1);
+    assert.ok(bounced);
+  }
+});
+
+test('selected step topics constrain the shuffle; excluded natural incidents do not affect accuracy', () => {
+  const session = new RefereeMatch(42, { topics: ['damage'] });
+  assert.equal(session.nextCase(), true);
+  assert.ok(
+    ['damaged', 'both-damaged', 'damage-exception'].includes(
+      session.active.definition.id,
+    ),
+  );
+  const live = continuous({ topics: ['damage'] });
+  live.match.state.actors['blue-1'] = { x: 0.81, z: -0.2, yaw: 0 };
+  live.detectLiveIncident();
+  correct(live, 'out', 'blue-1');
+  assert.equal(live.snapshot().report.assessed, 0);
+});
+
+test('full time is finite and its report is immutable; last-second incidents are not penalized', () => {
+  const session = continuous({ duration: 1, topics: ['out'] });
+  advance(session, 0.9);
+  session.match.state.actors['blue-1'] = { x: 0.81, z: -0.2, yaw: 0 };
+  session.detectLiveIncident();
+  advance(session, 0.2);
+  assert.equal(session.snapshot().sessionFinished, true);
+  assert.equal(session.snapshot().report.missed, 0);
+  const before = session.snapshot();
+  advance(session, 10);
+  session.endSession();
+  session.requestHint();
+  assert.equal(
+    session.submit(session.decisionKey, { action: 'out', target: 'blue-1' }),
+    false,
+  );
+  assert.deepEqual(session.snapshot(), before);
+});
+
+test('continuous topic faults keep every robot within the normal per-tick movement limit', () => {
+  for (const topic of [
+    'out',
+    'damage',
+    'multiple',
+    'pushing',
+    'progress',
+    'scoring',
+  ]) {
+    const session = new RefereeMatch(17, {
+      mode: 'continuous',
+      topics: [topic],
+      duration: 60,
+    });
+    for (let tick = 0; tick < 2400; tick++) {
+      const before = session.match.snapshot().actors;
+      session.step();
+      for (const robot of MATCH_ROBOTS) {
+        const after = session.match.state.actors[robot.id];
+        assert.ok(
+          distance(before[robot.id], after) <= 0.68 * MATCH_STEP + 1e-7,
+          topic,
+        );
+      }
+      assert.equal(session.motionHeld, false, topic);
+    }
+    if (topic === 'damage')
+      assert.ok(session.snapshot().damage, 'fire begins in the running match');
+  }
+});
+
+test('goals and pushing actually develop after randomized legal kickoffs across repeatable seeds', () => {
+  for (const topic of ['pushing', 'scoring'])
+    for (const seed of [1, 17, 73]) {
+      const session = new RefereeMatch(seed, {
+        preMatch: true,
+        mode: 'continuous',
+        topics: [topic],
+        duration: 60,
+      });
+      session.tossCoin();
+      session.chooseFirstKickoff();
+      session.chooseOpeningEnd('yellow');
+      correct(session, 'start');
+      session.continue();
+      const seen = new Set();
+      for (let tick = 0; tick < 7200; tick++) {
+        session.step();
+        for (const item of session.observations.values())
+          seen.add(item.definition.id);
+        if (tick < 7199) assert.equal(session.motionHeld, false);
+      }
+      assert.ok(
+        [...seen].some((id) =>
+          topic === 'scoring'
+            ? ['live-goal', 'live-out-goal', 'live-pushing-goal'].includes(id)
+            : ['live-pushing', 'live-combined'].includes(id),
+        ),
+        `${topic}, seed ${seed}: ${[...seen].join(', ')}`,
+      );
+      assert.equal(session.snapshot().sessionFinished, true);
+    }
+});
 
 test('shuffle rounds cover all 35 cases without repeats and reproduce by seed', () => {
   assert.equal(REFEREE_CASES.length, 35);

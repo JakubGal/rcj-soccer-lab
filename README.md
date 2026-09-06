@@ -115,6 +115,35 @@ when you want to make a call, select the affected robot where relevant, and
 choose your action. Goal buttons identify the scoring team directly. **P**
 pauses playback. Other actions are available through the action-category menu.
 
+**Match setup** offers **Step** and **Continuous** modes, a 1/3/5/10-minute
+training match, and multiple topic checkboxes. Apply these with **Start new
+match with these settings**. Step keeps the guided decision pauses and authored
+drills. Continuous never stops for an uncalled incident: robots can touch the
+wall and drive back, goals bounce back into play, and penalties still require
+the referee. **Pause for decision** / Space freezes all actors, the ball,
+reaction windows and training time until you act or resume.
+
+Continuous faults steer real robots through normal physics; they never load
+an authored layout. Out-of-bounds, damage/fire, multiple defense, pushing,
+stalled play and scoring opportunities are encouraged according to selected
+topics. Restarts and return requests follow actual match events. Administrative
+exercises remain available in Step. Natural incidents outside the selection
+remain actionable but do not affect that session's accuracy.
+
+Both modes finish with correct, wrong, missed and assisted totals plus accuracy
+by topic: correct / (correct + wrong + missed). One situation counts once;
+retries cannot recover first-attempt credit. Assisted work is excluded from
+unaided accuracy. Continuous mode allows eight seconds for a persistent robot
+penalty/goal and a short reaction window after positional contact clears;
+uncalled discretionary pushing alone is not a missed violation. Full time
+excludes new incidents with less than three seconds to react. **End match & see
+results** also ends a session explicitly. Pauses themselves earn no points.
+
+A visible count can start after one sustained second of little ball movement,
+without guessing the later automatic stall detector. This is a permissive
+training threshold, not a rulebook timeout. Placement still requires the full
+illustrative count; resumed progress cancels it without a missed decision.
+
 There are 35 authored situations spanning scoring, pushing and multiple defense,
 lack of progress, out of bounds, ball movement, damaged robots and returns,
 kickoffs, interference, stoppages and match checks. The shuffle visits every
@@ -123,7 +152,7 @@ Legal situations are mixed in. The **Practice setup & coverage** panel shows
 what you have encountered, lets you choose a drill or skip the gap before the
 next incident, and provides a seed for repeating or changing the sequence.
 
-Normal AI play runs between drills. Live back-wall contacts, out-of-bounds
+In Step mode, normal AI play runs between drills. Live back-wall contacts, out-of-bounds
 events and stalled play are held for assessment; whistling also evaluates live
 pushing and multiple-defense geometry. Authored evidence stops before the
 lesson's referee action and hides its answer captions. Observation notes

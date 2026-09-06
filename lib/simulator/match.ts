@@ -20,6 +20,8 @@ export type MatchSettings = {
   selectedRobot: string;
   duration: number;
   referee?: boolean;
+  observeReferee?: boolean;
+  robotCommands?: Record<string, DriveInput>;
   disabledRobots?: string[];
 };
 export type MatchEvent =
@@ -147,6 +149,10 @@ export class SoccerMatch {
   private goalPause = 0;
   private kickoffTeam: MatchTeam = 'blue';
   private stalledFor = 0;
+  get stationarySeconds() {
+    return this.stalledFor;
+  }
+  private observedGoal = false;
   private ballAnchor: Pose = { x: 0, z: 0, yaw: 0 };
   private trail: Pose[] = [];
   private trailTick = 0;
@@ -200,6 +206,7 @@ export class SoccerMatch {
     this.state.pendingEvent = null;
     this.state.phase = 'playing';
     this.goalEntry = null;
+    this.observedGoal = false;
     this.goalPause = 0;
     this.cooldown = 0.35;
     this.stalledFor = 0;
@@ -373,7 +380,8 @@ export class SoccerMatch {
     };
   }
 
-  private constrainBall(previous: Pose): MatchTeam | null {
+  private constrainBall(previous: Pose, keepMoving = false): MatchTeam | null {
+    let scored: MatchTeam | null = null;
     const ball = this.state.actors.ball;
     const velocity = this.state.ballVelocity;
     const clearWidth = SPEC.goal.innerWidth / 2 - BALL_RADIUS;
@@ -402,7 +410,8 @@ export class SoccerMatch {
       Math.abs(ball.z) >= FIELD.goalBackContactBallCenterZ &&
       Math.abs(ball.z) < FIELD.goalBackInnerFaceZ + BALL_RADIUS
     ) {
-      return ball.z * this.blueAttackDirection > 0 ? 'blue' : 'yellow';
+      scored = ball.z * this.blueAttackDirection > 0 ? 'blue' : 'yellow';
+      if (!keepMoving) return scored;
     }
     const width = FIELD.floorHalfWidth - BALL_RADIUS;
     const length = FIELD.floorHalfLength - BALL_RADIUS;
@@ -498,10 +507,15 @@ export class SoccerMatch {
       }
       this.state.ballOwner = null;
     }
-    return null;
+    return scored;
   }
 
   step(settings: MatchSettings, manualInput: DriveInput = NO_DRIVE) {
+    if (settings.observeReferee) {
+      this.state.pendingEvent = null;
+      if (Math.abs(this.state.actors.ball.z) < FIELD.goalMouthZ - 0.03)
+        this.observedGoal = false;
+    }
     const dt = MATCH_STEP;
     if (this.state.phase === 'finished' || this.state.phase === 'referee')
       return;
@@ -571,7 +585,7 @@ export class SoccerMatch {
       ) {
         commands[robot.id] = { ...NO_DRIVE, dribble: false };
       } else {
-        commands[robot.id] = command;
+        commands[robot.id] = settings.robotCommands?.[robot.id] ?? command;
       }
       const input = commands[robot.id];
       const pose = this.state.actors[robot.id];
@@ -663,8 +677,14 @@ export class SoccerMatch {
           velocity.z -= 1.35 * inward * nz;
         }
       }
-      const scored = this.constrainBall(previousBall);
+      const scored = this.constrainBall(previousBall, settings.observeReferee);
       if (scored) {
+        if (settings.observeReferee) {
+          if (!this.observedGoal)
+            this.state.pendingEvent = { kind: 'goal', team: scored };
+          this.observedGoal = true;
+          continue;
+        }
         if (settings.referee) {
           this.state.phase = 'referee';
           this.state.pendingEvent = { kind: 'goal', team: scored };
@@ -698,6 +718,10 @@ export class SoccerMatch {
       this.stalledFor > 8 &&
       (settings.controls.blue === 'ai' || settings.controls.yellow === 'ai')
     ) {
+      if (settings.observeReferee) {
+        this.state.pendingEvent ??= { kind: 'lack-progress' };
+        return;
+      }
       if (settings.referee) {
         this.state.phase = 'referee';
         this.state.pendingEvent = { kind: 'lack-progress' };
