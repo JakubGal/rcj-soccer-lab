@@ -107,3 +107,35 @@ export const RCJ_FIELD_DERIVED = {
     spec.goal.innerDepth -
     spec.ball.diameter / 2,
 } as const;
+
+/** The same solid panels for ball collision and referee body-contact checks. */
+export const RCJ_GOAL_PANELS = ([-1, 1] as const).flatMap((end) => {
+  const mouth = end * RCJ_FIELD_DERIVED.goalMouthZ;
+  const back = end * RCJ_FIELD_DERIVED.goalBackInnerFaceZ;
+  const outer =
+    end *
+    (RCJ_FIELD_DERIVED.goalBackInnerFaceZ +
+      spec.goal.constructionPanelThickness);
+  const halfWidth = spec.goal.innerWidth / 2;
+  const thickness = spec.goal.constructionPanelThickness;
+  return [
+    {
+      minX: -halfWidth - thickness,
+      maxX: -halfWidth,
+      minZ: Math.min(mouth, outer),
+      maxZ: Math.max(mouth, outer),
+    },
+    {
+      minX: halfWidth,
+      maxX: halfWidth + thickness,
+      minZ: Math.min(mouth, outer),
+      maxZ: Math.max(mouth, outer),
+    },
+    {
+      minX: -halfWidth - thickness,
+      maxX: halfWidth + thickness,
+      minZ: Math.min(back, outer),
+      maxZ: Math.max(back, outer),
+    },
+  ];
+});

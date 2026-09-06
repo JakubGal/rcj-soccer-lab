@@ -2,6 +2,7 @@ import {
   RCJ_FIELD_DERIVED as FIELD,
   RCJ_FIELD_SPEC_2026 as SPEC,
   RCJ_SIMULATOR_GUIDES,
+  RCJ_GOAL_PANELS as GOAL_PANELS,
 } from './field-spec';
 import { moveManualActor } from './manual-layout';
 import { clampRobotToField } from './referee-geometry';
@@ -118,37 +119,6 @@ const NEUTRAL_SPOTS: Pose[] = [
     })),
   ),
 ];
-
-// The same solid goal panels drawn by the viewport. Live play is planar;
-// ramps, ball height, and the referee's discretionary rules are not simulated.
-const GOAL_PANELS = ([-1, 1] as const).flatMap((end) => {
-  const mouth = end * FIELD.goalMouthZ;
-  const back = end * FIELD.goalBackInnerFaceZ;
-  const outer =
-    end * (FIELD.goalBackInnerFaceZ + SPEC.goal.constructionPanelThickness);
-  const halfWidth = SPEC.goal.innerWidth / 2;
-  const thickness = SPEC.goal.constructionPanelThickness;
-  return [
-    {
-      minX: -halfWidth - thickness,
-      maxX: -halfWidth,
-      minZ: Math.min(mouth, outer),
-      maxZ: Math.max(mouth, outer),
-    },
-    {
-      minX: halfWidth,
-      maxX: halfWidth + thickness,
-      minZ: Math.min(mouth, outer),
-      maxZ: Math.max(mouth, outer),
-    },
-    {
-      minX: -halfWidth - thickness,
-      maxX: halfWidth + thickness,
-      minZ: Math.min(back, outer),
-      maxZ: Math.max(back, outer),
-    },
-  ];
-});
 
 /** Small fixed-step match model, independent of React, rendering, and wall time. */
 export class SoccerMatch {

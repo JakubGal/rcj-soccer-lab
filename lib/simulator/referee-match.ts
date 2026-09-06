@@ -19,6 +19,7 @@ import {
   insidePenalty,
   robotPenaltyOverlap,
   robotTouchesFieldWall,
+  robotTouchesGoal,
 } from './referee-geometry';
 import { rulesForDecision, type AppliedRule } from './referee-rules';
 import { DEFAULT_ROBOT_VISUAL_ID, type RobotVisualId } from './robot-models';
@@ -1611,6 +1612,7 @@ export class RefereeMatch {
       return (
         p &&
         (robotTouchesFieldWall(p, this.robotVisual) ||
+          robotTouchesGoal(p, this.robotVisual) ||
           [-1, 1].some((end) =>
             robotPenaltyOverlap(p, end, this.robotVisual, true),
           ))
@@ -2267,6 +2269,10 @@ export class RefereeMatch {
     const local = candidates
       .filter(
         (candidate) =>
+          !robotTouchesGoal(candidate, this.robotVisual, 0.005) &&
+          ![-1, 1].some((end) =>
+            robotPenaltyOverlap(candidate, end, this.robotVisual, true),
+          ) &&
           MATCH_ROBOTS.every(
             (robot) =>
               robot.id === target ||
