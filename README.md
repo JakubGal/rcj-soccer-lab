@@ -17,6 +17,8 @@ Live application: <https://jakubgal.github.io/rcj-soccer-lab/>
 - 32 additional gameplay animations with timelines, camera choices and questions,
   plus interactive inspection, kicker, field, ball and scoring workbenches.
 - Three unified tabs: **Rules**, **Play**, and **Referee**.
+- Complete English, Slovak, German, and Japanese interface/catalogue support,
+  including generated match feedback, referee reviews, quizzes, and embeds.
 - A situation library combining all 73 decision exercises, guided replays and
   detailed studies with their matching official sections, questions and saved
   completion checks.
@@ -66,9 +68,34 @@ pnpm test:match
 pnpm test:rules
 pnpm test:referee
 pnpm test:learning
+pnpm test:i18n
 pnpm lint
 pnpm build
 ```
+
+## Languages
+
+Use the language menu in the top-right corner. The selection is stored locally
+and carried in `?lang=en`, `?lang=sk`, `?lang=de`, or `?lang=ja` through modes,
+deep links, robot changes, and copied iframe embeds. Browser language is used
+the first time the app opens without an explicit selection.
+
+Rule-defined calls such as **Out of bounds**, **Damaged robot**, **Pushing**,
+**Multiple defense**, and **Lack of progress** intentionally remain in their
+official English wording. Exact official quotations and the cross-origin live
+rulebook remain English; surrounding explanations and controls are translated.
+The in-app translations are learning aids and do not replace the official
+English source.
+
+The checked-in runtime catalogue has no translation-service dependency. After
+adding or changing authored English copy, maintainers can refresh it with:
+
+```bash
+pnpm i18n:generate
+```
+
+Machine-generated rule explanations should receive native-speaker committee
+review before being treated as publication-ready wording.
 
 Every push to `main` is also type-checked, statically exported, and deployed
 to GitHub Pages by `.github/workflows/deploy-pages.yml`. The normal local and

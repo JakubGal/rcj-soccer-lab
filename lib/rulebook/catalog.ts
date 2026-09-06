@@ -55,7 +55,11 @@ export function sectionUrl(section: RuleSection) {
   return `${document.url}#${section.anchor}`;
 }
 
-export function findSections(query: string, document: string) {
+export function findSections(
+  query: string,
+  document: string,
+  localize: (value: string) => string = (value) => value,
+) {
   const terms = query.trim().toLowerCase().split(/\s+/).filter(Boolean);
   return RULE_SECTIONS.filter((section) => {
     if (!terms.length) return section.document === document;
@@ -65,8 +69,9 @@ export function findSections(query: string, document: string) {
         : guideFor(section) === 'kicker'
           ? 'kicking power test rebound'
           : '';
+    const source = `${section.number} ${section.title} ${section.chapter} ${section.document} ${aliases}`;
     const searchable =
-      `${section.number} ${section.title} ${section.chapter} ${section.document} ${aliases}`.toLowerCase();
+      `${source} ${localize(section.title)} ${localize(section.chapter)} ${localize(aliases)}`.toLowerCase();
     return terms.every((term) => searchable.includes(term));
   });
 }

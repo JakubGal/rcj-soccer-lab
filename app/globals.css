@@ -52,6 +52,20 @@ body {
   font-family: var(--font-geist-sans), Arial, Helvetica, sans-serif;
 }
 
+html:lang(ja) body {
+  font-family:
+    var(--font-geist-sans), 'Hiragino Sans', 'Yu Gothic UI', 'Yu Gothic',
+    Meiryo, 'Noto Sans JP', sans-serif;
+  line-break: strict;
+  overflow-wrap: anywhere;
+  word-break: normal;
+}
+
+html:lang(ja) :is(.rule-kicker, .eyebrow, .rail-heading) {
+  letter-spacing: 0.04em;
+  text-transform: none;
+}
+
 :root {
   --background: oklch(0.155 0.018 247);
   --foreground: oklch(0.965 0.009 240);
@@ -196,6 +210,36 @@ a {
   border-radius: 10px;
   background: rgba(9, 15, 22, 0.72);
   padding: 3px;
+}
+
+.app-header-actions {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  justify-self: end;
+  gap: 7px;
+}
+
+.app-robot-select [data-slot='native-select'] {
+  width: 164px;
+}
+
+.app-language-select {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 5px;
+  color: var(--muted-foreground);
+}
+
+.app-language-select > svg {
+  width: 14px;
+  height: 14px;
+  flex: 0 0 14px;
+}
+
+.app-language-select [data-slot='native-select'] {
+  width: 104px;
 }
 
 .workspace-grid {
@@ -2909,6 +2953,12 @@ a {
   }
 }
 
+@media (max-width: 760px) {
+  .app-robot-select {
+    display: none;
+  }
+}
+
 @media (max-width: 600px) {
   .app-header {
     grid-template-columns: 1fr auto auto;
@@ -2924,6 +2974,27 @@ a {
   .mode-switcher button {
     width: 34px;
     padding-inline: 0;
+  }
+
+  .mode-switcher button span {
+    display: none;
+  }
+
+  .app-robot-select {
+    display: none;
+  }
+
+  .app-language-select {
+    gap: 0;
+  }
+
+  .app-language-select > svg {
+    display: none;
+  }
+
+  .app-language-select [data-slot='native-select'] {
+    width: 84px;
+    font-size: 11px;
   }
 
   .viewport-panel {

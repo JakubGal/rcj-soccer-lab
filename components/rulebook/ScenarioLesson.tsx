@@ -9,6 +9,7 @@ import {
 } from '@/components/simulator/PlayCanvasViewport';
 import type { RobotVisualId } from '@/lib/simulator/robot-models';
 import type { ScenarioDefinition } from '@/lib/simulator/types';
+import { useLocalization } from '@/components/i18n/LocalizationProvider';
 
 export function ScenarioLesson({
   scenario,
@@ -25,6 +26,7 @@ export function ScenarioLesson({
   onAnswer?: (id: string) => void;
   studyScore?: string;
 }) {
+  const { locale, t } = useLocalization();
   const [time, setTime] = useState(0);
   const [playing, setPlaying] = useState(false);
   const [answer, setAnswer] = useState<string | null>(initialAnswer);
@@ -164,10 +166,14 @@ export function ScenarioLesson({
             url.search = new URLSearchParams({
               embed: scenario.id,
               robot: robotVisual,
+              lang: locale,
             }).toString();
-            await navigator.clipboard.writeText(
-              `<iframe src="${url}" title="${scenario.title}" loading="lazy" allowfullscreen></iframe>`,
-            );
+            const iframe = document.createElement('iframe');
+            iframe.src = url.toString();
+            iframe.title = t(scenario.title);
+            iframe.loading = 'lazy';
+            iframe.setAttribute('allowfullscreen', '');
+            await navigator.clipboard.writeText(iframe.outerHTML);
             setCopied(true);
           }}
         >

@@ -51,6 +51,8 @@ import { REFEREE_CASES } from '@/lib/simulator/referee-cases';
 import { SCENARIOS } from '@/lib/simulator/scenarios';
 import { CaseLesson } from './CaseLesson';
 import { ScenarioLesson } from './ScenarioLesson';
+import { useLocalization } from '@/components/i18n/LocalizationProvider';
+import { translateText } from '@/lib/i18n';
 
 const DEFAULT_SECTION = 'soccer:inside-penalty-area';
 const PROGRESS_KEY = 'rcj-rulebook-read-2026-06-03-v1';
@@ -68,6 +70,7 @@ export function Rulebook({
   situationId?: string | null;
   onSelect: (sectionId: string, situationId: string | null) => void;
 }) {
+  const { locale } = useLocalization();
   const requestedSituation = LEARNING_SITUATIONS.find(
     (item) => item.id === situationId,
   );
@@ -89,8 +92,9 @@ export function Rulebook({
   )!;
   const guide = guideFor(selected);
   const matches = useMemo(
-    () => findSections(query, document.id),
-    [document.id, query],
+    () =>
+      findSections(query, document.id, (value) => translateText(value, locale)),
+    [document.id, locale, query],
   );
   const documentSections = RULE_SECTIONS.filter(
     (section) => section.document === document.id,
@@ -194,7 +198,17 @@ export function Rulebook({
     )!;
     return (
       !query ||
-      (item.title + ' ' + section.title + ' ' + section.number)
+      (
+        item.title +
+        ' ' +
+        translateText(item.title, locale) +
+        ' ' +
+        section.title +
+        ' ' +
+        translateText(section.title, locale) +
+        ' ' +
+        section.number
+      )
         .toLowerCase()
         .includes(query.toLowerCase())
     );
@@ -545,6 +559,7 @@ export function Rulebook({
                   <BookOpen />
                   Official text · live source
                 </span>
+                <small>Official English source</small>
                 <a href={sourceUrl} target="_blank" rel="noreferrer">
                   Open original <ExternalLink />
                 </a>
@@ -559,7 +574,8 @@ export function Rulebook({
               <p className="rule-source-footer">
                 All paragraphs, tables, notes and appendices are in this
                 original document. Internet access is needed for the official
-                text.
+                text. Translations in this app are learning aids; the official
+                English source controls.
               </p>
             </section>
           )}

@@ -43,8 +43,13 @@ export function readNavigation(search: string): AppNavigation {
     embed: query.get('embed'),
   };
 }
-export function navigationSearch(nav: AppNavigation, robot: string) {
+export function navigationSearch(
+  nav: AppNavigation,
+  robot: string,
+  locale = 'en',
+) {
   const query = new URLSearchParams({ mode: nav.mode, robot });
+  query.set('lang', locale);
   if (nav.mode === 'rules') {
     query.set('rule', nav.sectionId);
     if (nav.situationId) query.set('situation', nav.situationId);

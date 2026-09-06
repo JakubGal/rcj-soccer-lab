@@ -46,6 +46,8 @@ import {
 import type { RobotVisualId } from '@/lib/simulator/robot-models';
 import { robotPenaltyOverlap } from '@/lib/simulator/referee-geometry';
 import { cn } from '@/lib/utils';
+import { useLocalization } from '@/components/i18n/LocalizationProvider';
+import { appendLocaleToSearch } from '@/lib/i18n';
 
 const clock = (seconds: number) =>
   `${Math.floor(seconds / 60)}:${String(Math.floor(seconds % 60)).padStart(2, '0')}`;
@@ -99,6 +101,7 @@ export function RefereePlay({
   active?: boolean;
   onOpenRule?: (sectionId: string) => void;
 }) {
+  const { locale } = useLocalization();
   const [session, setSession] = useState(
     () =>
       new RefereeMatch(randomSeed(), {
@@ -1291,7 +1294,11 @@ export function RefereePlay({
                           {rule.note && <p>{rule.note}</p>}
                           <div className="referee-rule-links">
                             <a
-                              href={rule.lessonUrl}
+                              href={appendLocaleToSearch(
+                                rule.lessonUrl,
+                                locale,
+                                { robot: robotVisual },
+                              )}
                               onClick={(event) => {
                                 if (
                                   onOpenRule &&

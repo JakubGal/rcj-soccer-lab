@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
-import { BookOpen, CircleDot, Gamepad2, Scale } from 'lucide-react';
+import { BookOpen, CircleDot, Gamepad2, Languages, Scale } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import {
   NativeSelect,
@@ -25,6 +25,8 @@ import {
   type AppMode,
   type AppNavigation,
 } from '@/lib/simulator/navigation';
+import { LOCALE_OPTIONS, appendLocaleToSearch, type Locale } from '@/lib/i18n';
+import { useLocalization } from '@/components/i18n/LocalizationProvider';
 
 const tabs = [
   { id: 'rules', label: 'Rules', icon: BookOpen },
@@ -33,6 +35,7 @@ const tabs = [
 ] as const;
 
 export function SimulatorApp() {
+  const { locale, setLocale } = useLocalization();
   const [nav, setNav] = useState(INITIAL_NAVIGATION);
   const [visited, setVisited] = useState<AppMode[]>(['rules']);
   const [robotVisual, setRobotVisual] = useState<RobotVisualId>(
@@ -59,10 +62,10 @@ export function SimulatorApp() {
       setNav(next);
       setVisited((current) => [...new Set([...current, next.mode])]);
       const url = new URL(window.location.href);
-      url.search = navigationSearch(next, robotVisual);
+      url.search = navigationSearch(next, robotVisual, locale);
       window.history.pushState(null, '', url);
     },
-    [nav, robotVisual],
+    [locale, nav, robotVisual],
   );
   const openRule = useCallback(
     (sectionId: string) =>
@@ -72,7 +75,7 @@ export function SimulatorApp() {
   const changeRobotVisual = (value: RobotVisualId) => {
     setRobotVisual(value);
     const url = new URL(window.location.href);
-    url.search = navigationSearch(nav, value);
+    url.search = navigationSearch(nav, value, locale);
     window.history.replaceState(null, '', url);
   };
   const embedded = SCENARIOS.find((item) => item.id === nav.embed);
@@ -81,9 +84,37 @@ export function SimulatorApp() {
       <main className="embed-shell lesson-embed">
         <div className="embed-toolbar">
           <strong>{embedded.title}</strong>
-          <a href={`?mode=rules&situation=scenario:${embedded.id}`}>
-            Open in Rules
-          </a>
+          <div className="embed-toolbar-actions">
+            <label className="app-language-select embed-language-select">
+              <Languages aria-hidden="true" />
+              <span className="sr-only">Language</span>
+              <NativeSelect
+                size="sm"
+                aria-label="Language"
+                value={locale}
+                onChange={(event) => setLocale(event.target.value as Locale)}
+              >
+                {LOCALE_OPTIONS.map((option) => (
+                  <NativeSelectOption
+                    key={option.id}
+                    value={option.id}
+                    data-i18n-skip
+                  >
+                    {option.label}
+                  </NativeSelectOption>
+                ))}
+              </NativeSelect>
+            </label>
+            <a
+              href={appendLocaleToSearch(
+                `?mode=rules&situation=scenario:${embedded.id}`,
+                locale,
+                { robot: robotVisual },
+              )}
+            >
+              Open in Rules
+            </a>
+          </div>
         </div>
         <ScenarioLesson scenario={embedded} robotVisual={robotVisual} />
       </main>
@@ -116,21 +147,44 @@ export function SimulatorApp() {
             </Button>
           ))}
         </nav>
-        <NativeSelect
-          size="sm"
-          aria-label="Robot visual style"
-          value={robotVisual}
-          onChange={(event) => {
-            if (isRobotVisualId(event.target.value))
-              changeRobotVisual(event.target.value);
-          }}
-        >
-          {ROBOT_VISUALS.map((model) => (
-            <NativeSelectOption key={model.id} value={model.id}>
-              {model.label}
-            </NativeSelectOption>
-          ))}
-        </NativeSelect>
+        <div className="app-header-actions">
+          <NativeSelect
+            className="app-robot-select"
+            size="sm"
+            aria-label="Robot visual style"
+            value={robotVisual}
+            onChange={(event) => {
+              if (isRobotVisualId(event.target.value))
+                changeRobotVisual(event.target.value);
+            }}
+          >
+            {ROBOT_VISUALS.map((model) => (
+              <NativeSelectOption key={model.id} value={model.id}>
+                {model.label}
+              </NativeSelectOption>
+            ))}
+          </NativeSelect>
+          <label className="app-language-select">
+            <Languages aria-hidden="true" />
+            <span className="sr-only">Language</span>
+            <NativeSelect
+              size="sm"
+              aria-label="Language"
+              value={locale}
+              onChange={(event) => setLocale(event.target.value as Locale)}
+            >
+              {LOCALE_OPTIONS.map((option) => (
+                <NativeSelectOption
+                  key={option.id}
+                  value={option.id}
+                  data-i18n-skip
+                >
+                  {option.label}
+                </NativeSelectOption>
+              ))}
+            </NativeSelect>
+          </label>
+        </div>
       </header>
       {visited.includes('rules') && (
         <Rulebook
