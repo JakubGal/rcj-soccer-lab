@@ -182,7 +182,7 @@ export const REFEREE_CASES: RefereeCase[] = [
   },
   {
     id: 'out-goal',
-    title: 'Goal before an out robot is removed',
+    title: 'Goal after an out-of-bounds event',
     family: 'Scoring',
     clip: 'goal-contact',
     end: 4,
@@ -190,7 +190,7 @@ export const REFEREE_CASES: RefereeCase[] = [
       'Blue 2 has already been called out of bounds but is still on the field when Blue scores.',
     steps: [one('no-goal')[0], one('out', 'blue-2')[0]],
     explanation:
-      'Disallow the penalized team’s goal while its out-of-bounds robot remains on the field, then remove that robot. The minute starts at removal.',
+      'Disallow the penalized team’s goal while its out-of-bounds robot remains on the field, then remove that robot. A ball passage released by an out carrier also stays invalid after the robot is removed.',
     anchor: 'out-of-bounds',
   },
   {
@@ -342,9 +342,9 @@ export const REFEREE_CASES: RefereeCase[] = [
     clip: 'pushed-out',
     end: 2.5,
     facts: 'Yellow 1 accidentally pushes Blue 1 into the wall.',
-    steps: [[call('waive-out', 'blue-1', true), call('out', 'blue-1', true)]],
+    steps: one('waive-out', 'blue-1'),
     explanation:
-      'A pushed-out waiver and small correction are permitted, but not compulsory.',
+      'Call pushed out, keep Blue 1 in the game, and make only the small correction needed to restore safe field clearance. The published rule describes the waiver as referee discretion; this trainer uses the committee’s requested keep-in-play decision.',
   },
   {
     id: 'ball-out',

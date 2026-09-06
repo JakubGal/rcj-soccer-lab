@@ -41,10 +41,10 @@ const provisions = {
   out: ['out-of-bounds', 'Removal and waiting period'],
   outGoal: [
     'out-of-bounds',
-    'Scoring while the penalized robot remains on field',
+    'Scoring after an out carrier or while the penalized robot remains on field',
   ],
   outReturn: ['out-of-bounds', 'Return position and direction'],
-  pushed: ['out-of-bounds', 'Opponent-caused contact: discretionary waiver'],
+  pushed: ['out-of-bounds', 'Opponent-caused contact and pushed-out waiver'],
   damage: ['damaged-robots', 'Repair, waiting period and referee permission'],
   waitingGoal: [
     'damaged-robots',

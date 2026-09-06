@@ -996,6 +996,7 @@ export function RefereePlay({
                           {assessmentLabel(event.assessment)}
                         </span>
                         <strong>{event.situation}</strong>
+                        <small>{event.evidence}</small>
                         <span>
                           <b>You:</b>{' '}
                           {event.actual

@@ -55,10 +55,12 @@ const {
   requiresStoppage,
   transformId,
 } = await import('../lib/simulator/referee-cases.ts');
-const { SoccerMatch, MATCH_ROBOTS, MATCH_STEP } =
+const { SoccerMatch, MATCH_ROBOTS, MATCH_STEP, NO_DRIVE } =
   await import('../lib/simulator/match.ts');
-const { RCJ_FIELD_DERIVED: FIELD } =
+const { RCJ_FIELD_DERIVED: FIELD, RCJ_SIMULATOR_GUIDES } =
   await import('../lib/simulator/field-spec.ts');
+const { MANUAL_ROBOT_BALL_CENTER_DISTANCE } =
+  await import('../lib/simulator/manual-layout.ts');
 const { RULE_SECTIONS } = await import('../lib/rulebook/catalog.ts');
 const { ruleUrl } = await import('../lib/simulator/referee-cases.ts');
 const { SituationRecorder, sampleSituation } =
@@ -227,6 +229,186 @@ test('out-and-back remains actionable, is missed once, and a late correction ear
   session.continue();
   advance(session, 3);
   assert.equal(session.snapshot().report.assessed, 1);
+});
+
+test('opponent pressure at the wall becomes pushed out and keeps the robot in play', () => {
+  const session = continuous({ topics: ['out'] });
+  const radius = RCJ_SIMULATOR_GUIDES.robotCollisionRadius;
+  const wallX = FIELD.floorHalfWidth - radius;
+  session.match.place({
+    'blue-1': { x: wallX, z: 0, yaw: 0 },
+    'yellow-1': { x: wallX - radius * 2, z: 0, yaw: 0 },
+    ball: { x: -0.4, z: -0.4, yaw: 0 },
+  });
+  session.match.step({
+    controls: { blue: 'off', yellow: 'off' },
+    selectedRobot: 'blue-1',
+    duration: 120,
+    referee: true,
+    observeReferee: true,
+    robotCommands: {
+      'blue-1': { ...NO_DRIVE, dribble: false },
+      'yellow-1': { ...NO_DRIVE, strafe: 1, dribble: false },
+    },
+  });
+
+  assert.equal(session.match.opponentPusher('blue-1'), 'yellow-1');
+  session.detectLiveIncident();
+  assert.equal(session.active.definition.id, 'live-pushed-out');
+  assert.deepEqual(session.expected(), [
+    { action: 'waive-out', target: 'blue-1' },
+  ]);
+
+  correct(session, 'waive-out', 'blue-1');
+  const blue = session.match.state.actors['blue-1'];
+  const yellow = session.match.state.actors['yellow-1'];
+  assert.ok(blue, 'the pushed robot stays on the field');
+  assert.equal(session.bench['blue-1'], undefined);
+  assert.ok(Math.abs(blue.x) <= FIELD.floorHalfWidth - radius);
+  assert.ok(distance(blue, yellow) >= radius * 2);
+});
+
+test('pushed-out detection rejects gaps, tangential drive and same-team pressure', () => {
+  const radius = RCJ_SIMULATOR_GUIDES.robotCollisionRadius;
+  const wallX = FIELD.floorHalfWidth - radius;
+  const stopped = { ...NO_DRIVE, dribble: false };
+  for (const item of [
+    {
+      label: 'visible gap',
+      pusher: 'yellow-1',
+      offset: radius * 2 + 0.003,
+      command: { ...stopped, strafe: 0.12 },
+    },
+    {
+      label: 'tangential drive',
+      pusher: 'yellow-1',
+      offset: radius * 2,
+      command: { ...stopped, forward: 1 },
+    },
+    {
+      label: 'same-team pressure',
+      pusher: 'blue-2',
+      offset: radius * 2,
+      command: { ...stopped, strafe: 1 },
+    },
+  ]) {
+    const match = new SoccerMatch();
+    match.place({
+      'blue-1': { x: wallX, z: 0, yaw: 0 },
+      [item.pusher]: { x: wallX - item.offset, z: 0, yaw: 0 },
+      ball: { x: -0.4, z: -0.4, yaw: 0 },
+    });
+    match.step({
+      controls: { blue: 'off', yellow: 'off' },
+      selectedRobot: 'blue-1',
+      duration: 120,
+      observeReferee: true,
+      robotCommands: {
+        'blue-1': stopped,
+        [item.pusher]: item.command,
+      },
+    });
+    assert.equal(match.opponentPusher('blue-1'), null, item.label);
+  }
+});
+
+test('an ordinary wall contact without opponent pressure still removes the robot', () => {
+  const session = continuous({ topics: ['out'] });
+  session.match.place({
+    'blue-1': {
+      x: FIELD.floorHalfWidth - RCJ_SIMULATOR_GUIDES.robotCollisionRadius,
+      z: 0,
+      yaw: 0,
+    },
+    ball: { x: -0.4, z: -0.4, yaw: 0 },
+  });
+  session.detectLiveIncident();
+  assert.equal(session.active.definition.id, 'live-wall');
+  correct(session, 'out', 'blue-1');
+  assert.equal(session.match.state.actors['blue-1'], undefined);
+  assert.ok(session.bench['blue-1']);
+});
+
+test('a released ball passage from an out carrier cannot score after removal', () => {
+  const session = continuous({ topics: ['out', 'scoring'] });
+  const blue = { x: 0, z: 0.95, yaw: 0 };
+  session.match.place({
+    'blue-1': blue,
+    ball: { x: 0, z: FIELD.goalMouthZ - 0.001, yaw: 0 },
+  });
+  session.match.state.ballOwner = 'blue-1';
+  assert.equal(robotPenaltyOverlap(blue, 1, session.robotVisual, true), true);
+  session.match.state.ballVelocity = { x: 0, z: 0.8 };
+
+  session.detectLiveIncident();
+  assert.equal(session.active.definition.id, 'live-full-area');
+  correct(session, 'out', 'blue-1');
+  assert.equal(session.match.state.actors['blue-1'], undefined);
+  assert.ok(session.bench['blue-1']);
+
+  session.resumeMotion();
+  for (
+    let tick = 0;
+    tick < 180 && session.active?.definition.id !== 'live-out-goal';
+    tick += 1
+  )
+    session.step();
+  assert.equal(session.active.definition.id, 'live-out-goal');
+  assert.match(session.active.definition.facts, /same released ball/i);
+  assert.deepEqual(session.expected(), [
+    { action: 'no-goal', target: undefined },
+  ]);
+  correct(session, 'no-goal');
+  assert.deepEqual(session.snapshot().score, { blue: 0, yellow: 0 });
+
+  session.endSession();
+  const events = session.snapshot().review;
+  assert.ok(
+    events.some(
+      (event) =>
+        event.situation === 'Goal after an out-of-bounds event' &&
+        /same released ball/i.test(event.evidence) &&
+        event.actual?.action === 'no-goal' &&
+        event.assessment === 'correct',
+    ),
+  );
+});
+
+test('another robot touch clears an out-carrier goal passage', () => {
+  const session = continuous({ topics: ['out', 'scoring'] });
+  session.match.place({
+    'blue-1': { x: 0, z: 0.95, yaw: 0 },
+    'yellow-1': { x: 0.5, z: 0, yaw: 0 },
+    ball: { x: 0, z: FIELD.goalMouthZ - 0.001, yaw: 0 },
+  });
+  session.match.state.ballOwner = 'blue-1';
+  session.match.state.ballVelocity = { x: 0, z: 0.8 };
+  session.detectLiveIncident();
+  correct(session, 'out', 'blue-1');
+  session.resumeMotion();
+
+  session.match.state.actors.ball = { x: 0, z: 0, yaw: 0 };
+  session.match.state.actors['yellow-1'] = {
+    x: 0.11,
+    z: 0,
+    yaw: Math.PI / 2,
+  };
+  session.match.state.ballVelocity = { x: 0.2, z: 0 };
+  session.step();
+  assert.equal(session.match.lastBallTouch, 'yellow-1');
+
+  session.match.place({
+    ball: { x: 0, z: FIELD.goalMouthZ - 0.001, yaw: 0 },
+  });
+  session.match.state.ballVelocity = { x: 0, z: 0.8 };
+  for (
+    let tick = 0;
+    tick < 180 && session.active?.definition.id !== 'live-goal';
+    tick += 1
+  )
+    session.step();
+  assert.equal(session.active.definition.id, 'live-goal');
+  assert.deepEqual(session.expected(), [{ action: 'goal', target: 'blue' }]);
 });
 
 test('simultaneous outs can be called in either order and stale continuous commands are still enacted', () => {
@@ -872,15 +1054,18 @@ test('pushing and multiple defense use the updated ball position and correct ord
   );
 });
 
-test('discretionary waivers and equivalent damaged calls are accepted', () => {
+test('pushed-out training keeps the displaced robot in play', () => {
   assert.equal(
     correct(prepare('pushed-out'), 'waive-out', 'blue-1').verdict,
-    'supported',
+    'correct',
   );
   assert.equal(
-    correct(prepare('pushed-out'), 'out', 'blue-1').verdict,
-    'supported',
+    submit(prepare('pushed-out'), 'out', 'blue-1').verdict,
+    'incorrect',
   );
+});
+
+test('equivalent damaged calls are accepted', () => {
   for (const id of ['early', 'ball-out']) {
     const session = prepare(id);
     correct(session, 'damaged', 'blue-1');
@@ -1666,10 +1851,46 @@ test('waiving an opponent-caused wall contact corrects only the selected robot',
     if (id === 'blue-1') continue;
     assert.deepEqual(after[id], before[id], id);
   }
-  assert.ok(distance(before['blue-1'], after['blue-1']) < 0.02);
+  assert.ok(distance(before['blue-1'], after['blue-1']) < 0.08);
+  const radius = RCJ_SIMULATOR_GUIDES.robotCollisionRadius;
+  assert.ok(Math.abs(after['blue-1'].x) <= FIELD.floorHalfWidth - radius);
+  assert.ok(Math.abs(after['blue-1'].z) <= FIELD.floorHalfLength - radius);
+  for (const robot of MATCH_ROBOTS) {
+    if (robot.id === 'blue-1' || !after[robot.id]) continue;
+    assert.ok(distance(after['blue-1'], after[robot.id]) >= radius * 2);
+  }
   assertFrozen(session);
   session.continue();
   assert.equal(session.motionHeld, false);
+});
+
+test('pushed-out correction remains clear of robots and the ball', () => {
+  const session = prepare('pushed-out');
+  const radius = RCJ_SIMULATOR_GUIDES.robotCollisionRadius;
+  const edge = FIELD.floorHalfWidth - radius;
+  session.match.state.actors = {
+    ball: { x: edge - 0.005, z: -0.05, yaw: 0 },
+    'blue-1': { x: edge, z: 0, yaw: 0 },
+    'yellow-1': { x: edge - radius * 2, z: 0, yaw: 0 },
+    'blue-2': { x: edge - 0.005, z: 0.2, yaw: 0 },
+    'yellow-2': { x: -0.4, z: -0.5, yaw: 0 },
+  };
+
+  correct(session, 'waive-out', 'blue-1');
+  const corrected = session.match.state.actors['blue-1'];
+  for (const robot of MATCH_ROBOTS) {
+    if (robot.id === 'blue-1' || !session.match.state.actors[robot.id])
+      continue;
+    assert.ok(
+      distance(corrected, session.match.state.actors[robot.id]) >=
+        radius * 2 + 0.0005 - 1e-9,
+      robot.id,
+    );
+  }
+  assert.ok(
+    distance(corrected, session.match.state.actors.ball) >=
+      MANUAL_ROBOT_BALL_CENTER_DISTANCE - 1e-9,
+  );
 });
 
 test('damage freezes every robot and keeps its cue anchored through removal', () => {

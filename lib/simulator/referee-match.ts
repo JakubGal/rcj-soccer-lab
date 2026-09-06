@@ -1,7 +1,7 @@
 import { SoccerMatch, MATCH_STEP, MATCH_ROBOTS, type MatchTeam } from './match';
 import { NEUTRAL_SPOTS } from '../rulebook/animations';
-import { RCJ_FIELD_DERIVED as FIELD } from './field-spec';
-import { clonePoses } from './manual-layout';
+import { RCJ_FIELD_DERIVED as FIELD, RCJ_SIMULATOR_GUIDES } from './field-spec';
+import { clonePoses, MANUAL_ROBOT_BALL_CENTER_DISTANCE } from './manual-layout';
 import type { Pose } from './types';
 import type { DamageCue } from './damage-effects';
 import {
@@ -74,6 +74,7 @@ export type MatchReviewEvent = {
   replayAt: number;
   incidentId: number;
   situation: string;
+  evidence: string;
   topic: TrainingTopic;
   actual: RefereeCall | null;
   expected: RefereeCall[];
@@ -200,6 +201,7 @@ export class RefereeMatch {
   private reviewedNoCalls = new Set<number>();
   private matchFrames: ReplayFrame[] = [];
   private lastSampledMatchTime = Number.NEGATIVE_INFINITY;
+  private invalidGoalPassage: { robot: string; team: MatchTeam } | null = null;
 
   private assess(item: ActiveIncident, result: Assessment) {
     const topic = item.scoreTopic ?? trainingTopic(item.definition);
@@ -230,6 +232,7 @@ export class RefereeMatch {
           replayAt: item.replayAt ?? this.currentMatchReplayTime,
           incidentId: item.number,
           situation: item.definition.title,
+          evidence: transformText(item.definition.facts, item.variant),
           topic,
           actual: null,
           expected,
@@ -288,6 +291,7 @@ export class RefereeMatch {
             replayAt: item.replayAt ?? this.currentMatchReplayTime,
             incidentId: item.number,
             situation: item.definition.title,
+            evidence: transformText(item.definition.facts, item.variant),
             topic: item.scoreTopic ?? trainingTopic(item.definition),
             actual: null,
             expected,
@@ -489,9 +493,29 @@ export class RefereeMatch {
       )
     )
       return;
-    for (const call of item.definition.steps.flat())
-      if (call.action === 'out' && call.target)
-        this.outRobots.add(transformId(call.target, item.variant));
+    for (const call of item.definition.steps.flat()) {
+      if (call.action !== 'out' || !call.target) continue;
+      const robot = transformId(call.target, item.variant);
+      this.outRobots.add(robot);
+      if (
+        this.match.state.ballOwner === robot ||
+        this.match.lastBallTouch === robot
+      )
+        this.invalidGoalPassage = {
+          robot,
+          team: teamOf(robot),
+        };
+    }
+  }
+
+  private refreshGoalPassage() {
+    const passage = this.invalidGoalPassage;
+    if (!passage) return;
+    const touch = this.match.lastBallTouch;
+    if (touch && touch !== passage.robot) {
+      this.invalidGoalPassage = null;
+      return;
+    }
   }
   private skipResolvedSteps(item: ActiveIncident) {
     while (item.step < item.definition.steps.length) {
@@ -554,6 +578,7 @@ export class RefereeMatch {
 
   /** A scored passage ends positional corrections, but not robot penalties. */
   private endScoredPassage() {
+    this.invalidGoalPassage = null;
     const positional = new Set([
       'pushing',
       'multiple',
@@ -911,6 +936,7 @@ export class RefereeMatch {
     this.drillReady = false;
     this.fixtureEnded = false;
     this.outRobots.clear();
+    this.invalidGoalPassage = null;
     this.recorder.resetBuffer();
     this.permittedContact = null;
     const scene = this.scene(definition, 0, variant);
@@ -988,6 +1014,7 @@ export class RefereeMatch {
   /** New layouts are always an explicit user operation. */
   arrangeKickoff() {
     if (!this.canArrangeKickoff) return false;
+    this.invalidGoalPassage = null;
     this.match.place(
       randomKickoff(
         Object.keys(this.match.state.actors),
@@ -1274,6 +1301,7 @@ export class RefereeMatch {
       robotCommands: directed?.commands,
       disabledRobots,
     });
+    this.refreshGoalPassage();
     if ((this.heights.ball ?? 0.022) > 0.022)
       this.heights.ball = Math.max(
         0.022,
@@ -1347,16 +1375,31 @@ export class RefereeMatch {
           ))
       );
     });
+    const boundaryPushers = new Map(
+      boundaries.map((robot) => [
+        robot.id,
+        this.match.opponentPusher(robot.id),
+      ]),
+    );
     if (pending) {
-      const scoringOffender =
+      const liveScoringOffender =
         pending.kind === 'goal'
           ? MATCH_ROBOTS.find(
               (r) =>
                 r.team === pending.team &&
                 this.match.state.actors[r.id] &&
-                (this.outRobots.has(r.id) || boundaries.includes(r)),
+                (this.outRobots.has(r.id) ||
+                  (boundaries.includes(r) && !boundaryPushers.get(r.id))),
             )
           : undefined;
+      const passageOffender =
+        pending.kind === 'goal' &&
+        this.invalidGoalPassage?.team === pending.team
+          ? MATCH_ROBOTS.find(
+              (robot) => robot.id === this.invalidGoalPassage?.robot,
+            )
+          : undefined;
+      const scoringOffender = liveScoringOffender ?? passageOffender;
       const pushing =
         pending.kind === 'goal'
           ? [this.active, ...this.pending].find(
@@ -1372,18 +1415,20 @@ export class RefereeMatch {
                 !item.permitContact,
             )
           : null;
-      if (pending.kind === 'goal' && scoringOffender)
+      if (pending.kind === 'goal' && scoringOffender) {
+        const steps: RequiredCall[][] = [[{ action: 'no-goal' }]];
+        if (this.match.state.actors[scoringOffender.id])
+          steps.push([{ action: 'out', target: scoringOffender.id }]);
         this.beginLive(
           this.liveDefinition(
             'out-goal',
-            `${scoringOffender.label} is out of bounds and still on the field when its team scores.`,
-            [
-              [{ action: 'no-goal' }],
-              [{ action: 'out', target: scoringOffender.id }],
-            ],
+            !liveScoringOffender && passageOffender
+              ? `${scoringOffender.label} was out of bounds while controlling the ball. The robot was removed, but that same released ball continued to the back wall.`
+              : `${scoringOffender.label} is out of bounds and still on the field when its team scores.`,
+            steps,
           ),
         );
-      else if (pending.kind === 'goal' && pushing) {
+      } else if (pending.kind === 'goal' && pushing) {
         if (this.active === pushing) this.active = null;
         this.pending = this.pending.filter((item) => item !== pushing);
         const steps: RequiredCall[][] = [
@@ -1449,13 +1494,23 @@ export class RefereeMatch {
           true,
         ),
       );
+      const pushedBy = fullyInside ? null : boundaryPushers.get(boundary.id);
       this.beginLive(
         this.liveDefinition(
-          fullyInside ? 'full-area' : 'wall',
+          fullyInside ? 'full-area' : pushedBy ? 'pushed-out' : 'wall',
           fullyInside
             ? `${boundary.label} has entered a penalty area with its whole footprint.`
-            : `${boundary.label} has touched the wall.`,
-          [[{ action: 'out', target: boundary.id }]],
+            : pushedBy
+              ? `${robotName(pushedBy)} drove ${boundary.label} into the wall. Call pushed out and keep the displaced robot in play.`
+              : `${boundary.label} has touched the wall.`,
+          [
+            [
+              {
+                action: pushedBy ? 'waive-out' : 'out',
+                target: boundary.id,
+              },
+            ],
+          ],
         ),
       );
       this.syncMotion();
@@ -1703,7 +1758,7 @@ export class RefereeMatch {
     if (['goal', 'own-goal', 'post'].includes(id))
       return 'Watch for contact with the INSIDE back wall, not just the post or goal line. The team attacking that end receives the goal, regardless of the last touch.';
     if (id === 'out-goal')
-      return 'Check whether a robot from the scoring team had already been called out and was still on the field when the ball reached the back wall.';
+      return 'Check whether a scoring-team robot was already out on the field, or whether the same ball passage continued from an out-of-bounds carrier after removal.';
     if (id === 'pushing-goal')
       return 'Decide whether the earlier pushing caused the goal. A disallowed goal can leave a separate infringement to resolve.';
     if (['multiple', 'repeat-defense'].includes(id))
@@ -1874,6 +1929,52 @@ export class RefereeMatch {
           (farthest ? -1 : 1),
       )[0] ?? null
     );
+  }
+
+  private pushedOutCorrection(
+    target: string,
+    actors: Record<string, Pose>,
+  ): Pose | null {
+    const original = actors[target];
+    const radius = RCJ_SIMULATOR_GUIDES.robotCollisionRadius;
+    const limitX = FIELD.floorHalfWidth - radius - 0.005;
+    const limitZ = FIELD.floorHalfLength - radius - 0.005;
+    const clampInside = (pose: Pose): Pose => ({
+      ...pose,
+      x: Math.max(-limitX, Math.min(limitX, pose.x)),
+      z: Math.max(-limitZ, Math.min(limitZ, pose.z)),
+    });
+    const candidates: Pose[] = [];
+    const grid = 0.005;
+    const reach = 32;
+    for (let x = -reach; x <= reach; x++)
+      for (let z = -reach; z <= reach; z++)
+        candidates.push(
+          clampInside({
+            ...original,
+            x: original.x + x * grid,
+            z: original.z + z * grid,
+          }),
+        );
+    const clearance = radius * 2 + 0.0005;
+    const local = candidates
+      .filter(
+        (candidate) =>
+          MATCH_ROBOTS.every(
+            (robot) =>
+              robot.id === target ||
+              !actors[robot.id] ||
+              distance(candidate, actors[robot.id]) >= clearance,
+          ) &&
+          (!actors.ball ||
+            distance(candidate, actors.ball) >=
+              MANUAL_ROBOT_BALL_CENTER_DISTANCE),
+      )
+      .sort(
+        (first, second) =>
+          distance(first, original) - distance(second, original),
+      )[0];
+    return local ?? this.neutralSpot(true, target);
   }
 
   private topicForAction(action: RefereeCall['action']): TrainingTopic {
@@ -2052,6 +2153,7 @@ export class RefereeMatch {
       replayAt,
       incidentId: item.number,
       situation: item.definition.title,
+      evidence: transformText(item.definition.facts, item.variant),
       topic,
       actual: { ...submitted },
       expected: expected.map(({ action, target }) => ({
@@ -2372,6 +2474,7 @@ export class RefereeMatch {
       const spot = this.neutralSpot(far, 'ball', different);
       if (!spot)
         return 'All neutral spots are occupied; hold the placement until a spot is available.';
+      this.invalidGoalPassage = null;
       this.match.place({ ...this.match.state.actors, ball: { ...spot } });
       this.heights.ball = 0.022;
       return `Ball moved to the ${far ? 'furthest' : 'nearest'} available${different ? ' different' : ''} neutral spot.`;
@@ -2389,7 +2492,15 @@ export class RefereeMatch {
       }
       return `${target === 'blue' ? 'Blue' : 'Yellow'} +1.${waiting ? ' Keep play stopped until a working robot is ready.' : ' Conceding team kickoff is pending; eligible robots may return first.'}`;
     }
-    if (action === 'no-goal') item.stopsPlay = false;
+    if (action === 'no-goal') {
+      item.stopsPlay = false;
+      if (
+        ['goal', 'own-goal', 'out-goal', 'pushing-goal', 'post'].includes(
+          item.definition.id.replace(/^live-/, ''),
+        )
+      )
+        this.invalidGoalPassage = null;
+    }
     if (
       action === 'out' ||
       action === 'damaged' ||
@@ -2483,18 +2594,14 @@ export class RefereeMatch {
       const pose = actors[target];
       if (!pose)
         return `${robotName(target)} is off the field; the correction was recorded without moving a robot.`;
-      pose.x = Math.max(
-        -FIELD.floorHalfWidth + 0.105,
-        Math.min(FIELD.floorHalfWidth - 0.105, pose.x),
-      );
-      pose.z = Math.max(
-        -FIELD.floorHalfLength + 0.105,
-        Math.min(FIELD.floorHalfLength - 0.105, pose.z),
-      );
-      this.match.state.actors[target] = pose;
-      return 'Pushed-out penalty waived; a small correction restores field clearance.';
+      const correction = this.pushedOutCorrection(target, actors);
+      if (!correction)
+        return 'Pushed out called; the robot stays in play, but no collision-free correction is currently available.';
+      this.match.state.actors[target] = correction;
+      return 'Pushed out called; the robot stays in play and a small collision-free correction restores field clearance.';
     }
     if (action === 'correct-setup') {
+      this.invalidGoalPassage = null;
       this.match.restart('neutral');
       return 'Neutral kickoff positions corrected; robots remain halted for your signal.';
     }
@@ -2504,7 +2611,10 @@ export class RefereeMatch {
       this.kickoffDue = false;
       item.stopsPlay = false;
       this.manualHold = false;
-      if (action === 'neutral') this.match.restart('neutral');
+      if (action === 'neutral') {
+        this.invalidGoalPassage = null;
+        this.match.restart('neutral');
+      }
       return action === 'neutral'
         ? 'Neutral kickoff arranged and signalled.'
         : 'Start signal given; robots may move.';

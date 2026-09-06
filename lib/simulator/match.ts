@@ -157,6 +157,8 @@ export class SoccerMatch {
   private trail: Pose[] = [];
   private trailTick = 0;
   private goalEntry: -1 | 1 | null = null;
+  private lastBoundaryPushers = new Map<string, string>();
+  private lastTouchedBall: string | null = null;
 
   constructor() {
     this.state = {
@@ -191,6 +193,16 @@ export class SoccerMatch {
     };
   }
 
+  /** Opponent whose outward drive caused this robot's current wall contact. */
+  opponentPusher(robot: string) {
+    return this.lastBoundaryPushers.get(robot) ?? null;
+  }
+
+  /** Robot that most recently touched the ball during the last physics step. */
+  get lastBallTouch() {
+    return this.lastTouchedBall;
+  }
+
   ballTrail() {
     return this.trail.map((pose) => ({ ...pose }));
   }
@@ -212,6 +224,8 @@ export class SoccerMatch {
     this.stalledFor = 0;
     this.ballAnchor = { ...this.state.actors.ball };
     this.trail = [];
+    this.lastBoundaryPushers.clear();
+    this.lastTouchedBall = null;
   }
 
   removeRobot(id: string) {
@@ -380,6 +394,56 @@ export class SoccerMatch {
     };
   }
 
+  private observeBoundaryPushes(
+    activeRobots: ActorDefinition[],
+    intendedVelocities: Record<string, { x: number; z: number }>,
+  ) {
+    this.lastBoundaryPushers.clear();
+    const limitX = FIELD.floorHalfWidth - ROBOT_RADIUS;
+    const limitZ = FIELD.floorHalfLength - ROBOT_RADIUS;
+    for (const victim of activeRobots) {
+      const pose = this.state.actors[victim.id];
+      const walls = [
+        { gap: limitX - pose.x, x: 1, z: 0 },
+        { gap: limitX + pose.x, x: -1, z: 0 },
+        { gap: limitZ - pose.z, x: 0, z: 1 },
+        { gap: limitZ + pose.z, x: 0, z: -1 },
+      ].sort((first, second) => first.gap - second.gap);
+      const wall = walls[0];
+      if (wall.gap > 0.0002) continue;
+
+      const victimVelocity = intendedVelocities[victim.id] ?? { x: 0, z: 0 };
+      const victimOutward =
+        victimVelocity.x * wall.x + victimVelocity.z * wall.z;
+      let strongest: { id: string; pressure: number } | null = null;
+      for (const candidate of activeRobots) {
+        if (candidate.team === victim.team) continue;
+        const pusher = this.state.actors[candidate.id];
+        const deltaX = pose.x - pusher.x;
+        const deltaZ = pose.z - pusher.z;
+        const separation = Math.hypot(deltaX, deltaZ);
+        if (separation > ROBOT_RADIUS * 2 + 0.0005) continue;
+
+        // The opponent must be behind the boundary robot and actively drive
+        // through it toward the wall. Nearby or tangential contact is not a push.
+        const outwardAlignment = deltaX * wall.x + deltaZ * wall.z;
+        const lateralAlignment = Math.abs(deltaX * wall.z - deltaZ * wall.x);
+        if (
+          outwardAlignment < ROBOT_RADIUS * 1.45 ||
+          lateralAlignment > ROBOT_RADIUS * 0.8
+        )
+          continue;
+        const velocity = intendedVelocities[candidate.id] ?? { x: 0, z: 0 };
+        const pusherOutward = velocity.x * wall.x + velocity.z * wall.z;
+        const pressure = pusherOutward - victimOutward;
+        if (pusherOutward < 0.08 || pressure < 0.06) continue;
+        if (!strongest || pressure > strongest.pressure)
+          strongest = { id: candidate.id, pressure };
+      }
+      if (strongest) this.lastBoundaryPushers.set(victim.id, strongest.id);
+    }
+  }
+
   private constrainBall(previous: Pose, keepMoving = false): MatchTeam | null {
     let scored: MatchTeam | null = null;
     const ball = this.state.actors.ball;
@@ -528,6 +592,8 @@ export class SoccerMatch {
       }
       return;
     }
+    this.lastBoundaryPushers.clear();
+    this.lastTouchedBall = null;
     this.state.elapsed = Math.min(settings.duration, this.state.elapsed + dt);
     if (this.state.elapsed >= settings.duration) {
       this.state.phase = 'finished';
@@ -563,10 +629,12 @@ export class SoccerMatch {
     }
     const commands: Record<string, DriveInput> = {};
     const velocities: Record<string, { x: number; z: number }> = {};
+    const intendedVelocities: Record<string, { x: number; z: number }> = {};
     for (const robot of activeRobots) {
       if (settings.disabledRobots?.includes(robot.id)) {
         commands[robot.id] = { ...NO_DRIVE, dribble: false };
         velocities[robot.id] = { x: 0, z: 0 };
+        intendedVelocities[robot.id] = { x: 0, z: 0 };
         continue;
       }
       const team = robot.team as MatchTeam;
@@ -596,6 +664,7 @@ export class SoccerMatch {
         (Math.sin(yaw) * input.forward + Math.cos(yaw) * input.strafe) * scale;
       const vz =
         (Math.cos(yaw) * input.forward - Math.sin(yaw) * input.strafe) * scale;
+      intendedVelocities[robot.id] = { x: vx, z: vz };
       const next = moveManualActor(activeRobots, this.state.actors, robot.id, {
         x: pose.x + vx * dt,
         z: pose.z + vz * dt,
@@ -606,6 +675,7 @@ export class SoccerMatch {
       };
       this.state.actors[robot.id] = { ...next, yaw };
     }
+    this.observeBoundaryPushes(activeRobots, intendedVelocities);
     this.state.ballOwner = null;
     for (const robot of activeRobots) {
       const pose = this.state.actors[robot.id];
@@ -621,6 +691,7 @@ export class SoccerMatch {
           x: Math.sin(pose.yaw) * 3,
           z: Math.cos(pose.yaw) * 3,
         };
+        this.lastTouchedBall = robot.id;
         this.cooldown = 0.32;
         break;
       }
@@ -643,6 +714,7 @@ export class SoccerMatch {
           z: velocities[robot.id].z + (targetZ - ball.z) * 18,
         };
         this.state.ballOwner = robot.id;
+        this.lastTouchedBall = robot.id;
         break;
       }
     }
@@ -664,6 +736,7 @@ export class SoccerMatch {
         const dz = ball.z - pose.z;
         const length = Math.hypot(dx, dz);
         if (length >= ROBOT_RADIUS + BALL_RADIUS) continue;
+        this.lastTouchedBall = robot.id;
         const nx = length > 1e-9 ? dx / length : Math.sin(pose.yaw);
         const nz = length > 1e-9 ? dz / length : Math.cos(pose.yaw);
         const correction = ROBOT_RADIUS + BALL_RADIUS - length;
