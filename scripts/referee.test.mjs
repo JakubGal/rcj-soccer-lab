@@ -47,6 +47,7 @@ const {
   clampRobotToField,
   robotWallClearance,
   robotTouchesFieldWall,
+  robotTouchesGoal,
 } = await import('../lib/simulator/referee-geometry.ts');
 const { ROBOT_VISUALS } = await import('../lib/simulator/robot-models.ts');
 const {
@@ -60,8 +61,11 @@ const {
 } = await import('../lib/simulator/referee-cases.ts');
 const { SoccerMatch, MATCH_ROBOTS, MATCH_STEP, NO_DRIVE } =
   await import('../lib/simulator/match.ts');
-const { RCJ_FIELD_DERIVED: FIELD, RCJ_SIMULATOR_GUIDES } =
-  await import('../lib/simulator/field-spec.ts');
+const {
+  RCJ_FIELD_DERIVED: FIELD,
+  RCJ_FIELD_SPEC_2026: SPEC,
+  RCJ_SIMULATOR_GUIDES,
+} = await import('../lib/simulator/field-spec.ts');
 const { MANUAL_ROBOT_BALL_CENTER_DISTANCE } =
   await import('../lib/simulator/manual-layout.ts');
 const { RULE_SECTIONS } = await import('../lib/rulebook/catalog.ts');
@@ -1373,6 +1377,158 @@ test('rounded penalty geometry agrees with the shared field at both ends', () =>
     assert.equal(penaltyOverlap({ x: 0, z: end * 0.87 }, end, true), false);
     assert.equal(penaltyOverlap({ x: 0.18, z: end * 0.87 }, end), true);
   }
+});
+
+test('the goal-line stripe and goal mouth extend the penalty area, but never the unmarked outer lane beside the goal', () => {
+  for (const end of [-1, 1]) {
+    assert.equal(
+      insidePenalty({ x: 0.35, z: end * 1.1 }, end),
+      false,
+      'unmarked outer lane beside the goal, past the stripe',
+    );
+    assert.equal(
+      insidePenalty({ x: 0, z: end * 1.16 }, end),
+      false,
+      'behind the goal back wall',
+    );
+    assert.equal(
+      insidePenalty({ x: 0.35, z: end * 1.085 }, end),
+      true,
+      'goal-line stripe, still as wide as the marked area',
+    );
+    assert.equal(
+      insidePenalty({ x: 0.1, z: end * 1.12 }, end),
+      true,
+      'goal interior, narrower than the marked area',
+    );
+  }
+});
+
+test('a robot camping across the goal-line stripe and into the goal mouth is fully inside the penalty area, for every model', () => {
+  // This straddles the union's internal step at playingHalfLength (the
+  // stripe's outer edge, where the required width narrows from the area's
+  // 0.8 m down to the goal's 0.6 m): the footprint's rear half sits in the
+  // wide stripe and its front half in the narrower goal mouth, so if the
+  // full-entry fast path only checked vertices it could wrongly pass a body
+  // whose edge dips into the unmarked outer lane at that step.
+  for (const visual of ['lab', 'xlc-open-2020', 'xlc-innovation-2021'])
+    for (const end of [-1, 1])
+      for (const z of [1.0, 1.04]) {
+        const pose = { x: 0, z: end * z, yaw: end === 1 ? 0 : Math.PI };
+        assert.equal(
+          robotPenaltyOverlap(pose, end, visual, true),
+          true,
+          `${visual} end ${end} z ${z}`,
+        );
+      }
+});
+
+test('a robot straddling the goal-mouth step, or short of the area entirely, is only partially inside at most', () => {
+  for (const visual of ['lab', 'xlc-open-2020', 'xlc-innovation-2021']) {
+    const straddlingStep = { x: 0.36, z: 1.0, yaw: 0 };
+    assert.equal(
+      robotPenaltyOverlap(straddlingStep, 1, visual),
+      true,
+      `${visual}: part of the body sits in the outer lane`,
+    );
+    assert.equal(
+      robotPenaltyOverlap(straddlingStep, 1, visual, true),
+      false,
+      `${visual}: not fully inside`,
+    );
+    const straddlingSide = { x: 0.4, z: 0.9, yaw: 0 };
+    assert.equal(robotPenaltyOverlap(straddlingSide, 1, visual), true, visual);
+    assert.equal(
+      robotPenaltyOverlap(straddlingSide, 1, visual, true),
+      false,
+      visual,
+    );
+    // Clear of the area's front edge (0.825) by more than any model's
+    // outermost point, so no part of the body reaches it.
+    assert.equal(
+      robotPenaltyOverlap({ x: 0, z: 0.7, yaw: 0 }, 1, visual),
+      false,
+      visual,
+    );
+  }
+});
+
+test('robotTouchesGoal detects footprint contact against a goal post but not open field near the mouth', () => {
+  for (const visual of ['lab', 'xlc-open-2020', 'xlc-innovation-2021'])
+    assert.equal(
+      robotTouchesGoal({ x: 0, z: 0.95, yaw: 0 }, visual),
+      false,
+      `${visual}: well clear of both posts`,
+    );
+});
+
+test('robotTouchesGoal tests the actual footprint polygon against each goal panel, not just its bounding box', () => {
+  // For an infinite outer-wall half-plane the axis-aligned body bounds are
+  // an exact clearance measure, which is why robotTouchesFieldWall can stop
+  // there. A goal panel is only a small rectangle, so a yaw-rotated body
+  // whose bounding-box corner overlaps the panel's corner can be flagged
+  // while the body itself is still centimetres away on the diagonal. The
+  // `lab` chassis is a 20-gon of radius 0.085 m (see the `lab` polygon in
+  // referee-geometry.ts), so its true silhouette never reaches farther
+  // than that radius in any direction, unlike its own bounding box corner.
+  const chassisRadius = 0.085;
+  const post = { x: SPEC.goal.innerWidth / 2, z: FIELD.goalMouthZ };
+  const diagonal = { x: -Math.SQRT1_2, z: -Math.SQRT1_2 };
+  const poseAtDistance = (d) => ({
+    x: post.x + diagonal.x * d,
+    z: post.z + diagonal.z * d,
+    yaw: 0,
+  });
+  assert.equal(
+    robotTouchesGoal(poseAtDistance(chassisRadius + 0.02), 'lab'),
+    false,
+    'body is still ~2 cm short of the post along the diagonal',
+  );
+  // The 20-gon's vertices sit exactly on the 0.085 m circle, but this
+  // diagonal falls between two vertices (spaced 18° apart, none aligned
+  // with a -45° direction), so its true boundary along that ray is
+  // slightly inside the vertex radius. 5 mm further in than the vertex
+  // radius clears that faceting and gives an unambiguous overlap.
+  assert.equal(
+    robotTouchesGoal(poseAtDistance(chassisRadius - 0.005), 'lab'),
+    true,
+    'moved in along the diagonal until the body overlaps the post corner',
+  );
+});
+
+test('detectLiveIncident reports full-area entry deep in the goal-line stripe, and a wall touch against a goal post', () => {
+  const deep = continuous({ topics: ['out'] });
+  const camping = { x: 0, z: 1.02, yaw: 0 };
+  assert.equal(
+    robotPenaltyOverlap(camping, 1, deep.robotVisual, true),
+    true,
+    'camping pose is fully inside the extended area',
+  );
+  deep.match.place({
+    'blue-1': camping,
+    ball: { x: -0.5, z: -0.4, yaw: 0 },
+  });
+  deep.detectLiveIncident();
+  assert.equal(deep.active.definition.id, 'live-full-area');
+
+  const post = continuous({ topics: ['out'] });
+  const pressed = { x: 0.395, z: 1.05, yaw: 0 };
+  assert.equal(
+    robotTouchesGoal(pressed, post.robotVisual),
+    true,
+    'pressed against the goal post',
+  );
+  assert.equal(
+    robotPenaltyOverlap(pressed, 1, post.robotVisual, true),
+    false,
+    'the same pose must not also count as fully inside the area',
+  );
+  post.match.place({
+    'blue-1': pressed,
+    ball: { x: -0.5, z: -0.4, yaw: 0 },
+  });
+  post.detectLiveIncident();
+  assert.equal(post.active.definition.id, 'live-wall');
 });
 
 test('body footprints match current GLBs and preserve the shapes that a circle or hull loses', () => {
