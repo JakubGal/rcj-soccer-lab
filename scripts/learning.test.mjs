@@ -308,6 +308,19 @@ test('legacy modes preserve learning intent and live referee routes', () => {
   assert.equal(readNavigation('?mode=manual').mode, 'play');
   assert.equal(readNavigation('?mode=manual').arrange, true);
   assert.equal(readNavigation('?mode=unknown').mode, 'rules');
+  assert.equal(readNavigation('?mode=academy').mode, 'academy');
+  assert.equal(
+    readNavigation('?mode=academy&academy=referees').academyPage,
+    'referees',
+  );
+  assert.equal(
+    readNavigation('?mode=referee&cert=continuous').certificationTrack,
+    'continuous',
+  );
+  assert.equal(
+    readNavigation('?mode=rules&cert=unknown').certificationTrack,
+    null,
+  );
 });
 
 test('explicit lesson selection and embeds survive navigation round trips', () => {

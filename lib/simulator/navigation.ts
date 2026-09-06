@@ -1,10 +1,14 @@
-export type AppMode = 'rules' | 'play' | 'referee';
+export type AppMode = 'rules' | 'play' | 'referee' | 'academy';
+export type AcademyPage = 'profile' | 'certification' | 'referees';
+export type CertificationTrack = 'rules' | 'step' | 'continuous' | null;
 export type AppNavigation = {
   mode: AppMode;
   sectionId: string;
   situationId: string | null;
   arrange: boolean;
   embed: string | null;
+  academyPage: AcademyPage;
+  certificationTrack: CertificationTrack;
 };
 export const INITIAL_NAVIGATION: AppNavigation = {
   mode: 'rules',
@@ -12,10 +16,14 @@ export const INITIAL_NAVIGATION: AppNavigation = {
   situationId: null,
   arrange: false,
   embed: null,
+  academyPage: 'profile',
+  certificationTrack: null,
 };
 export function readNavigation(search: string): AppNavigation {
   const query = new URLSearchParams(search);
   const mode = query.get('mode');
+  const academy = query.get('academy');
+  const certification = query.get('cert');
   const legacyStudy =
     mode === 'explore' ||
     mode === 'learn' ||
@@ -30,7 +38,9 @@ export function readNavigation(search: string): AppNavigation {
           ? 'referee'
           : mode === 'play'
             ? 'play'
-            : 'rules',
+            : mode === 'academy'
+              ? 'academy'
+              : 'rules',
     sectionId: query.get('rule') ?? INITIAL_NAVIGATION.sectionId,
     situationId:
       query.get('situation') ??
@@ -41,6 +51,16 @@ export function readNavigation(search: string): AppNavigation {
           : null),
     arrange: mode === 'manual' || query.get('arrange') === '1',
     embed: query.get('embed'),
+    academyPage:
+      academy === 'certification' || academy === 'referees'
+        ? academy
+        : 'profile',
+    certificationTrack:
+      certification === 'rules' ||
+      certification === 'step' ||
+      certification === 'continuous'
+        ? certification
+        : null,
   };
 }
 export function navigationSearch(
@@ -55,6 +75,8 @@ export function navigationSearch(
     if (nav.situationId) query.set('situation', nav.situationId);
   }
   if (nav.mode === 'play' && nav.arrange) query.set('arrange', '1');
+  if (nav.mode === 'academy') query.set('academy', nav.academyPage);
+  if (nav.certificationTrack) query.set('cert', nav.certificationTrack);
   if (nav.embed) query.set('embed', nav.embed);
   return `?${query}`;
 }

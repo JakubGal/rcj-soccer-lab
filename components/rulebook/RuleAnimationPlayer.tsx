@@ -19,15 +19,25 @@ import {
 } from '@/lib/rulebook/animations';
 import type { RobotVisualId } from '@/lib/simulator/robot-models';
 import { cn } from '@/lib/utils';
+import type {
+  RuleLearningEvent,
+  RuleLearningMode,
+} from '@/lib/certification/client-types';
 
 export function RuleAnimationPlayer({
   clips,
   robotVisual,
   onPassed,
+  learningMode = 'practice',
+  certificationRunId = null,
+  onLearningEvent,
 }: {
   clips: RuleClip[];
   robotVisual: RobotVisualId;
   onPassed?: () => void;
+  learningMode?: RuleLearningMode;
+  certificationRunId?: string | null;
+  onLearningEvent?: (event: RuleLearningEvent) => void | Promise<void>;
 }) {
   const [clipId, setClipId] = useState(clips[0].id);
   const clip = clips.find((item) => item.id === clipId) ?? clips[0];
@@ -37,6 +47,9 @@ export function RuleAnimationPlayer({
   const [camera, setCamera] = useState<CameraPreset>('overhead');
   const [speed, setSpeed] = useState(1);
   const [answer, setAnswer] = useState<number | null>(null);
+  const answerAttempts = useRef(new Map<string, number>());
+  const firstAnswers = useRef(new Map<string, number>());
+  const completedQuestions = useRef(new Set<string>());
   const duration = clip.frames[clip.frames.length - 1].at;
   const scene = useMemo(() => sampleClip(clip, time), [clip, time]);
   const trail = useMemo(
@@ -205,8 +218,50 @@ export function RuleAnimationPlayer({
               variant="outline"
               aria-pressed={answer === index}
               onClick={() => {
+                const questionId = `clip:${clip.id}`;
+                const attemptNumber =
+                  (answerAttempts.current.get(questionId) ?? 0) + 1;
+                answerAttempts.current.set(questionId, attemptNumber);
+                if (!firstAnswers.current.has(questionId))
+                  firstAnswers.current.set(questionId, index);
+                const accepted = index === clip.answer;
                 setAnswer(index);
-                if (index === clip.answer) onPassed?.();
+                void onLearningEvent?.({
+                  type: 'answer',
+                  mode: learningMode,
+                  certificationRunId,
+                  questionId,
+                  sourceId: clip.id,
+                  kind: 'clip',
+                  decisionId: questionId,
+                  answer: { kind: 'clip', selectedIndex: index },
+                  attemptNumber,
+                  firstAnswer: attemptNumber === 1,
+                  accepted,
+                  score: accepted ? 1 : 0,
+                  completed: accepted,
+                  assisted: false,
+                });
+                if (accepted) {
+                  onPassed?.();
+                  if (!completedQuestions.current.has(questionId)) {
+                    completedQuestions.current.add(questionId);
+                    void onLearningEvent?.({
+                      type: 'complete',
+                      mode: learningMode,
+                      certificationRunId,
+                      questionId,
+                      sourceId: clip.id,
+                      kind: 'clip',
+                      answer: {
+                        kind: 'clip',
+                        selectedIndex: firstAnswers.current.get(questionId)!,
+                      },
+                      firstTryCorrect: attemptNumber === 1,
+                      assisted: false,
+                    });
+                  }
+                }
               }}
               className={cn(
                 answer === index &&

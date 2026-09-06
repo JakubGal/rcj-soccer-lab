@@ -6,6 +6,7 @@ const ROOT = path.resolve(import.meta.dirname, '..');
 const OUTPUT = path.join(ROOT, 'lib', 'i18n', 'catalog.generated.json');
 const CACHE = path.join(ROOT, 'scripts', '.i18n-cache.json');
 const SOURCE_ROOTS = ['app', 'components', 'lib'];
+const SKIPPED_DIRECTORIES = new Set(['node_modules', 'i18n', 'api', 'server']);
 const TARGETS = ['sk', 'de', 'ja'];
 const CACHE_REVISION = 3;
 
@@ -119,8 +120,34 @@ const MANUAL = {
     Rules: 'Pravidlá',
     Play: 'Hra',
     Referee: 'Rozhodca',
-    'Learn the rules. Play. Referee.':
-      'Spoznávajte pravidlá. Hrajte. Rozhodujte.',
+    Academy: 'Akadémia',
+    'Learn the rules. Play. Referee. Certify.':
+      'Spoznávajte pravidlá. Hrajte. Rozhodujte. Certifikujte sa.',
+    'Training and certification': 'Tréning a certifikácia',
+    Profile: 'Profil',
+    Certification: 'Certifikácia',
+    'Certified referees': 'Certifikovaní rozhodcovia',
+    'Sign in': 'Prihlásiť sa',
+    'Sign out': 'Odhlásiť sa',
+    'Rules examination': 'Skúška z pravidiel',
+    'Step mode': 'Krokový režim',
+    'Continuous mode': 'Plynulý režim',
+    'Restart certification': 'Reštartovať certifikáciu',
+    'Start certification round': 'Začať certifikačné kolo',
+    'Public display name': 'Verejné zobrazované meno',
+    'Country or region': 'Krajina alebo región',
+    'Referee number': 'Číslo rozhodcu',
+    Certified: 'Certifikovaný',
+    Restarted: 'Reštartované',
+    'Load more': 'Načítať ďalšie',
+    'Loading more…': 'Načítavajú sa ďalšie…',
+    'In progress': 'Prebieha',
+    Failed: 'Neúspešné',
+    'CERTIFICATION RULES / FIRST ANSWER COUNTS':
+      'CERTIFIKAČNÉ PRAVIDLÁ / PRVÁ ODPOVEĎ SA POČÍTA',
+    'This certification round has failed':
+      'Toto certifikačné kolo je neúspešné',
+    'Restart required': 'Vyžaduje sa reštart',
     Language: 'Jazyk',
     English: 'Angličtina',
     Slovak: 'Slovenčina',
@@ -157,7 +184,34 @@ const MANUAL = {
     Rules: 'Regeln',
     Play: 'Spielen',
     Referee: 'Schiedsrichter',
-    'Learn the rules. Play. Referee.': 'Regeln lernen. Spielen. Entscheiden.',
+    Academy: 'Akademie',
+    'Learn the rules. Play. Referee. Certify.':
+      'Regeln lernen. Spielen. Entscheiden. Zertifizieren.',
+    'Training and certification': 'Training und Zertifizierung',
+    Profile: 'Profil',
+    Certification: 'Zertifizierung',
+    'Certified referees': 'Zertifizierte Schiedsrichter',
+    'Sign in': 'Anmelden',
+    'Sign out': 'Abmelden',
+    'Rules examination': 'Regelprüfung',
+    'Step mode': 'Schrittmodus',
+    'Continuous mode': 'Fortlaufender Modus',
+    'Restart certification': 'Zertifizierung neu starten',
+    'Start certification round': 'Zertifizierungsrunde starten',
+    'Public display name': 'Öffentlicher Anzeigename',
+    'Country or region': 'Land oder Region',
+    'Referee number': 'Schiedsrichternummer',
+    Certified: 'Zertifiziert',
+    Restarted: 'Neu gestartet',
+    'Load more': 'Mehr laden',
+    'Loading more…': 'Weitere werden geladen…',
+    'In progress': 'In Bearbeitung',
+    Failed: 'Nicht bestanden',
+    'CERTIFICATION RULES / FIRST ANSWER COUNTS':
+      'ZERTIFIZIERUNGSREGELN / DIE ERSTE ANTWORT ZÄHLT',
+    'This certification round has failed':
+      'Diese Zertifizierungsrunde wurde nicht bestanden',
+    'Restart required': 'Neustart erforderlich',
     Language: 'Sprache',
     English: 'Englisch',
     Slovak: 'Slowakisch',
@@ -202,8 +256,33 @@ const MANUAL = {
     Rules: 'ルール',
     Play: 'プレイ',
     Referee: '審判',
-    'Learn the rules. Play. Referee.':
-      'ルールを学び、プレイし、審判しましょう。',
+    Academy: 'アカデミー',
+    'Learn the rules. Play. Referee. Certify.':
+      'ルールを学び、プレイし、審判し、認定を取得しましょう。',
+    'Training and certification': 'トレーニングと認定',
+    Profile: 'プロフィール',
+    Certification: '認定',
+    'Certified referees': '認定審判員',
+    'Sign in': 'ログイン',
+    'Sign out': 'ログアウト',
+    'Rules examination': 'ルール試験',
+    'Step mode': 'ステップモード',
+    'Continuous mode': '連続モード',
+    'Restart certification': '認定を最初からやり直す',
+    'Start certification round': '認定ラウンドを開始',
+    'Public display name': '公開表示名',
+    'Country or region': '国または地域',
+    'Referee number': '審判員番号',
+    Certified: '認定済み',
+    Restarted: '再開始済み',
+    'Load more': 'さらに読み込む',
+    'Loading more…': 'さらに読み込み中…',
+    'In progress': '進行中',
+    Failed: '不合格',
+    'CERTIFICATION RULES / FIRST ANSWER COUNTS':
+      '認定ルール / 最初の回答が採点対象',
+    'This certification round has failed': 'この認定ラウンドは不合格です',
+    'Restart required': '最初からやり直す必要があります',
     Language: '言語',
     English: '英語',
     Slovak: 'スロバキア語',
@@ -267,7 +346,7 @@ async function filesUnder(directory) {
   const entries = await readdir(directory, { withFileTypes: true });
   const files = [];
   for (const entry of entries) {
-    if (entry.name === 'node_modules' || entry.name === 'i18n') continue;
+    if (entry.isDirectory() && SKIPPED_DIRECTORIES.has(entry.name)) continue;
     const target = path.join(directory, entry.name);
     if (entry.isDirectory()) files.push(...(await filesUnder(target)));
     else if (/\.tsx?$/.test(entry.name)) files.push(target);

@@ -53,6 +53,7 @@ import { CaseLesson } from './CaseLesson';
 import { ScenarioLesson } from './ScenarioLesson';
 import { useLocalization } from '@/components/i18n/LocalizationProvider';
 import { translateText } from '@/lib/i18n';
+import type { RuleLearningBridge } from '@/lib/certification/client-types';
 
 const DEFAULT_SECTION = 'soccer:inside-penalty-area';
 const PROGRESS_KEY = 'rcj-rulebook-read-2026-06-03-v1';
@@ -63,14 +64,22 @@ export function Rulebook({
   sectionId = DEFAULT_SECTION,
   situationId = null,
   onSelect,
+  learning,
 }: {
   robotVisual: RobotVisualId;
   active?: boolean;
   sectionId?: string;
   situationId?: string | null;
   onSelect: (sectionId: string, situationId: string | null) => void;
+  learning?: RuleLearningBridge;
 }) {
   const { locale } = useLocalization();
+  const learningMode = learning?.mode ?? 'practice';
+  const certificationRunId = learning?.certificationRunId ?? null;
+  const learningContextKey =
+    learningMode === 'certification'
+      ? `certification:${certificationRunId ?? 'unassigned'}`
+      : 'practice';
   const requestedSituation = LEARNING_SITUATIONS.find(
     (item) => item.id === situationId,
   );
@@ -79,11 +88,35 @@ export function Rulebook({
     'situations',
   );
   const [passed, setPassed] = useState<string[]>([]);
+  const [contextCompleted, setContextCompleted] = useState<
+    Record<string, string[]>
+  >({});
   const [studyAnswers, setStudyAnswers] = useState<Record<string, string>>({});
   const [query, setQuery] = useState('');
   const [layout, setLayout] = useState<'split' | 'text' | 'visual'>('split');
   const [reviewed, setReviewed] = useState<string[]>([]);
   const [restored, setRestored] = useState(false);
+  const remoteCompleted = useMemo(
+    () => validLearningProgress(learning?.completedSituationIds),
+    [learning?.completedSituationIds],
+  );
+  const completedSituationIds = useMemo(
+    () => [
+      ...new Set([
+        ...(learningMode === 'certification'
+          ? (contextCompleted[learningContextKey] ?? [])
+          : passed),
+        ...remoteCompleted,
+      ]),
+    ],
+    [
+      contextCompleted,
+      learningContextKey,
+      learningMode,
+      passed,
+      remoteCompleted,
+    ],
+  );
   const selected =
     RULE_SECTIONS.find((section) => section.id === selectedId) ??
     RULE_SECTIONS[0];
@@ -189,8 +222,15 @@ export function Rulebook({
     onSelect(item.sectionId, item.id);
   };
   const passSituation = () => {
-    if (situation)
-      setPassed((current) => [...new Set([...current, situation.id])]);
+    if (!situation) return;
+    if (learningMode === 'certification')
+      setContextCompleted((current) => ({
+        ...current,
+        [learningContextKey]: [
+          ...new Set([...(current[learningContextKey] ?? []), situation.id]),
+        ],
+      }));
+    else setPassed((current) => [...new Set([...current, situation.id])]);
   };
   const filteredSituations = LEARNING_SITUATIONS.filter((item) => {
     const section = RULE_SECTIONS.find(
@@ -219,7 +259,8 @@ export function Rulebook({
   const navigatingSituations = library === 'situations' && situationIndex >= 0;
   const studyResults = SCENARIOS.flatMap((item) => {
     const answer = item.choices.find(
-      (choice) => choice.id === studyAnswers[item.id],
+      (choice) =>
+        choice.id === studyAnswers[`${learningContextKey}:${item.id}`],
     );
     return answer ? [answer.score] : [];
   });
@@ -286,7 +327,11 @@ export function Rulebook({
     <div className="rulebook-shell">
       <aside className="rulebook-nav" aria-label="Complete rulebook contents">
         <div className="rulebook-nav-top">
-          <p className="rule-kicker">RULES & SITUATIONS / 2026</p>
+          <p className="rule-kicker">
+            {learningMode === 'certification'
+              ? 'CERTIFICATION RULES / FIRST ANSWER COUNTS'
+              : 'RULES & SITUATIONS / 2026'}
+          </p>
           <div className="learning-library-switch">
             <Button
               size="sm"
@@ -329,13 +374,17 @@ export function Rulebook({
           <div className="rule-reading-progress">
             <span>
               {library === 'situations'
-                ? `${passed.length} / ${LEARNING_SITUATIONS.length} checks passed`
+                ? learningMode === 'certification'
+                  ? `${completedSituationIds.length} / ${LEARNING_SITUATIONS.length} questions completed`
+                  : `${completedSituationIds.length} / ${LEARNING_SITUATIONS.length} checks passed`
                 : `${readCount} / ${documentSections.length} reviewed`}
             </span>
             <Progress
               value={
                 library === 'situations'
-                  ? (passed.length / LEARNING_SITUATIONS.length) * 100
+                  ? (completedSituationIds.length /
+                      LEARNING_SITUATIONS.length) *
+                    100
                   : (readCount / documentSections.length) * 100
               }
               aria-label={
@@ -345,6 +394,12 @@ export function Rulebook({
               }
             />
           </div>
+          {learningMode === 'certification' && (
+            <p className="rounded-md border border-amber-300/25 bg-amber-300/10 px-2.5 py-2 text-xs leading-5 text-amber-100">
+              Your first answer is final for this certification round. Hints and
+              answer-reveal tools are disabled.
+            </p>
+          )}
         </div>
         <nav
           className="rulebook-toc"
@@ -373,7 +428,7 @@ export function Rulebook({
                     onClick={() => chooseSituation(item.id)}
                   >
                     <span className="rule-toc-number">
-                      {passed.includes(item.id) ? (
+                      {completedSituationIds.includes(item.id) ? (
                         <Check aria-label="Check passed" />
                       ) : (
                         section.number
@@ -610,7 +665,7 @@ export function Rulebook({
                     >
                       {sectionSituations.map((item) => (
                         <NativeSelectOption key={item.id} value={item.id}>
-                          {passed.includes(item.id) ? '✓ ' : ''}
+                          {completedSituationIds.includes(item.id) ? '✓ ' : ''}
                           {item.title} ·{' '}
                           {item.kind === 'case'
                             ? 'decision practice'
@@ -623,12 +678,12 @@ export function Rulebook({
                     <p>
                       {
                         sectionSituations.filter((item) =>
-                          passed.includes(item.id),
+                          completedSituationIds.includes(item.id),
                         ).length
                       }{' '}
                       / {sectionSituations.length} situation checks passed ·{' '}
                       {sectionSituations.every((item) =>
-                        passed.includes(item.id),
+                        completedSituationIds.includes(item.id),
                       )
                         ? 'All checks complete'
                         : 'Answer each situation to check your understanding'}
@@ -637,35 +692,45 @@ export function Rulebook({
                 )}
                 {situation?.kind === 'case' && (
                   <CaseLesson
-                    key={situation.id}
+                    key={`${learningContextKey}:${situation.id}`}
                     item={REFEREE_CASES.find(
                       (item) => item.id === situation.sourceId,
                     )!}
                     robotVisual={robotVisual}
                     onPassed={passSituation}
+                    learningMode={learningMode}
+                    certificationRunId={certificationRunId}
+                    onLearningEvent={learning?.onEvent}
                   />
                 )}
                 {situation?.kind === 'scenario' && (
                   <ScenarioLesson
-                    key={situation.id}
+                    key={`${learningContextKey}:${situation.id}`}
                     scenario={SCENARIOS.find(
                       (item) => item.id === situation.sourceId,
                     )!}
-                    initialAnswer={studyAnswers[situation.sourceId]}
+                    initialAnswer={
+                      studyAnswers[
+                        `${learningContextKey}:${situation.sourceId}`
+                      ]
+                    }
                     onAnswer={(id) =>
                       setStudyAnswers((current) => ({
                         ...current,
-                        [situation.sourceId]: id,
+                        [`${learningContextKey}:${situation.sourceId}`]: id,
                       }))
                     }
                     studyScore={studyScore}
                     robotVisual={robotVisual}
                     onPassed={passSituation}
+                    learningMode={learningMode}
+                    certificationRunId={certificationRunId}
+                    onLearningEvent={learning?.onEvent}
                   />
                 )}
                 {situation?.kind === 'clip' && (
                   <RuleAnimationPlayer
-                    key={situation.id}
+                    key={`${learningContextKey}:${situation.id}`}
                     clips={[
                       RULE_CLIPS.find(
                         (item) => item.id === situation.sourceId,
@@ -673,6 +738,9 @@ export function Rulebook({
                     ]}
                     robotVisual={robotVisual}
                     onPassed={passSituation}
+                    learningMode={learningMode}
+                    certificationRunId={certificationRunId}
+                    onLearningEvent={learning?.onEvent}
                   />
                 )}
                 {guide === 'animation' && !situation && clips.length > 0 && (

@@ -1,5 +1,5 @@
 'use client';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Check, Lightbulb, Pause, Play, RotateCcw } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { RefereeMatch } from '@/lib/simulator/referee-match';
@@ -12,6 +12,10 @@ import { MATCH_ACTORS, MATCH_ROBOTS, MATCH_STEP } from '@/lib/simulator/match';
 import { lessonChoices } from '@/lib/rulebook/learning';
 import type { RobotVisualId } from '@/lib/simulator/robot-models';
 import { PlayCanvasViewport } from '@/components/simulator/PlayCanvasViewport';
+import type {
+  RuleLearningEvent,
+  RuleLearningMode,
+} from '@/lib/certification/client-types';
 
 function startLesson(item: RefereeCase, visual: RobotVisualId) {
   const session = new RefereeMatch(2026, { robotVisual: visual });
@@ -22,15 +26,27 @@ export function CaseLesson({
   item,
   robotVisual,
   onPassed,
+  learningMode = 'practice',
+  certificationRunId = null,
+  onLearningEvent,
 }: {
   item: RefereeCase;
   robotVisual: RobotVisualId;
   onPassed: () => void;
+  learningMode?: RuleLearningMode;
+  certificationRunId?: string | null;
+  onLearningEvent?: (event: RuleLearningEvent) => void | Promise<void>;
 }) {
   const [session, setSession] = useState(() => startLesson(item, robotVisual));
   const [frame, setFrame] = useState(() => session.snapshot());
   const [playing, setPlaying] = useState(false);
   const [ready, setReady] = useState(false);
+  const decisionAttempts = useRef(new Map<string, number>());
+  const firstTryCorrect = useRef(true);
+  const assisted = useRef(false);
+  const completionReported = useRef(false);
+  const firstDecisionIds = useRef(new Set<string>());
+  const firstCalls = useRef<RefereeCall[]>([]);
   const onReady = useCallback(() => setReady(true), []);
   const choices = useMemo(
     () =>
@@ -67,15 +83,64 @@ export function CaseLesson({
     return () => cancelAnimationFrame(raf);
   }, [playing, session]);
   const submit = (choice: RefereeCall) => {
+    const decisionId = frame.decisionKey;
+    const attemptNumber = (decisionAttempts.current.get(decisionId) ?? 0) + 1;
+    decisionAttempts.current.set(decisionId, attemptNumber);
+    if (!firstDecisionIds.current.has(decisionId)) {
+      firstDecisionIds.current.add(decisionId);
+      firstCalls.current.push({ ...choice });
+    }
     session.submit(frame.decisionKey, choice);
     const next = session.snapshot();
     setFrame(next);
     setPlaying(false);
+    const accepted = Boolean(
+      next.feedback && ['correct', 'supported'].includes(next.feedback.verdict),
+    );
+    if (!accepted) firstTryCorrect.current = false;
+    const questionId = `case:${item.id}`;
+    void onLearningEvent?.({
+      type: 'answer',
+      mode: learningMode,
+      certificationRunId,
+      questionId,
+      sourceId: item.id,
+      kind: 'case',
+      decisionId,
+      answer: {
+        kind: 'case',
+        calls: firstCalls.current.map((call) => ({ ...call })),
+      },
+      attemptNumber,
+      firstAnswer: attemptNumber === 1,
+      accepted,
+      score: accepted ? 1 : 0,
+      completed: Boolean(next.feedback?.final && accepted),
+      assisted: assisted.current,
+    });
     if (
       next.feedback?.final &&
       ['correct', 'supported'].includes(next.feedback.verdict)
-    )
+    ) {
       onPassed();
+      if (!completionReported.current) {
+        completionReported.current = true;
+        void onLearningEvent?.({
+          type: 'complete',
+          mode: learningMode,
+          certificationRunId,
+          questionId,
+          sourceId: item.id,
+          kind: 'case',
+          answer: {
+            kind: 'case',
+            calls: firstCalls.current.map((call) => ({ ...call })),
+          },
+          firstTryCorrect: firstTryCorrect.current && !assisted.current,
+          assisted: assisted.current,
+        });
+      }
+    }
   };
   const label = (choice: RefereeCall) =>
     `${REFEREE_ACTIONS.find((action) => action.id === choice.action)?.label}${choice.target ? ` · ${MATCH_ROBOTS.find((robot) => robot.id === choice.target)?.label ?? choice.target}` : ''}`;
@@ -212,11 +277,23 @@ export function CaseLesson({
             {feedback.final && <strong>Situation check complete</strong>}
           </div>
         )}
-        {!feedback?.final && (
+        {!feedback?.final && learningMode !== 'certification' && (
           <Button
             className="mt-3"
             variant="ghost"
             onClick={() => {
+              assisted.current = true;
+              firstTryCorrect.current = false;
+              void onLearningEvent?.({
+                type: 'assistance',
+                mode: learningMode,
+                certificationRunId,
+                questionId: `case:${item.id}`,
+                sourceId: item.id,
+                kind: 'case',
+                decisionId: frame.decisionKey,
+                assistance: 'hint',
+              });
               session.requestHint();
               setFrame(session.snapshot());
             }}
@@ -225,12 +302,14 @@ export function CaseLesson({
             {frame.help?.level ? 'More help' : 'Hint'}
           </Button>
         )}
-        {frame.help && frame.help.level > 0 && (
-          <p className="lesson-hint">
-            {frame.help.clue}
-            {frame.help.level >= 2 && ` ${frame.help.explanation}`}
-          </p>
-        )}
+        {learningMode !== 'certification' &&
+          frame.help &&
+          frame.help.level > 0 && (
+            <p className="lesson-hint">
+              {frame.help.clue}
+              {frame.help.level >= 2 && ` ${frame.help.explanation}`}
+            </p>
+          )}
       </section>
     </div>
   );

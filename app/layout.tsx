@@ -36,7 +36,7 @@ export const metadata: Metadata = {
     template: '%s · RCJ Soccer Lab',
   },
   description:
-    'Explore the complete RoboCupJunior Soccer 2026 rulebook with 3D examples, interactive inspections, referee practice, and playable matches.',
+    'Learn the RoboCupJunior Soccer 2026 rules with interactive 3D examples, referee practice, progress tracking, and optional referee certification.',
   ...(githubPagesUrl ? { alternates: { canonical: githubPagesUrl } } : {}),
   icons: {
     icon: faviconUrl,
@@ -44,7 +44,7 @@ export const metadata: Metadata = {
   openGraph: {
     title: 'RCJ Soccer Lab',
     description:
-      'Interactive 3D rules and referee training for RoboCupJunior Soccer 2026.',
+      'Interactive 3D rules, referee training, and optional certification for RoboCupJunior Soccer 2026.',
     type: 'website',
     ...(githubPagesUrl ? { url: githubPagesUrl } : {}),
     images: [

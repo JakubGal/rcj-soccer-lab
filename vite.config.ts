@@ -48,6 +48,13 @@ export default defineConfig(async () => {
   if (isGitHubPagesBuild) {
     return {
       ...baseConfig,
+      build: {
+        rolldownOptions: {
+          // API routes are not shipped in the Pages artifact, but Vinext still
+          // analyzes them while producing the static export.
+          external: ['cloudflare:workers'],
+        },
+      },
       plugins: [vinext()],
     };
   }

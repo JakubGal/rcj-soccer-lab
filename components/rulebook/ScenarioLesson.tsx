@@ -10,6 +10,10 @@ import {
 import type { RobotVisualId } from '@/lib/simulator/robot-models';
 import type { ScenarioDefinition } from '@/lib/simulator/types';
 import { useLocalization } from '@/components/i18n/LocalizationProvider';
+import type {
+  RuleLearningEvent,
+  RuleLearningMode,
+} from '@/lib/certification/client-types';
 
 export function ScenarioLesson({
   scenario,
@@ -18,6 +22,9 @@ export function ScenarioLesson({
   initialAnswer = null,
   onAnswer,
   studyScore,
+  learningMode = 'practice',
+  certificationRunId = null,
+  onLearningEvent,
 }: {
   scenario: ScenarioDefinition;
   robotVisual: RobotVisualId;
@@ -25,6 +32,9 @@ export function ScenarioLesson({
   initialAnswer?: string | null;
   onAnswer?: (id: string) => void;
   studyScore?: string;
+  learningMode?: RuleLearningMode;
+  certificationRunId?: string | null;
+  onLearningEvent?: (event: RuleLearningEvent) => void | Promise<void>;
 }) {
   const { locale, t } = useLocalization();
   const [time, setTime] = useState(0);
@@ -37,6 +47,16 @@ export function ScenarioLesson({
   const [camera, setCamera] = useState<CameraPreset>('overhead');
   const [copied, setCopied] = useState(false);
   const cursor = useRef(0);
+  const initialChoice = scenario.choices.find(
+    (choice) => choice.id === initialAnswer,
+  );
+  const answerAttempts = useRef(initialAnswer ? 1 : 0);
+  const firstAnswer = useRef<string | null>(initialAnswer);
+  const completionReported = useRef(
+    Boolean(
+      initialChoice && ['correct', 'acceptable'].includes(initialChoice.grade),
+    ),
+  );
   const frame = useMemo(() => scenario.sample(time), [scenario, time]);
   const trail = useMemo(
     () =>
@@ -230,11 +250,51 @@ export function ScenarioLesson({
               key={choice.id}
               aria-pressed={answer === choice.id}
               onClick={() => {
+                const questionId = `scenario:${scenario.id}`;
+                const attemptNumber = ++answerAttempts.current;
+                const accepted = ['correct', 'acceptable'].includes(
+                  choice.grade,
+                );
+                firstAnswer.current ??= choice.id;
                 setAnswer(choice.id);
                 onAnswer?.(choice.id);
                 setPlaying(false);
-                if (['correct', 'acceptable'].includes(choice.grade))
+                void onLearningEvent?.({
+                  type: 'answer',
+                  mode: learningMode,
+                  certificationRunId,
+                  questionId,
+                  sourceId: scenario.id,
+                  kind: 'scenario',
+                  decisionId: questionId,
+                  answer: { kind: 'scenario', choiceId: choice.id },
+                  attemptNumber,
+                  firstAnswer: attemptNumber === 1,
+                  accepted,
+                  score: choice.score,
+                  completed: accepted,
+                  assisted: false,
+                });
+                if (accepted) {
                   onPassed?.();
+                  if (!completionReported.current) {
+                    completionReported.current = true;
+                    void onLearningEvent?.({
+                      type: 'complete',
+                      mode: learningMode,
+                      certificationRunId,
+                      questionId,
+                      sourceId: scenario.id,
+                      kind: 'scenario',
+                      answer: {
+                        kind: 'scenario',
+                        choiceId: firstAnswer.current,
+                      },
+                      firstTryCorrect: attemptNumber === 1,
+                      assisted: false,
+                    });
+                  }
+                }
               }}
             >
               {choice.label}

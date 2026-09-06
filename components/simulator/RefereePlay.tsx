@@ -48,6 +48,14 @@ import { robotPenaltyOverlap } from '@/lib/simulator/referee-geometry';
 import { cn } from '@/lib/utils';
 import { useLocalization } from '@/components/i18n/LocalizationProvider';
 import { appendLocaleToSearch } from '@/lib/i18n';
+import {
+  CERTIFICATION_MATCH_DURATION_SECONDS,
+  type RefereeCertificationAttempt,
+  type RefereeCertificationBridge,
+  type RefereeCertificationFinishPayload,
+  type RefereePracticeSessionFinishPayload,
+  type RefereePracticeTrackingBridge,
+} from '@/lib/certification/client-types';
 
 const clock = (seconds: number) =>
   `${Math.floor(seconds / 60)}:${String(Math.floor(seconds % 60)).padStart(2, '0')}`;
@@ -78,6 +86,10 @@ const assessmentLabel = (assessment: string) =>
     'not-scored': 'Not scored',
   })[assessment] ?? assessment;
 const randomSeed = () => Math.floor(Math.random() * 4294967295) + 1;
+const ALL_TRAINING_TOPICS = TRAINING_TOPICS.map((topic) => topic.id);
+const practiceSessionId = () =>
+  globalThis.crypto?.randomUUID?.() ??
+  `practice-${Date.now()}-${Math.random().toString(36).slice(2)}`;
 const COMMON = new Set([
   'play-on',
   'no-goal',
@@ -95,26 +107,43 @@ export function RefereePlay({
   onExit,
   active = true,
   onOpenRule,
+  tracking,
+  certification,
 }: {
   robotVisual: RobotVisualId;
   onExit: () => void;
   active?: boolean;
   onOpenRule?: (sectionId: string) => void;
+  tracking?: RefereePracticeTrackingBridge;
+  certification?: RefereeCertificationBridge;
 }) {
   const { locale } = useLocalization();
+  const initialCertificationAttempt = certification?.attempt ?? null;
+  const initialMode = certification?.mode ?? 'step';
+  const initialDuration = certification
+    ? CERTIFICATION_MATCH_DURATION_SECONDS
+    : 180;
+  const initialSeed = initialCertificationAttempt?.seed ?? randomSeed();
+  const [certificationAttempt, setCertificationAttempt] =
+    useState<RefereeCertificationAttempt | null>(initialCertificationAttempt);
+  const [practiceId, setPracticeId] = useState(practiceSessionId);
+  const [sessionKind, setSessionKind] = useState<'practice' | 'certification'>(
+    certification ? 'certification' : 'practice',
+  );
   const [session, setSession] = useState(
     () =>
-      new RefereeMatch(randomSeed(), {
+      new RefereeMatch(initialSeed, {
         preMatch: true,
         robotVisual,
-        duration: 180,
+        mode: initialMode,
+        duration: initialDuration,
+        topics: ALL_TRAINING_TOPICS,
       }),
   );
-  const [mode, setMode] = useState<TrainingMode>('step');
-  const [duration, setDuration] = useState(180);
-  const [trainingTopics, setTrainingTopics] = useState<TrainingTopic[]>(
-    TRAINING_TOPICS.map((t) => t.id),
-  );
+  const [mode, setMode] = useState<TrainingMode>(initialMode);
+  const [duration, setDuration] = useState(initialDuration);
+  const [trainingTopics, setTrainingTopics] =
+    useState<TrainingTopic[]>(ALL_TRAINING_TOPICS);
   const [frame, setFrame] = useState(() => session.snapshot());
   const [running, setRunning] = useState(false);
   const [ready, setReady] = useState(false);
@@ -123,7 +152,7 @@ export function RefereePlay({
   const [speed, setSpeed] = useState(1);
   const [group, setGroup] = useState('common');
   const [topic, setTopic] = useState('random');
-  const [seed, setSeed] = useState(String(session.seed));
+  const [seed, setSeed] = useState(String(initialSeed));
   const [replay, setReplay] = useState<SituationReplay | null>(null);
   const [replayTime, setReplayTime] = useState(0);
   const [replayRunning, setReplayRunning] = useState(false);
@@ -133,6 +162,13 @@ export function RefereePlay({
   const [reviewEventId, setReviewEventId] = useState<number | null>(null);
   const replayCursor = useRef(0);
   const resultsHeading = useRef<HTMLHeadingElement>(null);
+  const practiceStartsReported = useRef(new Set<string>());
+  const practiceFinishesReported = useRef(new Set<string>());
+  const certificationFinishesReported = useRef(new Set<string>());
+  const [startingCertification, setStartingCertification] = useState(false);
+  const [certificationError, setCertificationError] = useState<string | null>(
+    null,
+  );
   const seekReplay = useCallback((time: number) => {
     replayCursor.current = time;
     setReplayTime(time);
@@ -146,16 +182,232 @@ export function RefereePlay({
   const field = useRef<HTMLElement>(null);
   const onReady = useCallback(() => setReady(true), []);
   const sync = useCallback(() => setFrame(session.snapshot()), [session]);
+  const activeCertificationAttempt =
+    certificationAttempt &&
+    certification &&
+    certificationAttempt.certificationRunId ===
+      certification.certificationRunId &&
+    certificationAttempt.mode === certification.mode
+      ? certificationAttempt
+      : null;
+  const certificationSessionReady =
+    !certification || Boolean(activeCertificationAttempt);
+  const displayedMode = certification?.mode ?? mode;
+  const displayedDuration = certification
+    ? CERTIFICATION_MATCH_DURATION_SECONDS
+    : duration;
+  const displayedTopics = certification ? ALL_TRAINING_TOPICS : trainingTopics;
+  const effectiveSpeed = certification ? 1 : speed;
+
+  const installCertificationAttempt = useCallback(
+    (attempt: RefereeCertificationAttempt) => {
+      if (!certification) return false;
+      if (
+        attempt.certificationRunId !== certification.certificationRunId ||
+        attempt.mode !== certification.mode ||
+        !Number.isInteger(attempt.seed) ||
+        attempt.seed < 1 ||
+        attempt.seed > 4294967295
+      ) {
+        setCertificationError(
+          'The server returned an invalid certification attempt.',
+        );
+        return false;
+      }
+      const next = new RefereeMatch(attempt.seed, {
+        preMatch: true,
+        robotVisual,
+        mode: attempt.mode,
+        duration: CERTIFICATION_MATCH_DURATION_SECONDS,
+        topics: ALL_TRAINING_TOPICS,
+      });
+      setReplay(null);
+      setReplayKind(null);
+      setReviewEventId(null);
+      setCertificationAttempt(attempt);
+      setSessionKind('certification');
+      setSession(next);
+      setFrame(next.snapshot());
+      setMode(attempt.mode);
+      setDuration(CERTIFICATION_MATCH_DURATION_SECONDS);
+      setTrainingTopics([...ALL_TRAINING_TOPICS]);
+      setSpeed(1);
+      setSeed(String(attempt.seed));
+      setTopic('random');
+      setRunning(false);
+      setCertificationError(null);
+      return true;
+    },
+    [certification, robotVisual],
+  );
+
+  const startCertificationAttempt = useCallback(async () => {
+    if (!certification || startingCertification) return;
+    setStartingCertification(true);
+    setCertificationError(null);
+    try {
+      const attempt = await certification.onStartAttempt({
+        certificationRunId: certification.certificationRunId,
+        mode: certification.mode,
+        durationSeconds: CERTIFICATION_MATCH_DURATION_SECONDS,
+        topics: [...ALL_TRAINING_TOPICS],
+      });
+      installCertificationAttempt(attempt);
+    } catch (error) {
+      setCertificationError(
+        error instanceof Error
+          ? error.message
+          : 'The certification attempt could not be started.',
+      );
+    } finally {
+      setStartingCertification(false);
+    }
+  }, [certification, installCertificationAttempt, startingCertification]);
+
   useEffect(() => {
     session.setRobotVisual(robotVisual);
     const update = requestAnimationFrame(sync);
     return () => cancelAnimationFrame(update);
   }, [session, robotVisual, sync]);
+
+  useEffect(() => {
+    const attempt = certification?.attempt;
+    if (!attempt || attempt.attemptId === certificationAttempt?.attemptId)
+      return;
+    const update = requestAnimationFrame(() =>
+      installCertificationAttempt(attempt),
+    );
+    return () => cancelAnimationFrame(update);
+  }, [
+    certification?.attempt,
+    certificationAttempt?.attemptId,
+    installCertificationAttempt,
+  ]);
+
+  useEffect(() => {
+    if (
+      sessionKind !== 'practice' ||
+      !tracking?.onStartSession ||
+      practiceStartsReported.current.has(practiceId)
+    )
+      return;
+    practiceStartsReported.current.add(practiceId);
+    const start = {
+      clientSessionId: practiceId,
+      mode: session.mode,
+      seed: session.seed,
+      durationSeconds: session.duration,
+      topics: [...session.topics],
+    };
+    void Promise.resolve()
+      .then(() => tracking.onStartSession?.(start))
+      .catch(() => undefined);
+  }, [practiceId, session, sessionKind, tracking]);
   useEffect(() => {
     if (!frame.sessionFinished) return;
     const focus = requestAnimationFrame(() => resultsHeading.current?.focus());
     return () => cancelAnimationFrame(focus);
   }, [frame.sessionFinished]);
+
+  useEffect(() => {
+    if (
+      sessionKind !== 'practice' ||
+      !frame.sessionFinished ||
+      !tracking?.onFinishSession ||
+      practiceFinishesReported.current.has(practiceId)
+    )
+      return;
+    practiceFinishesReported.current.add(practiceId);
+    const simulatedSeconds = Math.max(
+      0,
+      session.duration - frame.trainingRemaining,
+    );
+    const result: RefereePracticeSessionFinishPayload = {
+      clientSessionId: practiceId,
+      mode: session.mode,
+      seed: session.seed,
+      durationSeconds: session.duration,
+      topics: [...session.topics],
+      simulatedSeconds,
+      completionReason:
+        frame.trainingRemaining <= MATCH_STEP / 2 ? 'full-time' : 'ended-early',
+      report: {
+        correct: frame.report.correct,
+        wrong: frame.report.wrong,
+        missed: frame.report.missed,
+        assisted: frame.report.assisted,
+        assessed: frame.report.assessed,
+        accuracy: frame.report.accuracy,
+      },
+    };
+    void Promise.resolve()
+      .then(() => tracking.onFinishSession?.(result))
+      .catch(() => undefined);
+  }, [
+    frame.report,
+    frame.sessionFinished,
+    frame.trainingRemaining,
+    practiceId,
+    session,
+    sessionKind,
+    tracking,
+  ]);
+
+  useEffect(() => {
+    if (
+      sessionKind !== 'certification' ||
+      !certification ||
+      !activeCertificationAttempt ||
+      !frame.sessionFinished ||
+      certificationFinishesReported.current.has(
+        activeCertificationAttempt.attemptId,
+      )
+    )
+      return;
+    certificationFinishesReported.current.add(
+      activeCertificationAttempt.attemptId,
+    );
+    const simulatedSeconds = Math.max(
+      0,
+      CERTIFICATION_MATCH_DURATION_SECONDS - frame.trainingRemaining,
+    );
+    const completedAtFullTime = frame.trainingRemaining <= MATCH_STEP / 2;
+    const result: RefereeCertificationFinishPayload = {
+      attemptId: activeCertificationAttempt.attemptId,
+      certificationRunId: activeCertificationAttempt.certificationRunId,
+      mode: activeCertificationAttempt.mode,
+      seed: activeCertificationAttempt.seed,
+      durationSeconds: CERTIFICATION_MATCH_DURATION_SECONDS,
+      simulatedSeconds,
+      completionReason: completedAtFullTime ? 'full-time' : 'ended-early',
+      eligibleForScoring: completedAtFullTime && frame.report.assisted === 0,
+      topics: [...ALL_TRAINING_TOPICS],
+      report: {
+        correct: frame.report.correct,
+        wrong: frame.report.wrong,
+        missed: frame.report.missed,
+        assisted: frame.report.assisted,
+        assessed: frame.report.assessed,
+        accuracy: frame.report.accuracy,
+      },
+    };
+    void Promise.resolve()
+      .then(() => certification.onFinishAttempt(result))
+      .catch((error: unknown) =>
+        setCertificationError(
+          error instanceof Error
+            ? error.message
+            : 'The certification result could not be saved.',
+        ),
+      );
+  }, [
+    certification,
+    activeCertificationAttempt,
+    frame.report,
+    frame.sessionFinished,
+    frame.trainingRemaining,
+    sessionKind,
+  ]);
   const pause = useCallback(() => {
     if (replay) {
       setReplayRunning(false);
@@ -175,7 +427,7 @@ export function RefereePlay({
     return () => cancelAnimationFrame(update);
   }, [active, pause]);
   const toggleRunning = useCallback(() => {
-    if (!ready) return;
+    if (!ready || !certificationSessionReady) return;
     if (running) {
       pause();
       return;
@@ -183,9 +435,10 @@ export function RefereePlay({
     session.resumeMotion();
     setRunning(session.canAdvance);
     sync();
-  }, [ready, running, pause, session, sync]);
+  }, [ready, certificationSessionReady, running, pause, session, sync]);
   const reset = useCallback(
     (value: number) => {
+      if (certification) return;
       setReplay(null);
       setReplayKind(null);
       setReviewEventId(null);
@@ -197,20 +450,23 @@ export function RefereePlay({
         topics: trainingTopics,
       });
       setSession(next);
+      setSessionKind('practice');
       setFrame(next.snapshot());
+      setPracticeId(practiceSessionId());
       setSeed(String(value));
       setTopic('random');
       setRunning(false);
     },
-    [robotVisual, mode, duration, trainingTopics],
+    [certification, robotVisual, mode, duration, trainingTopics],
   );
   const whistle = useCallback(() => {
-    if (replay) return;
+    if (replay || !certificationSessionReady) return;
     session.whistle();
     setRunning(false);
     sync();
-  }, [session, sync, replay]);
+  }, [session, sync, replay, certificationSessionReady]);
   const submit = (call: RefereeCall) => {
+    if (!certificationSessionReady) return;
     session.submit(frame.decisionKey, call);
     setRunning(session.canAdvance);
     sync();
@@ -244,7 +500,7 @@ export function RefereePlay({
       }
       const delta = previous ? Math.min((now - previous) / 1000, 0.1) : 0;
       previous = now;
-      accumulator += delta * speed;
+      accumulator += delta * effectiveSpeed;
       publish += delta;
       while (accumulator >= MATCH_STEP) {
         session.step();
@@ -263,7 +519,7 @@ export function RefereePlay({
     };
     raf = requestAnimationFrame(animate);
     return () => cancelAnimationFrame(raf);
-  }, [active, running, session, speed, sync, replay]);
+  }, [active, effectiveSpeed, running, session, sync, replay]);
 
   useEffect(() => {
     if (!active || !replay || !replayRunning) return;
@@ -331,7 +587,7 @@ export function RefereePlay({
       ...session.snapshot(),
       playing: !replay && running && !session.motionHeld,
       replaying: Boolean(replay),
-      speed,
+      speed: effectiveSpeed,
       seed: session.seed,
       selectedActor: target,
     });
@@ -339,7 +595,7 @@ export function RefereePlay({
     return () => {
       if (host.snapshot === snapshot) delete host.snapshot;
     };
-  }, [active, session, running, speed, target, replay]);
+  }, [active, effectiveSpeed, session, running, target, replay]);
 
   const canNext = frame.canStartCase;
   const replayPlaying = Boolean(
@@ -357,6 +613,7 @@ export function RefereePlay({
   const blocked =
     frame.sessionFinished ||
     !ready ||
+    !certificationSessionReady ||
     Boolean(replay) ||
     Boolean(frame.opening) ||
     frame.resolving ||
@@ -383,6 +640,33 @@ export function RefereePlay({
       setRunning(session.canAdvance);
     }
   };
+
+  useEffect(() => {
+    if (
+      sessionKind !== 'certification' ||
+      !activeCertificationAttempt ||
+      activeCertificationAttempt.mode !== 'step' ||
+      !ready ||
+      !frame.canStartCase ||
+      frame.sessionFinished
+    )
+      return;
+    const update = requestAnimationFrame(() => {
+      if (session.nextCase()) {
+        sync();
+        setRunning(session.canAdvance);
+      }
+    });
+    return () => cancelAnimationFrame(update);
+  }, [
+    activeCertificationAttempt,
+    frame.canStartCase,
+    frame.sessionFinished,
+    ready,
+    session,
+    sessionKind,
+    sync,
+  ]);
 
   if (!active) return null;
   return (
@@ -422,7 +706,7 @@ export function RefereePlay({
           selectedActorId={view.actors[target] ? target : null}
           onReady={onReady}
         />
-        {frame.opening && !replay && (
+        {frame.opening && !replay && certificationSessionReady && (
           <PreMatchToss
             key={session.seed}
             meeting={frame.opening}
@@ -693,6 +977,7 @@ export function RefereePlay({
               <Button
                 disabled={
                   !ready ||
+                  !certificationSessionReady ||
                   frame.sessionFinished ||
                   Boolean(frame.opening) ||
                   (!running && !frame.canAdvance && !frame.canResumeMotion)
@@ -720,7 +1005,8 @@ export function RefereePlay({
               </Button>
               <NativeSelect
                 size="sm"
-                value={speed}
+                value={effectiveSpeed}
+                disabled={Boolean(certification)}
                 aria-label="Simulation speed"
                 onChange={(e) => setSpeed(Number(e.target.value))}
               >
@@ -809,13 +1095,14 @@ export function RefereePlay({
             open={Boolean(frame.opening)}
           >
             <summary>
-              Match setup ·{' '}
+              {certification ? 'Certification attempt' : 'Match setup'} ·{' '}
               {frame.trainingMode === 'continuous' ? 'Continuous' : 'Step mode'}
             </summary>
             <label htmlFor="referee-mode">Refereeing mode</label>
             <NativeSelect
               id="referee-mode"
-              value={mode}
+              value={displayedMode}
+              disabled={Boolean(certification)}
               onChange={(e) => setMode(e.target.value as TrainingMode)}
             >
               <NativeSelectOption value="step">
@@ -830,7 +1117,8 @@ export function RefereePlay({
             </label>
             <NativeSelect
               id="referee-duration"
-              value={duration}
+              value={displayedDuration}
+              disabled={Boolean(certification)}
               onChange={(e) => setDuration(Number(e.target.value))}
             >
               <NativeSelectOption value={60}>1 minute</NativeSelectOption>
@@ -846,7 +1134,8 @@ export function RefereePlay({
                 <label key={t.id} className="flex items-center gap-2">
                   <input
                     type="checkbox"
-                    checked={trainingTopics.includes(t.id)}
+                    disabled={Boolean(certification)}
+                    checked={displayedTopics.includes(t.id)}
                     onChange={(e) =>
                       setTrainingTopics((current) =>
                         e.target.checked
@@ -860,17 +1149,45 @@ export function RefereePlay({
               ))}
             </fieldset>
             <p>
-              {mode === 'continuous'
-                ? 'Selected faults develop during AI play. Every call you make is applied—even a wrong removal, goal, placement or early return—and evaluated privately after the match. Other natural incidents can still happen, but only selected topics affect your score.'
-                : 'The next practice drill comes from your selected topics. Each decision pauses in place.'}
+              {certification
+                ? 'Certification uses all topics, a server-issued shuffle, 10:00 of simulated play and 1× speed. Starting consumes one attempt. Hints and answer assistance are unavailable.'
+                : displayedMode === 'continuous'
+                  ? 'Selected faults develop during AI play. Every call you make is applied—even a wrong removal, goal, placement or early return—and evaluated privately after the match. Other natural incidents can still happen, but only selected topics affect your score.'
+                  : 'The next practice drill comes from your selected topics. Each decision pauses in place.'}
             </p>
-            <Button
-              disabled={!trainingTopics.length}
-              onClick={() => reset(randomSeed())}
-            >
-              <Shuffle /> Start new match with these settings
-            </Button>
-            {!trainingTopics.length && <p>Select at least one topic.</p>}
+            {certification ? (
+              <>
+                {activeCertificationAttempt && !frame.sessionFinished ? (
+                  <p>
+                    Attempt {activeCertificationAttempt.attemptNumber ?? '—'} is
+                    in progress.
+                  </p>
+                ) : (
+                  <Button
+                    disabled={startingCertification}
+                    onClick={() => void startCertificationAttempt()}
+                  >
+                    <Shuffle />
+                    {startingCertification
+                      ? 'Starting certification attempt…'
+                      : frame.sessionFinished
+                        ? 'Start next certification attempt'
+                        : 'Start certification attempt'}
+                  </Button>
+                )}
+                {certificationError && <p role="alert">{certificationError}</p>}
+              </>
+            ) : (
+              <>
+                <Button
+                  disabled={!trainingTopics.length}
+                  onClick={() => reset(randomSeed())}
+                >
+                  <Shuffle /> Start new match with these settings
+                </Button>
+                {!trainingTopics.length && <p>Select at least one topic.</p>}
+              </>
+            )}
           </details>
           <div className="my-3 flex flex-wrap items-center justify-between gap-2">
             <strong>
@@ -880,14 +1197,20 @@ export function RefereePlay({
             <Button
               size="sm"
               variant="outline"
-              disabled={frame.sessionFinished || Boolean(frame.opening)}
+              disabled={
+                frame.sessionFinished ||
+                Boolean(frame.opening) ||
+                !certificationSessionReady
+              }
               onClick={() => {
                 session.endSession();
                 setRunning(false);
                 sync();
               }}
             >
-              End match & see results
+              {certification
+                ? 'End attempt early · cannot qualify'
+                : 'End match & see results'}
             </Button>
           </div>
           {frame.sessionFinished && (
@@ -906,9 +1229,9 @@ export function RefereePlay({
                 {frame.report.missed} missed · {frame.report.assisted} assisted
               </p>
               <p>
-                Each situation counts once. Accuracy = correct ÷ (correct +
-                wrong + missed). Hints are unlimited; assisted situations are
-                listed separately.
+                {certification
+                  ? 'Each situation counts once. Certification accuracy uses the first unaided outcome; hints and answer assistance were unavailable.'
+                  : 'Each situation counts once. Accuracy = correct ÷ (correct + wrong + missed). Hints are unlimited; assisted situations are listed separately.'}
               </p>
               <div className="overflow-x-auto">
                 <table className="w-full text-left text-xs [&_th]:px-1 [&_td]:px-1">
@@ -1060,25 +1383,28 @@ export function RefereePlay({
             </p>
           )}
 
-          <Button
-            className="referee-replay-button"
-            variant="outline"
-            disabled={!ready || !frame.canReplayLast}
-            onClick={() => {
-              const recording = session.getLastReplay();
-              if (recording) {
-                setReplay(recording);
-                setReplayKind('situation');
-                setReviewEventId(null);
-                seekReplay(0);
-                setReplayRunning(true);
-              }
-            }}
-          >
-            <RotateCcw /> Replay last situation
-          </Button>
+          {!certification && (
+            <Button
+              className="referee-replay-button"
+              variant="outline"
+              disabled={!ready || !frame.canReplayLast}
+              onClick={() => {
+                const recording = session.getLastReplay();
+                if (recording) {
+                  setReplay(recording);
+                  setReplayKind('situation');
+                  setReviewEventId(null);
+                  seekReplay(0);
+                  setReplayRunning(true);
+                }
+              }}
+            >
+              <RotateCcw /> Replay last situation
+            </Button>
+          )}
 
-          {frame.trainingMode === 'continuous' &&
+          {!certification &&
+            frame.trainingMode === 'continuous' &&
             !frame.help &&
             !frame.opening &&
             !frame.sessionFinished && (
@@ -1095,94 +1421,97 @@ export function RefereePlay({
                 <Lightbulb /> Pause & get a hint
               </Button>
             )}
-          {frame.help && !frame.opening && !frame.sessionFinished && (
-            <section className="referee-help" aria-label="Decision help">
-              <div className="referee-help-heading">
-                <Lightbulb className="size-4" />
-                <strong>{frame.help.title}</strong>
-                <small>
-                  Step {frame.help.step} / {frame.help.steps}
-                </small>
-              </div>
-              <div className="referee-help-actions">
-                <Button
-                  variant="outline"
-                  disabled={!ready || frame.resolving}
-                  onClick={() => {
-                    session.requestHint();
-                    sync();
-                  }}
-                >
-                  <Lightbulb /> {frame.help.level ? 'More help' : 'Hint'}
-                </Button>
-                <Button
-                  variant="outline"
-                  disabled={!ready || frame.resolving}
-                  onClick={() => {
-                    session.requestHint(true);
-                    sync();
-                  }}
-                >
-                  Show answer
-                </Button>
-                <Button
-                  disabled={!ready || frame.resolving}
-                  onClick={() => {
-                    session.resolveForMe();
-                    sync();
-                    setRunning(session.canAdvance);
-                  }}
-                >
-                  {frame.resolving ? 'Resolving…' : 'Resolve for me'}
-                </Button>
-              </div>
-              {frame.resolving && (
-                <output>
-                  I’ll finish this situation’s decisions for you. Watching the
-                  evidence or count…
-                </output>
-              )}
-              {frame.help.level > 0 && (
-                <div className="referee-hint-content" aria-live="polite">
-                  <p>{frame.help.clue}</p>
-                  <a
-                    href={frame.help.rule}
-                    onClick={(event) => {
-                      if (
-                        onOpenRule &&
-                        !event.ctrlKey &&
-                        !event.metaKey &&
-                        !event.shiftKey
-                      ) {
-                        event.preventDefault();
-                        pause();
-                        onOpenRule(
-                          'soccer:' + new URL(frame.help!.rule).hash.slice(1),
-                        );
-                      }
+          {!certification &&
+            frame.help &&
+            !frame.opening &&
+            !frame.sessionFinished && (
+              <section className="referee-help" aria-label="Decision help">
+                <div className="referee-help-heading">
+                  <Lightbulb className="size-4" />
+                  <strong>{frame.help.title}</strong>
+                  <small>
+                    Step {frame.help.step} / {frame.help.steps}
+                  </small>
+                </div>
+                <div className="referee-help-actions">
+                  <Button
+                    variant="outline"
+                    disabled={!ready || frame.resolving}
+                    onClick={() => {
+                      session.requestHint();
+                      sync();
                     }}
                   >
-                    Read the relevant rule <ExternalLink className="size-3" />
-                  </a>
-                  {frame.help.level >= 2 && <p>{frame.help.explanation}</p>}
-                  {frame.help.level >= 3 &&
-                    frame.help.choices.map((choice, i) => (
-                      <Button
-                        key={`${choice.action}:${choice.target}`}
-                        variant="outline"
-                        disabled={blocked || frame.resolving}
-                        onClick={() => submit(choice)}
-                      >
-                        {i > 0 ? 'Or: ' : ''}
-                        {choice.label}
-                      </Button>
-                    ))}
+                    <Lightbulb /> {frame.help.level ? 'More help' : 'Hint'}
+                  </Button>
+                  <Button
+                    variant="outline"
+                    disabled={!ready || frame.resolving}
+                    onClick={() => {
+                      session.requestHint(true);
+                      sync();
+                    }}
+                  >
+                    Show answer
+                  </Button>
+                  <Button
+                    disabled={!ready || frame.resolving}
+                    onClick={() => {
+                      session.resolveForMe();
+                      sync();
+                      setRunning(session.canAdvance);
+                    }}
+                  >
+                    {frame.resolving ? 'Resolving…' : 'Resolve for me'}
+                  </Button>
                 </div>
-              )}
-            </section>
-          )}
+                {frame.resolving && (
+                  <output>
+                    I’ll finish this situation’s decisions for you. Watching the
+                    evidence or count…
+                  </output>
+                )}
+                {frame.help.level > 0 && (
+                  <div className="referee-hint-content" aria-live="polite">
+                    <p>{frame.help.clue}</p>
+                    <a
+                      href={frame.help.rule}
+                      onClick={(event) => {
+                        if (
+                          onOpenRule &&
+                          !event.ctrlKey &&
+                          !event.metaKey &&
+                          !event.shiftKey
+                        ) {
+                          event.preventDefault();
+                          pause();
+                          onOpenRule(
+                            'soccer:' + new URL(frame.help!.rule).hash.slice(1),
+                          );
+                        }
+                      }}
+                    >
+                      Read the relevant rule <ExternalLink className="size-3" />
+                    </a>
+                    {frame.help.level >= 2 && <p>{frame.help.explanation}</p>}
+                    {frame.help.level >= 3 &&
+                      frame.help.choices.map((choice, i) => (
+                        <Button
+                          key={`${choice.action}:${choice.target}`}
+                          variant="outline"
+                          disabled={blocked || frame.resolving}
+                          onClick={() => submit(choice)}
+                        >
+                          {i > 0 ? 'Or: ' : ''}
+                          {choice.label}
+                        </Button>
+                      ))}
+                  </div>
+                )}
+              </section>
+            )}
 
-          {((frame.drillReady && canNext) ||
+          {((!certification && frame.drillReady && canNext) ||
             frame.canArrangeKickoff ||
             frame.kickoffReturns.length > 0) && (
             <section className="referee-checkpoint" aria-live="polite">
@@ -1494,7 +1823,7 @@ export function RefereePlay({
             </section>
           )}
 
-          {frame.trainingMode === 'step' && (
+          {frame.trainingMode === 'step' && !certification && (
             <details className="referee-details">
               <summary>Practice setup & coverage</summary>
               <p>
