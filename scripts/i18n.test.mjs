@@ -283,8 +283,12 @@ test('Slovak referee controls use football and keyboard terminology from PR 10',
     'Kick ball (Space)': 'Kopnúť loptu (Medzerník)',
     'Make the call': 'Rozhodnite',
     'Goal resulting from pushing': 'Gól vyplývajúci z pushing',
-  })) assert.equal(translateText(source, 'sk'), expected);
-  assert.match(translateText('Call pushing whenever opposing robots touch', 'sk'), /^Vyhláste pushing/);
+  }))
+    assert.equal(translateText(source, 'sk'), expected);
+  assert.match(
+    translateText('Call pushing whenever opposing robots touch', 'sk'),
+    /^Vyhláste pushing/,
+  );
 });
 
 test('reviewed translations preserve the called-pushing premise and farther-robot selection', () => {

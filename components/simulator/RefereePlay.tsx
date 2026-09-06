@@ -910,9 +910,10 @@ export function RefereePlay({
   // A manual category change in the meantime (see the select below) clears
   // preKickoffGroup so it never overrides that later choice.
   useEffect(() => {
-    const restoreGroup = wasKickoffDue.current && !frame.kickoffDue
-      ? preKickoffGroup.current
-      : null;
+    const restoreGroup =
+      wasKickoffDue.current && !frame.kickoffDue
+        ? preKickoffGroup.current
+        : null;
     wasKickoffDue.current = frame.kickoffDue;
     if (!restoreGroup) return;
     const update = requestAnimationFrame(() => {

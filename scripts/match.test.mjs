@@ -43,9 +43,8 @@ const { SoccerMatch, MATCH_ROBOTS, MATCH_STEP, NO_DRIVE } =
   await import('../lib/simulator/match.ts');
 const { clampRobotToField, robotTouchesFieldWall, robotWallClearance } =
   await import('../lib/simulator/referee-geometry.ts');
-const { RCJ_FIELD_DERIVED: FIELD } = await import(
-  '../lib/simulator/field-spec.ts'
-);
+const { RCJ_FIELD_DERIVED: FIELD } =
+  await import('../lib/simulator/field-spec.ts');
 const settings = (controls = { blue: 'manual', yellow: 'off' }) => ({
   controls,
   selectedRobot: 'blue-1',
@@ -224,7 +223,10 @@ test('lack of progress moves only the ball to the nearest neutral spot', () => {
   match.state.actors.ball = { x: 0.6, z: 0.95, yaw: 0 };
   match.state.ballVelocity = { x: 0, z: 0 };
   const before = Object.fromEntries(
-    MATCH_ROBOTS.map((robot) => [robot.id, { ...match.state.actors[robot.id] }]),
+    MATCH_ROBOTS.map((robot) => [
+      robot.id,
+      { ...match.state.actors[robot.id] },
+    ]),
   );
   advance(match, 8.5, config);
   assert.equal(match.state.actors.ball.x, FIELD.neutralSpotX);
@@ -268,7 +270,9 @@ test('first lack-of-progress placement can use the current free spot; a repeat u
   advance(match, 8.1, config);
   assert.deepEqual(match.state.actors.ball, { x: 0, z: 0, yaw: 0 });
   advance(match, 8.1, config);
-  assert.ok(Math.hypot(match.state.actors.ball.x, match.state.actors.ball.z) > 0.1);
+  assert.ok(
+    Math.hypot(match.state.actors.ball.x, match.state.actors.ball.z) > 0.1,
+  );
   match.place(match.state.actors);
   assert.equal(match.lastProgressRelocation, null);
 });

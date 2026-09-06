@@ -336,13 +336,16 @@ export class SoccerMatch {
     ).map((robot) => this.state.actors[robot.id]);
     const available = NEUTRAL_SPOTS.filter(
       (spot) =>
-        (!this.lastProgressRelocation || distance(spot, this.lastProgressRelocation) > 1e-6) &&
-        robots.every((robot) => distance(spot, robot) >= ROBOT_RADIUS + BALL_RADIUS + 0.002),
+        (!this.lastProgressRelocation ||
+          distance(spot, this.lastProgressRelocation) > 1e-6) &&
+        robots.every(
+          (robot) =>
+            distance(spot, robot) >= ROBOT_RADIUS + BALL_RADIUS + 0.002,
+        ),
     );
     return (
-      [...available].sort(
-        (a, b) => distance(a, ball) - distance(b, ball),
-      )[0] ?? null
+      [...available].sort((a, b) => distance(a, ball) - distance(b, ball))[0] ??
+      null
     );
   }
 
@@ -886,7 +889,8 @@ export class SoccerMatch {
         this.stalledFor = 0;
         this.ballAnchor = { ...spot };
         this.lastProgressRelocation = { ...spot };
-        this.state.message = 'Stalled play · Ball moved to nearest neutral spot';
+        this.state.message =
+          'Stalled play · Ball moved to nearest neutral spot';
       }
     }
   }
