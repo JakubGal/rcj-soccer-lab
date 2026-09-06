@@ -2691,6 +2691,52 @@ test('coin toss locks setup, allocates the remaining choice and waits for the si
   assert.equal(winners.size, 2);
 });
 
+test('a plain opening kickoff signal is not scored as a real referee call', () => {
+  const session = new RefereeMatch(1, { preMatch: true });
+  session.tossCoin();
+  session.chooseOpeningEnd('blue');
+  correct(session, 'start');
+  assert.equal(session.snapshot().report.assessed, 0);
+
+  const drill = prepare('setup');
+  correct(drill, 'correct-setup', 'blue-1');
+  drill.continue();
+  correct(drill, 'start');
+  assert.equal(drill.snapshot().report.assessed, 1);
+});
+
+test('routine kickoff signals never inflate either mode, but incorrect calls still count', () => {
+  for (const mode of ['step', 'continuous']) {
+    const session = new RefereeMatch(1, { preMatch: true, mode });
+    session.tossCoin();
+    session.chooseOpeningEnd('blue');
+    correct(session, 'start');
+    assert.equal(session.snapshot().report.assessed, 0, mode);
+    session.continue();
+    deliverGoal(session, 'blue');
+    correct(session, 'goal', 'blue');
+    session.continue();
+    assert.equal(session.arrangeKickoff(), true);
+    correct(session, 'start');
+    assert.equal(
+      session.snapshot().report.assessed,
+      1,
+      'only the goal judgment earns credit',
+    );
+
+    const wrong = new RefereeMatch(1, { preMatch: true, mode });
+    wrong.tossCoin();
+    wrong.chooseOpeningEnd('blue');
+    submit(wrong, 'pushing');
+    assert.equal(
+      wrong.snapshot().report.assessed,
+      1,
+      'incorrect kickoff-window decisions are assessed',
+    );
+    assert.equal(wrong.snapshot().report.correct, 0);
+  }
+});
+
 test('random kickoff footprints remain legal for all teams, ends, and missing robots', () => {
   const ids = MATCH_ROBOTS.map((robot) => robot.id);
   const assertLayout = (poses, kickoff, direction) => {

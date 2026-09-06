@@ -242,3 +242,27 @@ test('failed final saves can retry; concurrent and completed saves are deduplica
   assert.equal(calls, 2);
   assert.equal(tracker.isSaved('attempt'), true);
 });
+
+test('v2 completed and unfinished recordings survive upgrade, backup import and explicit restart without regrading', async () => {
+  const data = await dataForTest();
+  const completed = await start(data);
+  finish(data, completed.attemptId);
+  const active = await start(data);
+  data.round.policyVersion = 'rcj-soccer-2026-v2';
+  data.round.games[0].replay.engineVersion = 'referee-match-2026-v2';
+  data.checkpoints[active.attemptId].engineVersion = 'referee-match-2026-v2';
+  const checkpoint = structuredClone(data.checkpoints[active.attemptId]);
+  const replay = structuredClone(data.round.games[0].replay);
+  const restored = await validateBackup(JSON.parse(JSON.stringify(data)));
+  assert.deepEqual(restored.checkpoints[active.attemptId], checkpoint);
+  assert.deepEqual(restored.round.games[0].replay, replay);
+  assert.equal((await accountSnapshot(restored)).certification.status, 'upgrade-required');
+  assert.throws(() => resumeLocalGame(restored, active.attemptId), /cannot be resumed/);
+  assert.throws(() => savedLocalReplay(restored, completed.attemptId), /engine|version/i);
+  await newRound(restored);
+  const again = await validateBackup(JSON.parse(JSON.stringify(restored)));
+  assert.deepEqual(again.archivedCheckpoints[active.attemptId], checkpoint);
+  assert.deepEqual(again.archivedReplays[completed.attemptId], replay);
+  assert.equal(again.round.policyVersion, CERTIFICATION_POLICY.policyVersion);
+  assert.equal(again.round.games.length, 0);
+});

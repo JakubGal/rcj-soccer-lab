@@ -3,7 +3,7 @@ import { LEARNING_SITUATIONS } from '@/lib/rulebook/learning';
 import { CERTIFICATION_ENGINE_VERSION } from './versions';
 
 export const CERTIFICATION_POLICY = {
-  policyVersion: 'rcj-soccer-2026-v2',
+  policyVersion: 'rcj-soccer-2026-v3',
   rulesetVersion: 'rcj-soccer-rules-2026',
   engineVersion: CERTIFICATION_ENGINE_VERSION,
   ruleQuestionCount: LEARNING_SITUATIONS.length,

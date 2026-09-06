@@ -71,7 +71,7 @@ test('the versioned 2026 policy covers every current question and exact certific
     LEARNING_SITUATIONS.length,
   );
   assert.equal(CERTIFICATION_POLICY.ruleFirstTryPercent, 95);
-  assert.equal(CERTIFICATION_POLICY.policyVersion, 'rcj-soccer-2026-v2');
+  assert.equal(CERTIFICATION_POLICY.policyVersion, 'rcj-soccer-2026-v3');
   assert.equal(
     CERTIFICATION_POLICY.ruleFirstTryRequired,
     Math.ceil(
@@ -211,7 +211,7 @@ test('every concrete UI case answer is engine-graded correctly across locked rob
       );
 });
 
-test('saved v2 out-goal answers keep their decision ticks and grade after the visual fix', () => {
+test('out-goal retains its original decision ticks under the current assessment version', () => {
   for (const { id: robotVisual } of ROBOT_VISUALS) {
     const calls = [{ action: 'no-goal' }, { action: 'out', target: 'blue-2' }];
     const answer = {
@@ -219,7 +219,7 @@ test('saved v2 out-goal answers keep their decision ticks and grade after the vi
       calls,
       evidence: {
         schema: 'rcj-case-evidence/v2',
-        engineVersion: 'referee-match-2026-v2',
+        engineVersion: 'referee-match-2026-v3',
         seed: 2026,
         robotVisual,
         operations: [
@@ -248,6 +248,9 @@ test('case evidence rejects symbolic-only legacy answers and tampered operations
   for (const mutate of [
     (answer) => {
       answer.evidence.engineVersion = 'referee-match-2026-v1';
+    },
+    (answer) => {
+      answer.evidence.engineVersion = 'referee-match-2026-v2';
     },
     (answer) => {
       answer.evidence.seed = 7;

@@ -50,6 +50,7 @@ export type LocalProgress = {
   receipt: SignedEnvelope | null;
   checkpoints?: Record<string, MatchReplayCheckpoint>;
   archivedReplays?: Record<string, MatchReplay>;
+  archivedCheckpoints?: Record<string, MatchReplayCheckpoint>;
 };
 
 export function emptyProgress(): LocalProgress {
@@ -69,6 +70,7 @@ export function emptyProgress(): LocalProgress {
     receipt: null,
     checkpoints: {},
     archivedReplays: {},
+    archivedCheckpoints: {},
   };
 }
 
@@ -393,6 +395,9 @@ export async function newRound(data: LocalProgress) {
     data.archivedReplays ??= {};
     for (const game of data.round.games)
       if (game.replay) data.archivedReplays[game.id] = game.replay;
+    data.archivedCheckpoints ??= {};
+    for (const [id, checkpoint] of Object.entries(data.checkpoints ?? {}))
+      data.archivedCheckpoints[id] = structuredClone(checkpoint);
     const snapshot = await accountSnapshot(data);
     if (
       snapshot.certification?.status === 'qualified' &&
@@ -632,13 +637,24 @@ function storedReplay(value: unknown): MatchReplay {
     return validateMatchReplay(record);
   // Old evidence is retained only as opaque backup/history data. It is never
   // replayed or used to qualify against a different engine version.
-  if (record.engineVersion !== 'referee-match-2026-v1' ||
+  if (!['referee-match-2026-v1', 'referee-match-2026-v2'].includes(String(record.engineVersion)) ||
     record.schema !== 'rcj-match-replay/v1' ||
     JSON.stringify(record).length > 512 * 1024 || !Array.isArray(record.events) ||
     record.events.length > 4096) return invalidBackup();
   backupMode(record.mode);
   backupNumber(record.seed, 0xffffffff, 1, true);
   return structuredClone(record) as MatchReplay;
+}
+function storedCheckpoint(value: unknown): MatchReplayCheckpoint {
+  const record = backupRecord(value);
+  if (record.engineVersion === MATCH_REPLAY_ENGINE_VERSION)
+    return validateMatchReplayCheckpoint(record);
+  if (!['referee-match-2026-v1', 'referee-match-2026-v2'].includes(String(record.engineVersion)))
+    return invalidBackup();
+  // Validate the unchanged recording format only; never execute old operations
+  // or relabel them as new-engine evidence. Legacy checkpoints are backup-only.
+  validateMatchReplayCheckpoint({ ...record, engineVersion: MATCH_REPLAY_ENGINE_VERSION });
+  return structuredClone(record) as MatchReplayCheckpoint;
 }
 function backupText(value: unknown, maximum: number, minimum = 0) {
   if (
@@ -865,9 +881,23 @@ export async function validateBackup(value: unknown): Promise<LocalProgress> {
   }
   const checkpoints = source.checkpoints === undefined ? {} : backupRecord(source.checkpoints);
   if (Object.keys(checkpoints).length > 13) invalidBackup();
-  for (const [id, value] of Object.entries(checkpoints))
+  for (const [id, value] of Object.entries(checkpoints)) {
     if (data.round?.policyVersion === CERTIFICATION_POLICY.policyVersion)
       saveLocalCheckpoint(data, id, validateMatchReplayCheckpoint(value));
+    else {
+      const checkpoint = storedCheckpoint(value);
+      const game = data.round?.games.find((entry) => entry.id === id);
+      if (!game || game.endedAt || game.mode !== checkpoint.mode || game.seed !== checkpoint.seed)
+        invalidBackup();
+      data.checkpoints![id] = checkpoint;
+    }
+  }
+  const archivedCheckpoints = source.archivedCheckpoints === undefined ? {} : backupRecord(source.archivedCheckpoints);
+  if (Object.keys(archivedCheckpoints).length > 10000) invalidBackup();
+  for (const [id, value] of Object.entries(archivedCheckpoints)) {
+    backupRoundId(id);
+    data.archivedCheckpoints![id] = storedCheckpoint(value);
+  }
   const archived = source.archivedReplays === undefined ? {} : backupRecord(source.archivedReplays);
   if (Object.keys(archived).length > 10000) invalidBackup();
   for (const [id, value] of Object.entries(archived)) {

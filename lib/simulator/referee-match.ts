@@ -1297,7 +1297,10 @@ export class RefereeMatch {
       initial: clonePoses(this.match.state.actors),
       observedAt: this.clock,
       lastSeen: this.clock,
-      scoreNeutral: definition.id === 'live-dribbler',
+      // A plain arranged kickoff only asks for the start signal, with no
+      // judgment call to make; only 'setup'/'ready' drills that ask the
+      // referee to check an arrangement are scored (see beginCase).
+      scoreNeutral: ['live-dribbler', 'live-ready'].includes(definition.id),
       ballPassageRevision: ['live-pushing', 'live-combined'].includes(
         definition.id,
       )

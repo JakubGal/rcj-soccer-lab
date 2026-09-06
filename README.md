@@ -129,8 +129,8 @@ summary. Saves can be retried after a storage error. Export
 a backup before clearing site data or changing browsers. Checkpoints are not cloud
 sync, and abrupt browser/device shutdown can lose the most recent unsaved seconds.
 
-The corrected examination is `rcj-soccer-2026-v2` (replay engine
-`referee-match-2026-v2`). Unfinished older rounds are read-only and require an
+The corrected examination is `rcj-soccer-2026-v3` (replay engine
+`referee-match-2026-v3`). Unfinished older rounds are read-only and require an
 explicit fresh-round restart. Existing practice history, older evidence in backups,
 and previously signed certificates are preserved; older recordings are not
 silently regraded using the new engine.
