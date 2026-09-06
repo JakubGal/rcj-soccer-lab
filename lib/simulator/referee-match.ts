@@ -290,8 +290,25 @@ export class RefereeMatch {
     if (this.motionHeld) this.match.holdMotion();
     else this.match.releaseReferee();
   }
+  get canResumeMotion() {
+    if (this.sessionFinished || this.opening || this.fixtureEnded) return false;
+    if (this.mode === 'continuous')
+      return (
+        !this.kickoffDue || (this.phase === 'live' && this.awaitingWorkingTeam)
+      );
+    return (
+      !this.manualHold &&
+      !this.decisionPaused &&
+      (this.phase === 'evidence' ||
+        !this.kickoffDue ||
+        (this.phase === 'live' && this.awaitingWorkingTeam)) &&
+      (this.phase === 'evidence' || !this.active?.stopsPlay)
+    );
+  }
   resumeMotion() {
-    if (this.sessionFinished) return;
+    if (!this.canResumeMotion) return;
+    if (this.mode === 'continuous' && this.phase === 'feedback')
+      this.continue();
     this.userPaused = false;
     if (this.mode === 'continuous') this.manualHold = false;
     this.syncMotion();
@@ -479,12 +496,24 @@ export class RefereeMatch {
       !this.sessionFinished &&
       this.kickoffDue &&
       !this.active &&
-      (['blue', 'yellow'] as const).every((team) =>
-        MATCH_ROBOTS.some(
+      !this.kickoffReturns.length &&
+      !this.awaitingWorkingTeam
+    );
+  }
+  private get awaitingWorkingTeam() {
+    return (['blue', 'yellow'] as const).some(
+      (team) =>
+        !MATCH_ROBOTS.some(
           (robot) => robot.team === team && this.match.state.actors[robot.id],
         ),
-      )
     );
+  }
+  private get kickoffReturns() {
+    return this.kickoffDue
+      ? Object.values(this.bench)
+          .filter((entry) => this.returnTimeEligible(entry.robot))
+          .map((entry) => entry.robot)
+      : [];
   }
   get canAdvance() {
     if (this.opening || this.userPaused || this.sessionFinished) return false;
@@ -493,7 +522,7 @@ export class RefereeMatch {
       !this.motionHeld ||
       (this.phase === 'live' &&
         this.kickoffDue &&
-        !this.canArrangeKickoff &&
+        this.awaitingWorkingTeam &&
         !this.manualHold)
     );
   }
@@ -674,6 +703,8 @@ export class RefereeMatch {
       kickoffTeam: this.kickoffTeam,
       canArrangeKickoff: this.canArrangeKickoff,
       canAdvance: this.canAdvance,
+      canResumeMotion: this.canResumeMotion,
+      kickoffReturns: this.kickoffReturns,
       motionHeld: this.motionHeld,
       decisionPaused: this.decisionPaused,
       drillReady:
@@ -859,10 +890,21 @@ export class RefereeMatch {
         ));
     const key =
       this.incidentKey(definition, unchanged) +
-      (discrete ? `:${this.serial + 1}` : '');
+      (definition.id === 'live-ready'
+        ? `:${this.kickoffSerial}`
+        : discrete
+          ? `:${this.serial + 1}`
+          : '');
     if (this.mode === 'continuous') {
       const previous = this.observations.get(key);
-      if (previous) {
+      // A denied request is a new decision once the robot becomes eligible.
+      const newlyEligibleReturn =
+        previous?.finished &&
+        definition.id === 'live-return-ready' &&
+        previous.definition.steps
+          .flat()
+          .some((call) => call.action === 'keep-out');
+      if (previous && !newlyEligibleReturn) {
         previous.lastSeen = this.clock;
         return;
       }
@@ -1612,14 +1654,48 @@ export class RefereeMatch {
     )[0]?.id;
   }
 
-  canReturn(id: string) {
+  private returnTimeEligible(id: string) {
     const entry = this.bench[id];
     return Boolean(
       entry?.ready &&
       (this.clock + 1e-8 >= entry.eligibleAt ||
-        (this.kickoffDue && this.kickoffSerial >= entry.kickoff)) &&
-      this.neutralSpot(true, id),
+        (this.kickoffDue && this.kickoffSerial >= entry.kickoff)),
     );
+  }
+  canReturn(id: string) {
+    return this.returnTimeEligible(id) && Boolean(this.neutralSpot(true, id));
+  }
+  private focusIncident(item: ActiveIncident) {
+    const original = this.active;
+    if (item === original) return;
+    if (this.countFor !== null || this.countCompleted) {
+      this.countFor = null;
+      this.countCompleted = false;
+      this.countAnchor = null;
+      if (original) original.step = 0;
+    }
+    this.pending = this.pending.filter((x) => x !== item);
+    if (original && !original.finished) this.pending.unshift(original);
+    this.active = item;
+    if (item.replay) this.recorder.last = item.replay;
+  }
+  private selectReturnRequest(id: string) {
+    const findRequest = () =>
+      [this.active, ...this.pending].find(
+        (item) => item && !item.finished && this.returnRequest(item) === id,
+      );
+    if (!findRequest()) {
+      const valid = this.canReturn(id);
+      this.beginLive(
+        this.liveDefinition(
+          valid ? 'return-ready' : 'return-early',
+          `${robotName(id)} requests return. Check repair status, remaining time and kickoff eligibility.`,
+          [[{ action: valid ? 'return' : 'keep-out', target: id }]],
+        ),
+      );
+    }
+    const item = findRequest();
+    if (item) this.focusIncident(item);
   }
   neutralSpot(
     farthest: boolean,
@@ -1650,7 +1726,16 @@ export class RefereeMatch {
   submit(key: string, submitted: RefereeCall): boolean {
     if (this.sessionFinished) return false;
     if (this.opening && this.meeting.stage !== 'ready') return false;
-    if (key !== this.decisionKey || this.phase === 'feedback') return false;
+    if (key !== this.decisionKey) return false;
+    const benchRequest =
+      ['return', 'keep-out'].includes(submitted.action) &&
+      submitted.target &&
+      this.bench[submitted.target];
+    if (this.phase === 'feedback') {
+      if (!benchRequest) return false;
+      this.continue();
+    }
+    if (benchRequest) this.selectReturnRequest(submitted.target!);
     if (this.mode === 'continuous' && submitted.action === 'pause') {
       this.pauseForDecision();
       return true;
@@ -1686,45 +1771,13 @@ export class RefereeMatch {
       });
       this.active = original;
       if (chosen && chosen !== original) {
-        if (this.countFor !== null || this.countCompleted) {
-          this.countFor = null;
-          this.countCompleted = false;
-          this.countAnchor = null;
-          if (original) original.step = 0;
-        }
-        this.pending = this.pending.filter((x) => x !== chosen);
-        if (original && !original.finished) this.pending.unshift(original);
-        this.active = chosen;
-        if (chosen.replay) this.recorder.last = chosen.replay;
+        this.focusIncident(chosen);
       }
       if (['resume', 'play-on'].includes(submitted.action) && !chosen) {
         // Resuming observation makes no claim about unnoticed incidents.
         this.resumeMotion();
         return true;
       }
-    }
-    // Return requests can be judged directly from the bench during live play.
-    if (
-      !this.active &&
-      (submitted.action === 'return' || submitted.action === 'keep-out') &&
-      submitted.target &&
-      this.bench[submitted.target]
-    ) {
-      const valid = this.canReturn(submitted.target);
-      this.beginLive(
-        this.liveDefinition(
-          valid ? 'return-ready' : 'return-early',
-          `${robotName(submitted.target)} requests return. Check repair status, remaining time and kickoff eligibility.`,
-          [
-            [
-              {
-                action: valid ? 'return' : 'keep-out',
-                target: submitted.target,
-              },
-            ],
-          ],
-        ),
-      );
     }
     if (!this.active)
       this.beginLive(
@@ -1759,7 +1812,12 @@ export class RefereeMatch {
         (!entry.target || entry.target === submitted.target),
     );
     const rightAction = choices.some(sameAction);
-    const correct = Boolean(match) && !premature && this.countFor === null;
+    const kickoffBlocked =
+      this.kickoffDue &&
+      ['start', 'neutral'].includes(submitted.action) &&
+      this.kickoffReturns.length > 0;
+    const correct =
+      Boolean(match) && !premature && !kickoffBlocked && this.countFor === null;
     const appliedRules = correct
       ? rulesForDecision(item.definition, match!.action, {
           kickoffDue: this.kickoffDue,
@@ -1772,7 +1830,7 @@ export class RefereeMatch {
       ? match?.discretionary
         ? 'supported'
         : 'correct'
-      : premature || this.countFor !== null
+      : premature || kickoffBlocked || this.countFor !== null
         ? 'premature'
         : rightAction
           ? 'wrong-target'
@@ -1821,11 +1879,13 @@ export class RefereeMatch {
     const label =
       REFEREE_ACTIONS.find((action) => action.id === submitted.action)?.label ??
       submitted.action;
-    const detail = premature
-      ? 'That part of the incident has not happened yet. Watch the complete evidence before deciding.'
-      : correct
-        ? explanation
-        : `Expected ${choices.map((entry) => `${REFEREE_ACTIONS.find((action) => action.id === entry.action)?.label}${entry.target ? ` (${robotName(entry.target)})` : ''}`).join(' or ')}. ${explanation}`;
+    const detail = kickoffBlocked
+      ? `Return ${this.kickoffReturns.map(robotName).join(' and ')} before arranging and signalling kickoff.`
+      : premature
+        ? 'That part of the incident has not happened yet. Watch the complete evidence before deciding.'
+        : correct
+          ? explanation
+          : `Expected ${choices.map((entry) => `${REFEREE_ACTIONS.find((action) => action.id === entry.action)?.label}${entry.target ? ` (${robotName(entry.target)})` : ''}`).join(' or ')}. ${explanation}`;
     if (correct)
       item.step = match?.complete
         ? item.definition.steps.length
@@ -1879,6 +1939,10 @@ export class RefereeMatch {
   continue() {
     if (this.sessionFinished) return;
     if (this.phase !== 'feedback' || !this.active) return;
+    if (this.mode === 'continuous') {
+      this.userPaused = false;
+      this.manualHold = false;
+    }
     if (!this.feedback?.final) {
       this.feedback = null;
       this.phase = 'decision';
@@ -1894,7 +1958,7 @@ export class RefereeMatch {
     let next = this.pending.shift();
     while (next) {
       this.skipResolvedSteps(next);
-      if (next.step < next.definition.steps.length) break;
+      if (!next.finished && next.step < next.definition.steps.length) break;
       next = this.pending.shift();
     }
     if (next) {
@@ -1908,6 +1972,9 @@ export class RefereeMatch {
 
   private remove(id: string, reason: string, inspection = false) {
     if (!this.match.removeRobot(id)) return 'Robot is already off the field.';
+    // Each bench visit starts a fresh return lifecycle, even if another removal
+    // follows immediately after a return while the simulation is paused.
+    this.observations.delete(`return:${id}`);
     if (this.mode === 'continuous') {
       for (const item of this.observations.values()) {
         if (item === this.active || item.finished) continue;
@@ -2033,6 +2100,35 @@ export class RefereeMatch {
       };
       this.match.state.actors[target] = actors[target];
       delete this.bench[target];
+      if (action === 'return') {
+        // Being removed and returned conclusively clears the old robot fault;
+        // a new infringement need not wait for the absence debounce to expire.
+        for (const [key, observed] of this.observations)
+          if (
+            observed.finished &&
+            observed.definition.steps
+              .flat()
+              .some(
+                (call) =>
+                  call.target === target &&
+                  [
+                    'out',
+                    'damaged',
+                    'early-start',
+                    'ball-out',
+                    'inspect',
+                  ].includes(call.action),
+              )
+          )
+            this.observations.delete(key);
+      }
+      if (action === 'return' && this.kickoffDue) {
+        // A return at a neutral spot changes the kickoff layout. Arrange it
+        // again explicitly after all return requests have been handled.
+        for (const pending of this.pending)
+          if (pending.definition.id === 'live-ready') pending.finished = true;
+        this.observations.delete(`ready::${this.kickoffSerial}`);
+      }
       return `${robotName(target)} ${action === 'return' ? 'returned facing its own goal' : 'relocated'} at the furthest clear neutral spot.`;
     }
     if (action === 'keep-out')

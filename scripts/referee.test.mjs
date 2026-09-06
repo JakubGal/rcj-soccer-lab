@@ -283,11 +283,189 @@ test('early placement remains wrong; a count must finish before the ball is relo
   assert.equal(submit(session, 'lack-progress').verdict, 'premature');
   assert.deepEqual(session.match.state.actors.ball, ball);
   session.continue();
-  session.resumeMotion();
+  assert.equal(
+    session.canAdvance,
+    true,
+    'Try again must resume the interrupted count',
+  );
   advance(session, 3.1);
   correct(session, 'lack-progress');
   assert.equal(session.snapshot().report.wrong, 1);
   assert.equal(session.snapshot().report.correct, 0);
+});
+
+test('continuous feedback continuation clears a pause from reading a rule or changing tabs', () => {
+  const session = continuous();
+  session.match.state.actors['blue-1'] = { x: 0.81, z: -0.2, yaw: 0 };
+  session.detectLiveIncident();
+  correct(session, 'out', 'blue-1');
+  session.pauseForDecision();
+  const poses = structuredClone(session.match.state.actors);
+  session.continue();
+  assert.equal(session.canAdvance, true);
+  assert.deepEqual(session.match.state.actors, poses);
+  advance(session, 0.1);
+  assert.ok(session.clock > 0);
+});
+
+test('transport resume dismisses continuous feedback without losing an unresolved decision', () => {
+  const session = continuous();
+  session.match.state.actors['blue-1'] = { x: 0.81, z: -0.2, yaw: 0 };
+  session.detectLiveIncident();
+  submit(session, 'out', 'yellow-1');
+  assert.equal(session.snapshot().userPaused, false);
+  assert.equal(session.snapshot().canResumeMotion, true);
+  session.resumeMotion();
+  assert.equal(session.snapshot().feedback, null);
+  assert.equal(session.canAdvance, true);
+  correct(session, 'out', 'blue-1');
+  assert.equal(session.snapshot().report.wrong, 1);
+  session.resumeMotion();
+  assert.equal(session.canAdvance, true);
+  assert.equal(session.snapshot().feedback, null);
+});
+
+test('rapid successive goals each get an actionable kickoff signal', () => {
+  const session = continuous();
+  for (let i = 0; i < 3; i++) {
+    session.match.state.pendingEvent = { kind: 'goal', team: 'blue' };
+    session.detectLiveIncident();
+    correct(session, 'goal', 'blue');
+    session.pauseForDecision();
+    session.continue();
+    assert.equal(session.snapshot().canResumeMotion, false);
+    session.resumeMotion();
+    assert.equal(
+      session.canAdvance,
+      false,
+      'transport must not bypass kickoff',
+    );
+    assert.equal(session.arrangeKickoff(), true);
+    correct(session, 'start');
+    session.continue();
+    assert.equal(session.canAdvance, true);
+  }
+  assert.equal(session.snapshot().score.blue, 3);
+});
+
+test('eligible bench returns interrupt unrelated decisions and feedback in either mode', () => {
+  for (const mode of ['step', 'continuous']) {
+    const session = new RefereeMatch(73, { mode });
+    session.remove('blue-1', 'Out of bounds');
+    session.clock = 61;
+    session.match.state.actors['yellow-1'] = { x: 0.81, z: 0.2, yaw: 0 };
+    session.detectLiveIncident();
+    assert.equal(session.canReturn('blue-1'), true);
+    const unrelated = session.active.number;
+    correct(session, 'return', 'blue-1');
+    assert.ok(session.match.state.actors['blue-1']);
+    session.continue();
+    assert.equal(session.active.number, unrelated);
+    correct(session, 'out', 'yellow-1');
+    session.clock += 61;
+    correct(session, 'return', 'yellow-1'); // Bench button can dismiss old feedback.
+    assert.ok(session.match.state.actors['yellow-1']);
+  }
+});
+
+test('a refused return can become eligible without waiting for observation dedup to expire', () => {
+  const session = continuous();
+  session.remove('blue-1', 'Out of bounds');
+  correct(session, 'keep-out', 'blue-1');
+  session.continue();
+  session.clock = 61;
+  correct(session, 'return', 'blue-1');
+  assert.ok(session.match.state.actors['blue-1']);
+});
+
+test('a new bench visit can return at kickoff immediately after a previous successful return', () => {
+  const session = continuous();
+  session.remove('blue-1', 'Out of bounds');
+  session.clock = 61;
+  correct(session, 'return', 'blue-1');
+  session.continue();
+  session.remove('blue-1', 'Out of bounds');
+  session.match.state.pendingEvent = { kind: 'goal', team: 'blue' };
+  session.detectLiveIncident();
+  correct(session, 'goal', 'blue');
+  session.continue();
+  assert.equal(session.canReturn('blue-1'), true);
+  correct(session, 'return', 'blue-1');
+  session.continue();
+  assert.equal(session.arrangeKickoff(), true);
+  correct(session, 'start');
+  assert.equal(session.canAdvance, true);
+});
+
+test('returning clears the old out observation so an immediate new infringement is actionable', () => {
+  const session = continuous();
+  for (let i = 0; i < 2; i++) {
+    session.match.state.actors['blue-1'] = { x: 0.81, z: -0.2, yaw: 0 };
+    session.detectLiveIncident();
+    correct(session, 'out', 'blue-1');
+    session.continue();
+    session.match.state.pendingEvent = { kind: 'goal', team: 'yellow' };
+    session.detectLiveIncident();
+    correct(session, 'goal', 'yellow');
+    correct(session, 'return', 'blue-1');
+    session.continue();
+    assert.equal(session.arrangeKickoff(), true);
+    correct(session, 'start');
+    session.continue();
+  }
+  assert.equal(
+    session.snapshot().report.topics.find((t) => t.id === 'out').correct,
+    2,
+  );
+});
+
+test('kickoff requires every ready eligible robot to return, including during goal feedback', () => {
+  for (const mode of ['step', 'continuous']) {
+    const session = new RefereeMatch(73, { mode });
+    session.remove('blue-1', 'Out of bounds');
+    session.remove('yellow-1', 'Out of bounds');
+    session.match.state.pendingEvent = { kind: 'goal', team: 'blue' };
+    session.detectLiveIncident();
+    correct(session, 'goal', 'blue');
+    assert.equal(session.canReturn('blue-1'), true);
+    correct(session, 'return', 'blue-1');
+    session.continue();
+    assert.equal(session.canArrangeKickoff, false);
+    assert.equal(session.arrangeKickoff(), false);
+    assertFrozen(session, 3);
+    correct(session, 'return', 'yellow-1');
+    session.continue();
+    assert.equal(session.canArrangeKickoff, true);
+    assert.equal(session.arrangeKickoff(), true);
+    correct(session, 'start');
+    assert.ok(
+      MATCH_ROBOTS.every((robot) => session.match.state.actors[robot.id]),
+    );
+  }
+});
+
+test('kickoff signal rechecks newly eligible returns after arranging the field', () => {
+  const session = continuous();
+  session.remove('blue-1', 'Damaged');
+  session.match.state.pendingEvent = { kind: 'goal', team: 'blue' };
+  session.detectLiveIncident();
+  correct(session, 'goal', 'blue');
+  session.continue();
+  assert.equal(session.arrangeKickoff(), true); // Repairing robot cannot yet return.
+  session.bench['blue-1'].ready = true;
+  assert.equal(session.canReturn('blue-1'), true);
+  assert.equal(submit(session, 'start').verdict, 'premature');
+  assert.equal(session.snapshot().kickoffDue, true);
+  correct(session, 'return', 'blue-1');
+  session.continue();
+  assert.equal(
+    session.canArrangeKickoff,
+    true,
+    'return invalidates the old kickoff layout',
+  );
+  session.arrangeKickoff();
+  correct(session, 'start');
+  assert.equal(session.snapshot().kickoffDue, false);
 });
 
 test('ordinary pauses and resume signals never manufacture referee points', () => {

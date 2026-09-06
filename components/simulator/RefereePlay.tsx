@@ -572,7 +572,7 @@ export function RefereePlay({
                   !ready ||
                   frame.sessionFinished ||
                   Boolean(frame.opening) ||
-                  (!frame.canAdvance && !frame.userPaused)
+                  (!running && !frame.canAdvance && !frame.canResumeMotion)
                 }
                 onClick={() => {
                   toggleRunning();
@@ -584,7 +584,8 @@ export function RefereePlay({
                   ? 'Finished'
                   : running
                     ? 'Pause for decision'
-                    : frame.userPaused
+                    : frame.canResumeMotion &&
+                        (frame.userPaused || frame.motionHeld)
                       ? 'Resume observation'
                       : !frame.canAdvance
                         ? 'Stopped'
@@ -933,20 +934,26 @@ export function RefereePlay({
             </section>
           )}
 
-          {((frame.drillReady && canNext) || frame.canArrangeKickoff) && (
+          {((frame.drillReady && canNext) ||
+            frame.canArrangeKickoff ||
+            frame.kickoffReturns.length > 0) && (
             <section className="referee-checkpoint" aria-live="polite">
               <h2>
-                {frame.canArrangeKickoff
-                  ? 'Kickoff needs your signal'
-                  : 'Next practice situation is ready'}
+                {frame.kickoffReturns.length > 0
+                  ? 'Return ready robots before kickoff'
+                  : frame.canArrangeKickoff
+                    ? 'Kickoff needs your signal'
+                    : 'Next practice situation is ready'}
               </h2>
               <p>
-                {frame.canArrangeKickoff
-                  ? 'Check any return requests, then arrange the kickoff. The field stays here until you press the button.'
-                  : 'The match keeps playing. Start another situation when you want to load a new practice layout.'}
+                {frame.kickoffReturns.length > 0
+                  ? 'Use Return in Off the field for each eligible robot. Then arrange the kickoff and give the start signal.'
+                  : frame.canArrangeKickoff
+                    ? 'Check any return requests, then arrange the kickoff. The field stays here until you press the button.'
+                    : 'The match keeps playing. Start another situation when you want to load a new practice layout.'}
               </p>
               <Button
-                disabled={!ready}
+                disabled={!ready || frame.kickoffReturns.length > 0}
                 onClick={() => {
                   if (frame.canArrangeKickoff) {
                     if (session.arrangeKickoff()) {
@@ -957,8 +964,8 @@ export function RefereePlay({
                   } else startNext();
                 }}
               >
-                {frame.canArrangeKickoff ? <Flag /> : <Shuffle />}
-                {frame.canArrangeKickoff
+                {frame.kickoffDue ? <Flag /> : <Shuffle />}
+                {frame.kickoffDue
                   ? `Arrange ${frame.kickoffTeam} kickoff`
                   : 'Start next situation'}
               </Button>
@@ -1069,13 +1076,15 @@ export function RefereePlay({
                 }}
               >
                 {frame.feedback.final
-                  ? frame.pendingDecisions > 0
-                    ? 'Next referee decision'
-                    : frame.kickoffDue
-                      ? 'Continue to kickoff'
-                      : frame.motionHeld
-                        ? 'Resume match'
-                        : 'Dismiss feedback'
+                  ? frame.trainingMode === 'continuous' && !frame.kickoffDue
+                    ? 'Resume match'
+                    : frame.pendingDecisions > 0
+                      ? 'Next referee decision'
+                      : frame.kickoffDue
+                        ? 'Continue to kickoff'
+                        : frame.motionHeld
+                          ? 'Resume match'
+                          : 'Dismiss feedback'
                   : supported
                     ? frame.count !== null
                       ? 'Resume count'
@@ -1184,7 +1193,14 @@ export function RefereePlay({
                   <Button
                     size="sm"
                     variant="outline"
-                    disabled={blocked}
+                    disabled={
+                      !ready ||
+                      Boolean(replay) ||
+                      frame.sessionFinished ||
+                      Boolean(frame.opening) ||
+                      frame.resolving
+                    }
+                    aria-label={`Return ${MATCH_ROBOTS.find((robot) => robot.id === entry.robot)?.label}`}
                     onClick={() =>
                       submit({ action: 'return', target: entry.robot })
                     }
