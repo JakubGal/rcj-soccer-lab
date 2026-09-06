@@ -110,7 +110,17 @@ const COMMON = new Set([
   'count',
   'lack-progress',
   'pause',
+  'keep-out',
+  'return',
 ]);
+const actionInGroup = (group: string, actionId: string) => {
+  const action = REFEREE_ACTIONS.find((entry) => entry.id === actionId);
+  if (!action) return false;
+  if (group === 'all') return true;
+  if (group === 'common') return COMMON.has(actionId);
+  if (group === 'robot') return action.group === 'Robot';
+  return ['Restart', 'Field', 'Score'].includes(action.group);
+};
 
 type ReplayCapture = {
   attemptId: string;
@@ -227,6 +237,8 @@ export function RefereePlay({
   const replayCursor = useRef(0);
   const resultsHeading = useRef<HTMLHeadingElement>(null);
   const practiceStartsReported = useRef(new Set<string>());
+  const preKickoffGroup = useRef<string | null>(null);
+  const wasKickoffDue = useRef(false);
   const practiceFinishesReported = useRef(new Set<string>());
   const certificationFinishesReported = useRef(createResultSaveTracker());
   const [startingCertification, setStartingCertification] = useState(false);
@@ -890,14 +902,27 @@ export function RefereePlay({
   const revealReplay = frame.trainingMode === 'step' || frame.sessionFinished;
   const remainingSeconds = Math.ceil(frame.trainingRemaining);
   const actions = REFEREE_ACTIONS.filter(
-    (action) =>
-      action.id !== 'goal' &&
-      (group === 'all' || group === 'common'
-        ? group === 'all' || COMMON.has(action.id)
-        : group === 'robot'
-          ? action.group === 'Robot'
-          : ['Restart', 'Field', 'Score'].includes(action.group)),
+    (action) => action.id !== 'goal' && actionInGroup(group, action.id),
   );
+
+  // Restore the category the referee had chosen before the automatic
+  // 'restart' switch for arranging kickoff, once kickoff is no longer due.
+  // A manual category change in the meantime (see the select below) clears
+  // preKickoffGroup so it never overrides that later choice.
+  useEffect(() => {
+    const restoreGroup = wasKickoffDue.current && !frame.kickoffDue
+      ? preKickoffGroup.current
+      : null;
+    wasKickoffDue.current = frame.kickoffDue;
+    if (!restoreGroup) return;
+    const update = requestAnimationFrame(() => {
+      if (preKickoffGroup.current !== restoreGroup) return;
+      setGroup(restoreGroup);
+      preKickoffGroup.current = null;
+    });
+    return () => cancelAnimationFrame(update);
+  }, [frame.kickoffDue]);
+
   const startNext = () => {
     const definition = REFEREE_CASES.find(
       (item) => item.id === topic && frame.topics.includes(trainingTopic(item)),
@@ -1864,7 +1889,11 @@ export function RefereePlay({
                       });
                       sync();
                       setRunning(false);
-                      setGroup('restart');
+                      setGroup((current) => {
+                        if (current !== 'restart')
+                          preKickoffGroup.current = current;
+                        return 'restart';
+                      });
                     }
                   } else startNext();
                 }}
@@ -2074,7 +2103,10 @@ export function RefereePlay({
           <NativeSelect
             aria-label="Referee action category"
             value={group}
-            onChange={(e) => setGroup(e.target.value)}
+            onChange={(e) => {
+              preKickoffGroup.current = null;
+              setGroup(e.target.value);
+            }}
           >
             <NativeSelectOption value="common">Common calls</NativeSelectOption>
             <NativeSelectOption value="robot">
