@@ -225,7 +225,7 @@ export const REFEREE_CASES: RefereeCase[] = [
     family: 'Pushing & defense',
     clip: 'two-defenders',
     end: 2.5,
-    // Include visible body overlap even for the shorter Open model.
+    // Include visible body overlap even for the shorter XLC Open 2020 model.
     stopAt: 185 / 120,
     facts:
       'Both Blue robots partly overlap the same penalty area. Compare their distances to the ball.',

@@ -45,6 +45,9 @@ export type RuleClip = {
   id: string;
   title: string;
   anchor: string;
+  /** Other sections this clip also illustrates and counts toward, in
+   * addition to its primary `anchor` (which the UI shows as the rule). */
+  alsoAnchors?: string[];
   frames: Keyframe[];
   question: string;
   options: string[];
@@ -93,8 +96,19 @@ function make(
   options: string[],
   answer: number,
   feedback: string,
+  alsoAnchors?: string[],
 ): RuleClip {
-  return { id, title, anchor, frames, question, options, answer, feedback };
+  return {
+    id,
+    title,
+    anchor,
+    frames,
+    question,
+    options,
+    answer,
+    feedback,
+    ...(alsoAnchors ? { alsoAnchors } : {}),
+  };
 }
 
 /** Authored teaching scenes. Time is illustrative unless a clock is labelled. */
@@ -102,7 +116,7 @@ export const RULE_CLIPS: RuleClip[] = [
   make(
     'match-halves',
     'Two halves & a side swap',
-    'game-procedure-and-length-of-a-game',
+    'pre-match-meeting',
     [
       {
         at: 0,
@@ -137,6 +151,7 @@ export const RULE_CLIPS: RuleClip[] = [
     ['The other kickoff team', 'The first-half leader'],
     0,
     'Track the kickoff assignment across the side swap.',
+    ['game-procedure-and-length-of-a-game'],
   ),
   make(
     'late-team',
@@ -1080,7 +1095,9 @@ export const RULE_CLIPS: RuleClip[] = [
 
 export function clipsFor(anchor: string) {
   if (anchor === 'gameplay') return RULE_CLIPS;
-  return RULE_CLIPS.filter((clip) => clip.anchor === anchor);
+  return RULE_CLIPS.filter(
+    (clip) => clip.anchor === anchor || clip.alsoAnchors?.includes(anchor),
+  );
 }
 
 export function sampleClip(clip: RuleClip, time: number): RuleScene {
