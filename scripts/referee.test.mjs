@@ -2586,6 +2586,20 @@ test('coin toss locks setup, allocates the remaining choice and waits for the si
   assert.equal(winners.size, 2);
 });
 
+test('a plain opening kickoff signal is not scored as a real referee call', () => {
+  const session = new RefereeMatch(1, { preMatch: true });
+  session.tossCoin();
+  session.chooseOpeningEnd('blue');
+  correct(session, 'start');
+  assert.equal(session.snapshot().report.assessed, 0);
+
+  const drill = prepare('setup');
+  correct(drill, 'correct-setup', 'blue-1');
+  drill.continue();
+  correct(drill, 'start');
+  assert.equal(drill.snapshot().report.assessed, 1);
+});
+
 test('random kickoff footprints remain legal for all teams, ends, and missing robots', () => {
   const ids = MATCH_ROBOTS.map((robot) => robot.id);
   const assertLayout = (poses, kickoff, direction) => {
