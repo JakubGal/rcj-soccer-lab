@@ -45,6 +45,8 @@ const { RULE_CLIPS, sampleClip } =
   await import('../lib/rulebook/animations.ts');
 const { RULE_QUESTIONS } = await import('../lib/rulebook/questions.ts');
 const { SCENARIOS } = await import('../lib/simulator/scenarios.ts');
+const { robotPenaltyOverlap } =
+  await import('../lib/simulator/referee-geometry.ts');
 const { REFEREE_CASES, ruleUrl } =
   await import('../lib/simulator/referee-cases.ts');
 const { RefereeMatch } = await import('../lib/simulator/referee-match.ts');
@@ -507,6 +509,29 @@ test('all detailed and guided lesson arrangements can become playable layouts', 
         sampleClip(clip, time).poses,
         clip.id + ' at ' + time,
       );
+});
+
+test('no scenario robot is ever fully inside a penalty area (rule 2.6/2.8)', () => {
+  const visuals = ['lab', 'xlc-innovation-2021', 'xlc-open-2020'];
+  // Scenario ids that deliberately teach a full-entry violation belong here,
+  // exempted explicitly rather than silently. None currently need it.
+  const teachesFullEntry = new Set();
+  for (const scenario of SCENARIOS) {
+    if (teachesFullEntry.has(scenario.id)) continue;
+    for (let time = 0; time <= scenario.duration + 1e-9; time += 0.25) {
+      const frame = scenario.sample(Math.min(time, scenario.duration));
+      for (const [actorId, pose] of Object.entries(frame.actors)) {
+        if (actorId === 'ball') continue;
+        for (const visual of visuals)
+          for (const end of [-1, 1])
+            assert.equal(
+              robotPenaltyOverlap(pose, end, visual, true),
+              false,
+              `${scenario.id} at t=${time.toFixed(2)}: ${actorId} (${visual}, end=${end}) is fully inside the penalty area`,
+            );
+      }
+    }
+  }
 });
 
 test('returned layouts and their added poses are independent between launches', () => {
