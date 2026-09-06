@@ -44,7 +44,7 @@ export function AcademyHub({
               </Badge>
               {roundStatus === 'qualified' && (
                 <Badge className="bg-emerald-500/15 text-emerald-300">
-                  <BadgeCheck /> {t('Certified')}
+                  <BadgeCheck /> {t('Training certified')}
                 </Badge>
               )}
             </div>
@@ -53,13 +53,13 @@ export function AcademyHub({
             </h1>
             <p className="mt-1 max-w-3xl text-sm leading-6 text-slate-300">
               {t(
-                'Practice freely as a guest, or sign in to save progress, complete referee certification and appear in the public directory.',
+                'Practice freely as a guest, or create a local profile to save progress on this device. Submit your completed training through GitHub for a verified entry in the public directory.',
               )}
             </p>
           </div>
           {status === 'authenticated' && account?.profile && (
             <div className="text-sm sm:text-right">
-              <span className="block text-slate-400">{t('Signed in as')}</span>
+              <span className="block text-slate-400">{t('Local profile')}</span>
               <strong data-i18n-skip>{account.profile.displayName}</strong>
               {account.profile.refereeNumber && (
                 <span

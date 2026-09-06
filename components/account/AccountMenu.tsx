@@ -42,11 +42,14 @@ export function AccountMenu({
       <Button
         variant="outline"
         size={compact ? 'icon' : 'sm'}
-        onClick={signIn}
-        aria-label="Sign in to save progress"
+        onClick={() => {
+          signIn();
+          onNavigate('profile');
+        }}
+        aria-label={t('Create local profile')}
       >
         <LogIn />
-        {!compact && <span>{t('Sign in')}</span>}
+        {!compact && <span>{t('Create local profile')}</span>}
       </Button>
     );
 
@@ -71,6 +74,9 @@ export function AccountMenu({
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="min-w-56">
         <DropdownMenuLabel>
+          <small className="block font-normal text-slate-400">
+            {t('Local profile')}
+          </small>
           <span className="block" data-i18n-skip>
             {profile.displayName}
           </span>
@@ -89,7 +95,7 @@ export function AccountMenu({
         </DropdownMenuItem>
         <DropdownMenuSeparator />
         <DropdownMenuItem onClick={signOut}>
-          <LogOut /> {t('Sign out')}
+          <LogOut /> {t('Use guest mode')}
         </DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>

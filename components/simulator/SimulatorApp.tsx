@@ -169,6 +169,7 @@ export function SimulatorApp() {
           missed: result.report.missed,
           assisted: result.report.assisted,
           accuracy: result.report.accuracy,
+          replay: result.replay,
         });
         setCertificationLaunch(null);
       },

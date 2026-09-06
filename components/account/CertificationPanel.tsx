@@ -52,6 +52,7 @@ import type {
   GameCertificationProgress,
 } from '@/lib/account';
 import { useAccount } from './AccountProvider';
+import { GitHubSubmissionPanel } from './GitHubSubmissionPanel';
 import {
   AccountAccessCard,
   CertificationStatusBadge,
@@ -195,7 +196,7 @@ export function CertificationPanel({
         purpose: 'certification',
       });
       if (!attempt.attemptId)
-        throw new Error('The server did not issue a certification attempt.');
+        throw new Error('The certification attempt could not be created.');
       if (onLaunchGame) onLaunchGame(attempt);
       else
         setLaunchError(
@@ -242,7 +243,7 @@ export function CertificationPanel({
               <ShieldCheck />
             </div>
             <CardTitle className="text-xl">
-              {t('2026 referee certification')}
+              {t('2026 referee training certification')}
             </CardTitle>
             <CardDescription className="max-w-3xl text-sm leading-6">
               {t(
@@ -275,6 +276,7 @@ export function CertificationPanel({
   const allPassed =
     rules.passed && round.step.passed && round.continuous.passed;
   const roundFailed = round.status === 'failed';
+  const verified = round.status === 'qualified';
 
   return (
     <div className="grid gap-5">
@@ -302,7 +304,7 @@ export function CertificationPanel({
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <CertificationStatusBadge
-            status={allPassed ? 'qualified' : round.status}
+            status={verified ? 'qualified' : allPassed ? 'ready' : round.status}
           />
           <AlertDialog>
             <AlertDialogTrigger render={<Button variant="outline" size="sm" />}>
@@ -341,15 +343,23 @@ export function CertificationPanel({
         <Alert className="border-emerald-400/40 bg-emerald-400/10 p-4">
           <BadgeCheck />
           <AlertTitle>
-            {t('All certification requirements are complete')}
+            {t(
+              verified
+                ? 'Training certification verified'
+                : 'Ready for verification',
+            )}
           </AlertTitle>
           <AlertDescription>
             {t(
-              'Your referee certificate has been issued. If public listing is enabled, it can appear in the Certified referees directory.',
+              verified
+                ? 'Your training certificate has a verified GitHub receipt. If public listing was enabled in your submission, it can appear in the Certified referees directory.'
+                : 'All training requirements are complete locally. Submit your answers and game evidence for automated verification before a training certificate can be issued.',
             )}
           </AlertDescription>
         </Alert>
       )}
+
+      {(allPassed || verified) && <GitHubSubmissionPanel kind="certify" />}
 
       {roundFailed && (
         <Alert className="border-rose-400/40 bg-rose-400/10 p-4">

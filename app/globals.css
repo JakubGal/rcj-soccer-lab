@@ -67,6 +67,8 @@ html:lang(ja) :is(.rule-kicker, .eyebrow, .rail-heading) {
 }
 
 :root {
+  --font-geist-sans: 'Inter', Arial, Helvetica, sans-serif;
+  --font-geist-mono: 'Cascadia Code', Consolas, monospace;
   --background: oklch(0.155 0.018 247);
   --foreground: oklch(0.965 0.009 240);
   --card: oklch(0.205 0.023 247);

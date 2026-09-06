@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
   BadgeCheck,
   CircleAlert,
@@ -34,14 +34,12 @@ import {
   getCertifiedReferees,
   type CertifiedRefereeDirectory,
 } from '@/lib/account';
-import { useAccount } from './AccountProvider';
 import { LoadingCards, useAccountFormatting } from './account-ui';
 
 export function CertifiedRefereesPanel() {
   const { t } = useLocalization();
   const format = useAccountFormatting();
-  const { apiBaseUrl, isStaticHost, secureAppUrl } = useAccount();
-  const directoryApiBase = apiBaseUrl || (isStaticHost ? secureAppUrl : '');
+  const directoryApiBase = '';
   const [query, setQuery] = useState('');
   const [directory, setDirectory] = useState<CertifiedRefereeDirectory>({
     referees: [],
@@ -51,8 +49,10 @@ export function CertifiedRefereesPanel() {
   const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const searchVersion = useRef(0);
 
   useEffect(() => {
+    searchVersion.current += 1;
     const controller = new AbortController();
     const timer = window.setTimeout(async () => {
       setLoading(true);
@@ -77,6 +77,7 @@ export function CertifiedRefereesPanel() {
       }
     }, 250);
     return () => {
+      searchVersion.current += 1;
       window.clearTimeout(timer);
       controller.abort();
     };
@@ -86,6 +87,7 @@ export function CertifiedRefereesPanel() {
     if (!directory.nextCursor || loadingMore) return;
     setLoadingMore(true);
     setError(null);
+    const version = searchVersion.current;
     try {
       const next = await getCertifiedReferees(
         query,
@@ -93,12 +95,14 @@ export function CertifiedRefereesPanel() {
         undefined,
         directory.nextCursor,
       );
+      if (version !== searchVersion.current) return;
       setDirectory((current) => ({
         referees: [...current.referees, ...next.referees],
         total: next.total,
         nextCursor: next.nextCursor,
       }));
     } catch (caught) {
+      if (version !== searchVersion.current) return;
       setError(
         caught instanceof Error
           ? caught.message
@@ -119,7 +123,7 @@ export function CertifiedRefereesPanel() {
           <CardTitle className="text-xl">{t('Certified referees')}</CardTitle>
           <CardDescription>
             {t(
-              'Search the public registry by referee number or display name. Only certifications issued by this site are shown.',
+              'Search the public registry by referee number or display name. Entries come from digitally signed GitHub verification results. These are training credentials, not official competition appointments.',
             )}
           </CardDescription>
         </CardHeader>
@@ -191,7 +195,15 @@ export function CertifiedRefereesPanel() {
                       key={`${referee.refereeNumber}:${referee.verificationCode}:${index}`}
                     >
                       <TableCell className="font-mono" data-i18n-skip>
-                        {referee.refereeNumber || '—'}
+                        <a
+                          className="text-sky-300 underline underline-offset-4"
+                          href={`https://github.com/JakubGal/rcj-soccer-lab/issues?q=${encodeURIComponent(referee.verificationCode)}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          aria-label={t('View verification issue on GitHub')}
+                        >
+                          {referee.refereeNumber || '—'}
+                        </a>
                       </TableCell>
                       <TableCell data-i18n-skip>
                         {referee.displayName}
@@ -205,7 +217,7 @@ export function CertifiedRefereesPanel() {
                       </TableCell>
                       <TableCell>
                         <Badge className="bg-emerald-500/15 text-emerald-300">
-                          <ShieldCheck /> {t('Certified')}
+                          <ShieldCheck /> {t('Training certified')}
                         </Badge>
                       </TableCell>
                     </TableRow>
@@ -225,15 +237,19 @@ export function CertifiedRefereesPanel() {
                       <strong className="block truncate" data-i18n-skip>
                         {referee.displayName}
                       </strong>
-                      <span
+                      <a
                         className="font-mono text-xs text-sky-300"
+                        href={`https://github.com/JakubGal/rcj-soccer-lab/issues?q=${encodeURIComponent(referee.verificationCode)}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        aria-label={t('View verification issue on GitHub')}
                         data-i18n-skip
                       >
                         {referee.refereeNumber || '—'}
-                      </span>
+                      </a>
                     </div>
                     <Badge className="bg-emerald-500/15 text-emerald-300">
-                      <BadgeCheck /> {t('Certified')}
+                      <BadgeCheck /> {t('Training certified')}
                     </Badge>
                   </div>
                   <dl className="mt-3 grid grid-cols-2 gap-2 text-xs">
@@ -296,7 +312,7 @@ function DirectoryPrivacyNote() {
       <AlertTitle>{t('Public information is limited')}</AlertTitle>
       <AlertDescription>
         {t(
-          'The directory never shows email addresses or private account identifiers. A referee controls whether their public profile is listed.',
+          'The directory shows an opted-in display name, optional country, referee number and training credential. GitHub submissions and verification results are public, including the submitting GitHub username. No email address or password is needed.',
         )}
       </AlertDescription>
     </Alert>

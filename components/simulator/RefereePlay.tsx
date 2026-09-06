@@ -56,6 +56,12 @@ import {
   type RefereePracticeSessionFinishPayload,
   type RefereePracticeTrackingBridge,
 } from '@/lib/certification/client-types';
+import {
+  MAX_MATCH_REPLAY_EVENTS,
+  makeMatchReplay,
+  type MatchReplayEvent,
+  type MatchReplayOperation,
+} from '@/lib/certification/replay';
 
 const clock = (seconds: number) =>
   `${Math.floor(seconds / 60)}:${String(Math.floor(seconds % 60)).padStart(2, '0')}`;
@@ -102,6 +108,30 @@ const COMMON = new Set([
   'pause',
 ]);
 
+type ReplayCapture = {
+  attemptId: string;
+  session: RefereeMatch;
+  mode: TrainingMode;
+  seed: number;
+  initialRobotVisual: RobotVisualId;
+  events: MatchReplayEvent[];
+  overflow: boolean;
+};
+
+const replayCaptureFor = (
+  attempt: RefereeCertificationAttempt,
+  session: RefereeMatch,
+  robotVisual: RobotVisualId,
+): ReplayCapture => ({
+  attemptId: attempt.attemptId,
+  session,
+  mode: attempt.mode,
+  seed: attempt.seed,
+  initialRobotVisual: robotVisual,
+  events: [],
+  overflow: false,
+});
+
 export function RefereePlay({
   robotVisual,
   onExit,
@@ -140,6 +170,11 @@ export function RefereePlay({
         topics: ALL_TRAINING_TOPICS,
       }),
   );
+  const replayCapture = useRef<ReplayCapture | null>(
+    initialCertificationAttempt
+      ? replayCaptureFor(initialCertificationAttempt, session, robotVisual)
+      : null,
+  );
   const [mode, setMode] = useState<TrainingMode>(initialMode);
   const [duration, setDuration] = useState(initialDuration);
   const [trainingTopics, setTrainingTopics] =
@@ -168,6 +203,22 @@ export function RefereePlay({
   const [startingCertification, setStartingCertification] = useState(false);
   const [certificationError, setCertificationError] = useState<string | null>(
     null,
+  );
+  const recordReplayOperation = useCallback(
+    (subject: RefereeMatch, operation: MatchReplayOperation) => {
+      const capture = replayCapture.current;
+      if (!capture || capture.session !== subject) return;
+      if (capture.events.length >= MAX_MATCH_REPLAY_EVENTS) {
+        capture.overflow = true;
+        return;
+      }
+      capture.events.push({
+        ...operation,
+        seq: capture.events.length,
+        tick: subject.trainingTick,
+      } as MatchReplayEvent);
+    },
+    [],
   );
   const seekReplay = useCallback((time: number) => {
     replayCursor.current = time;
@@ -221,6 +272,7 @@ export function RefereePlay({
         duration: CERTIFICATION_MATCH_DURATION_SECONDS,
         topics: ALL_TRAINING_TOPICS,
       });
+      replayCapture.current = replayCaptureFor(attempt, next, robotVisual);
       setReplay(null);
       setReplayKind(null);
       setReviewEventId(null);
@@ -265,10 +317,16 @@ export function RefereePlay({
   }, [certification, installCertificationAttempt, startingCertification]);
 
   useEffect(() => {
-    session.setRobotVisual(robotVisual);
+    if (session.robotVisual !== robotVisual) {
+      session.setRobotVisual(robotVisual);
+      recordReplayOperation(session, {
+        op: 'set-robot-visual',
+        robotVisual,
+      });
+    }
     const update = requestAnimationFrame(sync);
     return () => cancelAnimationFrame(update);
-  }, [session, robotVisual, sync]);
+  }, [session, robotVisual, sync, recordReplayOperation]);
 
   useEffect(() => {
     const attempt = certification?.attempt;
@@ -372,6 +430,50 @@ export function RefereePlay({
       CERTIFICATION_MATCH_DURATION_SECONDS - frame.trainingRemaining,
     );
     const completedAtFullTime = frame.trainingRemaining <= MATCH_STEP / 2;
+    const capture = replayCapture.current;
+    if (
+      !capture ||
+      capture.session !== session ||
+      capture.attemptId !== activeCertificationAttempt.attemptId ||
+      capture.overflow
+    ) {
+      setCertificationError(
+        capture?.overflow
+          ? 'This attempt contains too many actions to submit as certification evidence.'
+          : 'Certification replay evidence is unavailable for this attempt.',
+      );
+      return;
+    }
+    const report = {
+      correct: frame.report.correct,
+      wrong: frame.report.wrong,
+      missed: frame.report.missed,
+      assisted: frame.report.assisted,
+      assessed: frame.report.assessed,
+      accuracy: frame.report.accuracy,
+    };
+    let replayEvidence;
+    try {
+      replayEvidence = makeMatchReplay({
+        mode: capture.mode,
+        seed: capture.seed,
+        robotVisual: capture.initialRobotVisual,
+        topics: [...ALL_TRAINING_TOPICS],
+        events: capture.events,
+        terminal: {
+          tick: session.trainingTick,
+          reason: completedAtFullTime ? 'full-time' : 'ended-early',
+        },
+        claimedReport: report,
+      });
+    } catch (error) {
+      setCertificationError(
+        error instanceof Error
+          ? `Certification evidence could not be prepared: ${error.message}`
+          : 'Certification evidence could not be prepared.',
+      );
+      return;
+    }
     const result: RefereeCertificationFinishPayload = {
       attemptId: activeCertificationAttempt.attemptId,
       certificationRunId: activeCertificationAttempt.certificationRunId,
@@ -382,14 +484,8 @@ export function RefereePlay({
       completionReason: completedAtFullTime ? 'full-time' : 'ended-early',
       eligibleForScoring: completedAtFullTime && frame.report.assisted === 0,
       topics: [...ALL_TRAINING_TOPICS],
-      report: {
-        correct: frame.report.correct,
-        wrong: frame.report.wrong,
-        missed: frame.report.missed,
-        assisted: frame.report.assisted,
-        assessed: frame.report.assessed,
-        accuracy: frame.report.accuracy,
-      },
+      replay: replayEvidence,
+      report,
     };
     void Promise.resolve()
       .then(() => certification.onFinishAttempt(result))
@@ -406,6 +502,7 @@ export function RefereePlay({
     frame.report,
     frame.sessionFinished,
     frame.trainingRemaining,
+    session,
     sessionKind,
   ]);
   const pause = useCallback(() => {
@@ -414,10 +511,13 @@ export function RefereePlay({
       setRunning(false);
       return;
     }
+    const wasPaused = session.snapshot().userPaused;
     session.pauseForDecision();
+    if (!wasPaused && session.snapshot().userPaused)
+      recordReplayOperation(session, { op: 'pause' });
     setRunning(false);
     sync();
-  }, [session, sync, replay]);
+  }, [session, sync, replay, recordReplayOperation]);
   useEffect(() => {
     if (active) return;
     const update = requestAnimationFrame(() => {
@@ -432,10 +532,20 @@ export function RefereePlay({
       pause();
       return;
     }
+    const canResume = session.canResumeMotion;
     session.resumeMotion();
+    if (canResume) recordReplayOperation(session, { op: 'resume' });
     setRunning(session.canAdvance);
     sync();
-  }, [ready, certificationSessionReady, running, pause, session, sync]);
+  }, [
+    ready,
+    certificationSessionReady,
+    running,
+    pause,
+    session,
+    sync,
+    recordReplayOperation,
+  ]);
   const reset = useCallback(
     (value: number) => {
       if (certification) return;
@@ -461,13 +571,25 @@ export function RefereePlay({
   );
   const whistle = useCallback(() => {
     if (replay || !certificationSessionReady) return;
+    if (session.snapshot().sessionFinished) return;
     session.whistle();
+    recordReplayOperation(session, { op: 'whistle' });
     setRunning(false);
     sync();
-  }, [session, sync, replay, certificationSessionReady]);
+  }, [session, sync, replay, certificationSessionReady, recordReplayOperation]);
   const submit = (call: RefereeCall) => {
     if (!certificationSessionReady) return;
-    session.submit(frame.decisionKey, call);
+    const displayedDecisionKey = frame.decisionKey;
+    const replayDecisionKey = session.decisionKey;
+    if (session.submit(displayedDecisionKey, call))
+      recordReplayOperation(session, {
+        op: 'call',
+        decisionKey: replayDecisionKey,
+        call: {
+          action: call.action,
+          ...(call.target ? { target: call.target } : {}),
+        },
+      });
     setRunning(session.canAdvance);
     sync();
   };
@@ -635,7 +757,11 @@ export function RefereePlay({
     const definition = REFEREE_CASES.find(
       (item) => item.id === topic && frame.topics.includes(trainingTopic(item)),
     );
-    if (definition ? session.beginCase(definition) : session.nextCase()) {
+    const started = definition
+      ? session.beginCase(definition)
+      : session.nextCase();
+    if (started) {
+      if (!definition) recordReplayOperation(session, { op: 'next-case' });
       sync();
       setRunning(session.canAdvance);
     }
@@ -653,6 +779,7 @@ export function RefereePlay({
       return;
     const update = requestAnimationFrame(() => {
       if (session.nextCase()) {
+        recordReplayOperation(session, { op: 'next-case' });
         sync();
         setRunning(session.canAdvance);
       }
@@ -666,6 +793,7 @@ export function RefereePlay({
     session,
     sessionKind,
     sync,
+    recordReplayOperation,
   ]);
 
   if (!active) return null;
@@ -712,15 +840,18 @@ export function RefereePlay({
             meeting={frame.opening}
             ready={ready}
             onToss={() => {
-              session.tossCoin();
+              if (session.tossCoin())
+                recordReplayOperation(session, { op: 'toss' });
               sync();
             }}
             onKickoff={() => {
-              session.chooseFirstKickoff();
+              if (session.chooseFirstKickoff())
+                recordReplayOperation(session, { op: 'take-kickoff' });
               sync();
             }}
             onEnd={(end) => {
-              session.chooseOpeningEnd(end);
+              if (session.chooseOpeningEnd(end))
+                recordReplayOperation(session, { op: 'choose-end', end });
               sync();
             }}
             onStart={() => submit({ action: 'start' })}
@@ -1203,7 +1334,9 @@ export function RefereePlay({
                 !certificationSessionReady
               }
               onClick={() => {
+                if (session.snapshot().sessionFinished) return;
                 session.endSession();
+                recordReplayOperation(session, { op: 'end' });
                 setRunning(false);
                 sync();
               }}
@@ -1412,8 +1545,14 @@ export function RefereePlay({
                 variant="outline"
                 onClick={() => {
                   session.pauseForDecision();
+                  recordReplayOperation(session, { op: 'pause' });
                   session.whistle();
-                  session.requestHint();
+                  recordReplayOperation(session, { op: 'whistle' });
+                  if (session.requestHint())
+                    recordReplayOperation(session, {
+                      op: 'hint',
+                      reveal: false,
+                    });
                   setRunning(false);
                   sync();
                 }}
@@ -1438,7 +1577,11 @@ export function RefereePlay({
                     variant="outline"
                     disabled={!ready || frame.resolving}
                     onClick={() => {
-                      session.requestHint();
+                      if (session.requestHint())
+                        recordReplayOperation(session, {
+                          op: 'hint',
+                          reveal: false,
+                        });
                       sync();
                     }}
                   >
@@ -1448,7 +1591,11 @@ export function RefereePlay({
                     variant="outline"
                     disabled={!ready || frame.resolving}
                     onClick={() => {
-                      session.requestHint(true);
+                      if (session.requestHint(true))
+                        recordReplayOperation(session, {
+                          op: 'hint',
+                          reveal: true,
+                        });
                       sync();
                     }}
                   >
@@ -1457,7 +1604,8 @@ export function RefereePlay({
                   <Button
                     disabled={!ready || frame.resolving}
                     onClick={() => {
-                      session.resolveForMe();
+                      if (session.resolveForMe())
+                        recordReplayOperation(session, { op: 'resolve' });
                       sync();
                       setRunning(session.canAdvance);
                     }}
@@ -1534,6 +1682,9 @@ export function RefereePlay({
                 onClick={() => {
                   if (frame.canArrangeKickoff) {
                     if (session.arrangeKickoff()) {
+                      recordReplayOperation(session, {
+                        op: 'arrange-kickoff',
+                      });
                       sync();
                       setRunning(false);
                       setGroup('restart');
@@ -1561,6 +1712,9 @@ export function RefereePlay({
                 disabled={!ready}
                 onClick={() => {
                   if (session.resumeEvidence()) {
+                    recordReplayOperation(session, {
+                      op: 'resume-evidence',
+                    });
                     sync();
                     setRunning(true);
                   }
@@ -1674,6 +1828,7 @@ export function RefereePlay({
                 <Button
                   onClick={() => {
                     session.continue();
+                    recordReplayOperation(session, { op: 'continue' });
                     sync();
                     setRunning(session.canAdvance);
                   }}

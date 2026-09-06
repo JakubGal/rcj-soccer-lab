@@ -191,6 +191,7 @@ export class RefereeMatch {
   readonly duration: number;
   readonly topics: readonly TrainingTopic[];
   private trainingElapsed = 0;
+  private trainingTicks = 0;
   private sessionFinished = false;
   private userPaused = false;
   private score = new RefereeScore();
@@ -201,6 +202,7 @@ export class RefereeMatch {
   private reviewedNoCalls = new Set<number>();
   private matchFrames: ReplayFrame[] = [];
   private lastSampledMatchTime = Number.NEGATIVE_INFINITY;
+  private readonly recordMatchReplay: boolean;
   private invalidGoalPassage: { robot: string; team: MatchTeam } | null = null;
 
   private assess(item: ActiveIncident, result: Assessment) {
@@ -437,7 +439,7 @@ export class RefereeMatch {
       damage: this.damage,
     };
     this.recorder.capture(frame);
-    if (this.mode === 'continuous') {
+    if (this.mode === 'continuous' && this.recordMatchReplay) {
       const previous = this.matchFrames.at(-1);
       if (
         !actionBoundary &&
@@ -703,6 +705,8 @@ export class RefereeMatch {
       mode?: TrainingMode;
       duration?: number;
       topics?: readonly TrainingTopic[];
+      /** Disable the heavyweight visual timeline for headless verification. */
+      recordMatchReplay?: boolean;
     } = {},
   ) {
     this.mode = options.mode ?? 'step';
@@ -711,6 +715,7 @@ export class RefereeMatch {
       ? [...options.topics]
       : TRAINING_TOPICS.map((t) => t.id);
     this.robotVisual = options.robotVisual ?? DEFAULT_ROBOT_VISUAL_ID;
+    this.recordMatchReplay = options.recordMatchReplay ?? true;
     this.bag = new IncidentBag(seed);
     this.director = new ContinuousDirector(this.bag, this.topics);
     this.meeting = new KickoffMeeting(seed);
@@ -749,6 +754,10 @@ export class RefereeMatch {
   }
   get decisionKey() {
     return `${this.active?.number ?? this.serial}:${this.active?.step ?? 0}`;
+  }
+  /** Integer fixed-step clock used by portable certification replays. */
+  get trainingTick() {
+    return this.trainingTicks;
   }
 
   snapshot() {
@@ -815,6 +824,7 @@ export class RefereeMatch {
       ...this.match.snapshot(),
       trainingMode: this.mode,
       trainingRemaining: Math.max(0, this.duration - this.trainingElapsed),
+      trainingTick: this.trainingTicks,
       sessionFinished: this.sessionFinished,
       userPaused: this.userPaused,
       report: this.score.snapshot(),
@@ -1186,9 +1196,10 @@ export class RefereeMatch {
   step() {
     this.resolveAssistedSteps();
     if (!this.canAdvance) return;
+    this.trainingTicks += 1;
     this.trainingElapsed = Math.min(
       this.duration,
-      this.trainingElapsed + MATCH_STEP,
+      this.trainingTicks * MATCH_STEP,
     );
     if (this.trainingElapsed + 1e-8 >= this.duration) {
       this.endSession();

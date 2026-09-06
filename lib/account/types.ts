@@ -1,3 +1,5 @@
+import type { MatchReplay } from '../certification/replay';
+
 export type AccountLoadStatus =
   | 'loading'
   | 'authenticated'
@@ -9,6 +11,7 @@ export type CertificationMode = 'step' | 'continuous';
 export type CertificationStatus =
   | 'not-started'
   | 'in-progress'
+  | 'ready'
   | 'qualified'
   | 'failed'
   | 'restarted';
@@ -150,6 +153,7 @@ export type FinishGamePayload = {
   missed: number;
   assisted: number;
   accuracy: number | null;
+  replay?: MatchReplay;
   decisionLog?: unknown[];
   purpose?: 'certification' | 'practice';
 };

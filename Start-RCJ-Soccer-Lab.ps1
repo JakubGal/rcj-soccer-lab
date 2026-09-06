@@ -4,7 +4,7 @@ param(
 
 $ErrorActionPreference = 'Stop'
 $projectRoot = Split-Path -Parent $MyInvocation.MyCommand.Path
-$vinextCli = Join-Path $projectRoot 'node_modules\vinext\dist\cli.js'
+$viteCli = Join-Path $projectRoot 'node_modules\vite\bin\vite.js'
 $localUrl = 'http://localhost:3000/'
 
 $nodeCommand = Get-Command node -ErrorAction SilentlyContinue
@@ -20,7 +20,7 @@ if (-not (Test-Path -LiteralPath $nodePath -PathType Leaf)) {
 
 $env:PATH = "$(Split-Path -Parent $nodePath);$env:PATH"
 
-if (-not (Test-Path -LiteralPath $vinextCli -PathType Leaf)) {
+if (-not (Test-Path -LiteralPath $viteCli -PathType Leaf)) {
   $pnpmCommand = Get-Command pnpm -ErrorAction SilentlyContinue
   $pnpmPath = if ($pnpmCommand) {
     $pnpmCommand.Source
@@ -34,7 +34,7 @@ if (-not (Test-Path -LiteralPath $vinextCli -PathType Leaf)) {
 
   Write-Host 'Preparing RCJ Soccer Lab for its first local run...'
   & $pnpmPath install
-  if ($LASTEXITCODE -ne 0 -or -not (Test-Path -LiteralPath $vinextCli -PathType Leaf)) {
+  if ($LASTEXITCODE -ne 0 -or -not (Test-Path -LiteralPath $viteCli -PathType Leaf)) {
     throw 'The project dependencies could not be installed.'
   }
 }
@@ -54,7 +54,7 @@ try {
 
 $server = Start-Process `
   -FilePath $nodePath `
-  -ArgumentList @($vinextCli, 'dev', '--host', '127.0.0.1') `
+  -ArgumentList @($viteCli, '--host', 'localhost') `
   -WorkingDirectory $projectRoot `
   -WindowStyle Hidden `
   -PassThru

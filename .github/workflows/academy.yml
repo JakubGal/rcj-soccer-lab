@@ -1,0 +1,56 @@
+name: Publish mock academy requests
+
+on:
+  issues:
+    types: [opened]
+  schedule:
+    - cron: '7,22,37,52 * * * *'
+  workflow_dispatch:
+
+# Open issues are the durable queue. Superseding a pending workflow never removes
+# an issue; every run reconciles that queue, with a rotating bounded scan cursor.
+# This is asynchronous public mock certification, not login/session infrastructure.
+concurrency:
+  group: academy-data-publisher
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  publish:
+    if: github.repository == 'JakubGal/rcj-soccer-lab'
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    permissions:
+      contents: write
+      issues: write
+    steps:
+      - name: Check out trusted application code
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+          persist-credentials: false
+
+      - name: Check out public issuer records
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          ref: academy-data
+          path: .academy-data
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+
+      - name: Check queue and signature invariants
+        # The 10k stress fixture runs in source CI, not on every idle queue scan.
+        run: node --test --test-skip-pattern='10,000' scripts/github-academy.test.mjs
+
+      - name: Validate, sign, and publish one bounded batch
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ACADEMY_SIGNING_KEY: ${{ secrets.ACADEMY_SIGNING_KEY }}
+        run: node --max-old-space-size=768 scripts/github-academy.mjs --publish --data-dir .academy-data

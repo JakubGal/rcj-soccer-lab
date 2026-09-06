@@ -3,6 +3,7 @@ import type {
   TrainingTopic,
 } from '@/lib/simulator/referee-training';
 import type { RefereeCall } from '@/lib/simulator/referee-cases';
+import type { MatchReplay } from './replay';
 
 export type MaybePromise<T> = T | Promise<T>;
 
@@ -95,6 +96,7 @@ export type RefereeCertificationFinishPayload = {
   completionReason: 'full-time' | 'ended-early';
   eligibleForScoring: boolean;
   topics: readonly TrainingTopic[];
+  replay: MatchReplay;
   report: {
     correct: number;
     wrong: number;

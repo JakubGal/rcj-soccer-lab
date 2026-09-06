@@ -129,6 +129,48 @@ const MANUAL = {
     'Certified referees': 'Certifikovaní rozhodcovia',
     'Sign in': 'Prihlásiť sa',
     'Sign out': 'Odhlásiť sa',
+    'Create local profile': 'Vytvoriť lokálny profil',
+    'Local profile': 'Lokálny profil',
+    'Use guest mode': 'Používať režim hosťa',
+    'An optional profile, on this device': 'Voliteľný profil v tomto zariadení',
+    'Training certified': 'Tréning úspešne certifikovaný',
+    'Ready for verification': 'Pripravené na overenie',
+    'GitHub identity': 'Identita na GitHube',
+    'GitHub identity verified': 'Identita na GitHube je overená',
+    'Training certification verified': 'Tréningová certifikácia je overená',
+    'Submit for verification': 'Odoslať na overenie',
+    'Your submission will be public': 'Vaše podanie bude verejné',
+    'Connect through GitHub': 'Prepojiť cez GitHub',
+    'Prepare certification submission': 'Pripraviť podanie na certifikáciu',
+    'Preparing submission…': 'Pripravuje sa podanie…',
+    'Copy submission': 'Kopírovať podanie',
+    'Submission copied': 'Podanie bolo skopírované',
+    'Open GitHub issue': 'Otvoriť issue na GitHube',
+    'Check verification result': 'Skontrolovať výsledok overenia',
+    'Checking…': 'Kontroluje sa…',
+    'View verification issue on GitHub': 'Zobraziť overovacie issue na GitHube',
+    'Submission not accepted': 'Podanie nebolo prijaté',
+    'Your progress stays on this device':
+      'Váš postup zostáva v tomto zariadení',
+    'Export progress backup': 'Exportovať zálohu postupu',
+    'Import progress backup': 'Importovať zálohu postupu',
+    'Importing backup…': 'Importuje sa záloha…',
+    'Progress backup imported': 'Záloha postupu bola importovaná',
+    'Local profile created': 'Vytvorenie lokálneho profilu',
+    'Update public GitHub profile': 'Aktualizovať verejný profil na GitHube',
+    'Prepare profile update': 'Pripraviť aktualizáciu profilu',
+    '2026 referee training certification':
+      'Tréningová certifikácia rozhodcov 2026',
+    'GitHub issues are public. Your GitHub username, chosen display name and optional country will be visible. Certification submissions also include your answers and game action logs. Do not include an email address, password or other private information.':
+      'Issue na GitHube sú verejné. Vaše používateľské meno na GitHube, zvolené zobrazované meno a voliteľne aj krajina budú viditeľné. Certifikačné podania obsahujú aj vaše odpovede a záznamy úkonov v zápasoch. Neuvádzajte e-mailovú adresu, heslo ani iné súkromné údaje.',
+    'Progress is saved in this browser, not synced to an account online. Download a backup to move it to another device or protect it before clearing browser data. A backup may contain your private profile and training history; keep it somewhere safe.':
+      'Postup sa ukladá v tomto prehliadači a nesynchronizuje sa s online účtom. Stiahnite si zálohu, ak ho chcete preniesť do iného zariadenia alebo uchovať pred vymazaním údajov prehliadača. Záloha môže obsahovať váš súkromný profil a históriu tréningu; uložte ju na bezpečnom mieste.',
+    'Importing a backup replaces this browser’s current local profile and progress. Export your current progress first. Imported scores cannot issue a verified certificate.':
+      'Import zálohy nahradí aktuálny lokálny profil a postup v tomto prehliadači. Najprv exportujte svoj aktuálny postup. Importované skóre samo osebe neumožňuje vydať overený certifikát.',
+    'This verifies completion of the training programme. It is not an official competition appointment.':
+      'Toto overuje absolvovanie tréningového programu. Nejde o oficiálne vymenovanie za rozhodcu súťaže.',
+    'Awaiting a signed verification result. Preparing or opening an issue does not submit it for you.':
+      'Čaká sa na podpísaný výsledok overenia. Samotná príprava alebo otvorenie issue ho za vás neodošle.',
     'Rules examination': 'Skúška z pravidiel',
     'Step mode': 'Krokový režim',
     'Continuous mode': 'Plynulý režim',
@@ -193,6 +235,50 @@ const MANUAL = {
     'Certified referees': 'Zertifizierte Schiedsrichter',
     'Sign in': 'Anmelden',
     'Sign out': 'Abmelden',
+    'Create local profile': 'Lokales Profil erstellen',
+    'Local profile': 'Lokales Profil',
+    'Use guest mode': 'Gastmodus verwenden',
+    'An optional profile, on this device':
+      'Ein optionales Profil auf diesem Gerät',
+    'Training certified': 'Training zertifiziert',
+    'Ready for verification': 'Bereit zur Überprüfung',
+    'GitHub identity': 'GitHub-Identität',
+    'GitHub identity verified': 'GitHub-Identität bestätigt',
+    'Training certification verified': 'Trainingszertifizierung bestätigt',
+    'Submit for verification': 'Zur Überprüfung einreichen',
+    'Your submission will be public': 'Ihre Einreichung wird öffentlich',
+    'Connect through GitHub': 'Über GitHub verknüpfen',
+    'Prepare certification submission':
+      'Zertifizierungseinreichung vorbereiten',
+    'Preparing submission…': 'Einreichung wird vorbereitet…',
+    'Copy submission': 'Einreichung kopieren',
+    'Submission copied': 'Einreichung kopiert',
+    'Open GitHub issue': 'GitHub-Issue öffnen',
+    'Check verification result': 'Prüfergebnis abrufen',
+    'Checking…': 'Wird geprüft…',
+    'View verification issue on GitHub': 'Prüfungs-Issue auf GitHub ansehen',
+    'Submission not accepted': 'Einreichung nicht akzeptiert',
+    'Your progress stays on this device':
+      'Ihr Fortschritt bleibt auf diesem Gerät',
+    'Export progress backup': 'Fortschrittssicherung exportieren',
+    'Import progress backup': 'Fortschrittssicherung importieren',
+    'Importing backup…': 'Sicherung wird importiert…',
+    'Progress backup imported': 'Fortschrittssicherung importiert',
+    'Local profile created': 'Lokales Profil erstellt',
+    'Update public GitHub profile': 'Öffentliches GitHub-Profil aktualisieren',
+    'Prepare profile update': 'Profilaktualisierung vorbereiten',
+    '2026 referee training certification':
+      'Schiedsrichter-Trainingszertifizierung 2026',
+    'GitHub issues are public. Your GitHub username, chosen display name and optional country will be visible. Certification submissions also include your answers and game action logs. Do not include an email address, password or other private information.':
+      'GitHub-Issues sind öffentlich. Ihr GitHub-Benutzername, Ihr gewählter Anzeigename und optional Ihr Land werden sichtbar sein. Zertifizierungseinreichungen enthalten auch Ihre Antworten und Aktionsprotokolle aus den Spielen. Geben Sie keine E-Mail-Adresse, kein Passwort und keine anderen privaten Informationen an.',
+    'Progress is saved in this browser, not synced to an account online. Download a backup to move it to another device or protect it before clearing browser data. A backup may contain your private profile and training history; keep it somewhere safe.':
+      'Ihr Fortschritt wird in diesem Browser gespeichert und nicht mit einem Online-Konto synchronisiert. Laden Sie eine Sicherung herunter, um ihn auf ein anderes Gerät zu übertragen oder vor dem Löschen von Browserdaten zu schützen. Eine Sicherung kann Ihr privates Profil und Ihren Trainingsverlauf enthalten; bewahren Sie sie sicher auf.',
+    'Importing a backup replaces this browser’s current local profile and progress. Export your current progress first. Imported scores cannot issue a verified certificate.':
+      'Der Import einer Sicherung ersetzt das aktuelle lokale Profil und den Fortschritt in diesem Browser. Exportieren Sie zuerst Ihren aktuellen Fortschritt. Importierte Punktzahlen allein können kein verifiziertes Zertifikat erzeugen.',
+    'This verifies completion of the training programme. It is not an official competition appointment.':
+      'Dies bestätigt den Abschluss des Trainingsprogramms. Es ist keine offizielle Ernennung für einen Wettbewerb.',
+    'Awaiting a signed verification result. Preparing or opening an issue does not submit it for you.':
+      'Ein signiertes Prüfergebnis wird erwartet. Das Vorbereiten oder Öffnen eines Issues reicht es noch nicht für Sie ein.',
     'Rules examination': 'Regelprüfung',
     'Step mode': 'Schrittmodus',
     'Continuous mode': 'Fortlaufender Modus',
@@ -265,6 +351,46 @@ const MANUAL = {
     'Certified referees': '認定審判員',
     'Sign in': 'ログイン',
     'Sign out': 'ログアウト',
+    'Create local profile': 'ローカルプロフィールを作成',
+    'Local profile': 'ローカルプロフィール',
+    'Use guest mode': 'ゲストモードを使用',
+    'An optional profile, on this device': 'この端末に任意のプロフィールを作成',
+    'Training certified': 'トレーニング認定済み',
+    'Ready for verification': '検証に提出できます',
+    'GitHub identity': 'GitHubでの本人確認',
+    'GitHub identity verified': 'GitHubでの本人確認済み',
+    'Training certification verified': 'トレーニング認定の検証済み',
+    'Submit for verification': '検証に提出',
+    'Your submission will be public': '提出内容は公開されます',
+    'Connect through GitHub': 'GitHubで連携',
+    'Prepare certification submission': '認定の提出データを準備',
+    'Preparing submission…': '提出データを準備中…',
+    'Copy submission': '提出データをコピー',
+    'Submission copied': '提出データをコピーしました',
+    'Open GitHub issue': 'GitHubのIssueを開く',
+    'Check verification result': '検証結果を確認',
+    'Checking…': '確認中…',
+    'View verification issue on GitHub': 'GitHubで検証のIssueを見る',
+    'Submission not accepted': '提出は承認されませんでした',
+    'Your progress stays on this device': '進捗はこの端末に保存されます',
+    'Export progress backup': '進捗のバックアップを保存',
+    'Import progress backup': '進捗のバックアップを読み込む',
+    'Importing backup…': 'バックアップを読み込み中…',
+    'Progress backup imported': '進捗のバックアップを読み込みました',
+    'Local profile created': 'ローカルプロフィール作成日',
+    'Update public GitHub profile': '公開GitHubプロフィールを更新',
+    'Prepare profile update': 'プロフィールの更新データを準備',
+    '2026 referee training certification': '2026年審判トレーニング認定',
+    'GitHub issues are public. Your GitHub username, chosen display name and optional country will be visible. Certification submissions also include your answers and game action logs. Do not include an email address, password or other private information.':
+      'GitHubのIssueは公開されます。GitHubのユーザー名、選択した表示名、任意で入力した国が表示されます。認定の提出内容には回答や試合中の操作ログも含まれます。メールアドレス、パスワード、その他の個人情報は含めないでください。',
+    'Progress is saved in this browser, not synced to an account online. Download a backup to move it to another device or protect it before clearing browser data. A backup may contain your private profile and training history; keep it somewhere safe.':
+      '進捗はこのブラウザーに保存され、オンラインアカウントとは同期されません。別の端末への移行やブラウザーデータ削除に備えて、バックアップをダウンロードしてください。バックアップには非公開のプロフィールやトレーニング履歴が含まれる場合があるため、安全な場所に保管してください。',
+    'Importing a backup replaces this browser’s current local profile and progress. Export your current progress first. Imported scores cannot issue a verified certificate.':
+      'バックアップを読み込むと、このブラウザーの現在のローカルプロフィールと進捗が置き換わります。先に現在の進捗を保存してください。読み込んだスコアだけで検証済みの認定証が発行されることはありません。',
+    'This verifies completion of the training programme. It is not an official competition appointment.':
+      'これはトレーニングプログラムの修了を確認するものです。大会への正式な審判任命ではありません。',
+    'Awaiting a signed verification result. Preparing or opening an issue does not submit it for you.':
+      '署名付きの検証結果を待っています。Issueを準備したり開いたりしただけでは、提出は完了しません。',
     'Rules examination': 'ルール試験',
     'Step mode': 'ステップモード',
     'Continuous mode': '連続モード',
@@ -418,6 +544,9 @@ function templatePattern(node) {
     value += `{${index}}${span.literal.text}`;
   });
   value = normalize(value);
+  // Submission packets and other code-fenced machine-readable payloads are
+  // deliberately displayed verbatim, not localized prose.
+  if (value.includes('```')) return null;
   return value.includes('{0}') && looksHuman(value) ? value : null;
 }
 

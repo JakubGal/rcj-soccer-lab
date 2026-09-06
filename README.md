@@ -4,9 +4,7 @@ Interactive 3D rule explanations, referee practice, and optional referee
 certification for RoboCupJunior Soccer 2026. The application works as a full
 training tool and as a small iframe embedded directly beside a rule.
 
-Account-enabled application: <https://rcj-soccer-lab.bukajlag.chatgpt.site/>
-
-Guest/static mirror: <https://jakubgal.github.io/rcj-soccer-lab/>
+Application: <https://jakubgal.github.io/rcj-soccer-lab/>
 
 ## What is included
 
@@ -20,8 +18,8 @@ Guest/static mirror: <https://jakubgal.github.io/rcj-soccer-lab/>
 - 32 additional gameplay animations with timelines, camera choices and questions,
   plus interactive inspection, kicker, field, ball and scoring workbenches.
 - Four unified tabs: **Rules**, **Play**, **Referee**, and **Academy**.
-- Optional sign-in with a stable referee number, cross-device learning progress,
-  referee-game history, average scores, and an opt-in certified-referee directory.
+- Optional device-local profiles, portable progress backups, GitHub-confirmed referee
+  numbers, game history/averages, and an opt-in signed training-referee directory.
 - Complete English, Slovak, German, and Japanese interface/catalogue support,
   including generated match feedback, referee reviews, quizzes, and embeds.
 - A situation library combining all 73 decision exercises, guided replays and
@@ -79,45 +77,74 @@ pnpm lint
 pnpm build
 ```
 
-## Accounts and referee certification
+## GitHub-only training certification
 
-Rules, Play, Referee, and every interactive lesson remain available without an
-account. Signing in is optional and saves rule checks, completed referee games,
-scores, profile details, and certification progress. The account-enabled Sites
-deployment stores these records server-side in D1; they are not editable through
-the repository or trusted from browser-local progress. The GitHub Pages mirror
-stays a static guest application and links account actions to the secure hosted
-version.
+The whole app is a static Vite/React application on GitHub Pages. It does not use
+ChatGPT authentication, a Sites backend, a paid server, or a runtime AI service.
+Guest Rules, Play, Referee, all robot models and interactive embeds still work.
 
-Each signed-in account receives one stable `RCJ-2026-######` referee number.
-Directory listing is off by default; the referee must explicitly enable it and
-choose a public display name and country/region. Email addresses and sign-in
-identifiers are never published.
+**Local profile** saves progress and game history in IndexedDB on this device.
+This is not a private online login. Export/import a progress backup to move
+between devices. Clearing site data deletes local progress unless backed up.
+Use a nickname; no email or password is requested. Creating a local profile
+does not automatically publish anything.
 
-A 2026 certification round requires all of the following:
+**Connect through GitHub** prepares an issue. The user signs in on GitHub itself,
+submits the issue, returns to the academy and checks its signed result. The
+actual GitHub issue author—not a name or ID supplied by the browser—determines
+the stable `RCJ-GH-<numeric GitHub ID>` referee number. The app never requests
+a GitHub access token or stores passwords. This public connection is not a
+private session, a legal identity check or proof of who is operating the device.
 
-- Complete all 73 rule questions, with at least 70 (95% rounded up) correct on
-  the first answer.
-- Complete five 10-minute Step games at 90% or better, using at most eight
-  started attempts.
-- Complete two 10-minute Continuous games at 80% or better, using at most five
-  started attempts.
+All GitHub submissions are public: GitHub username, chosen alias, optional
+country, and (for certification) answers and game action logs. Directory listing
+is opt-in and independent from that unavoidable public submission history.
+Changing an already-published alias/country/listing requires another connect
+submission. Opting out removes the current directory listing, not Git history
+or the original public issues. Do not put children's private information here.
 
-Certification hides hints and answer-reveal tools. Starting a game consumes an
-attempt, and ending it before ten minutes cannot qualify. A failed round can be
-restarted without limit; restarting clears that round's question and game
-progress while preserving lifetime practice statistics and the audit history.
-Certification identities, canonical rule answers, attempt limits, timestamps,
-and final eligibility are enforced by the server. Match decisions are currently
-summarized by the existing deterministic client trainer and sanity-checked by the
-server; this is appropriate for training certification, not a high-stakes
-tournament identity or anti-cheat system.
+A 2026 round requires:
 
-After changing the schema, create a checked-in migration with:
+- All 73 rule questions, with at least 70 correct on the first recorded answer.
+- Five complete 10-minute Step games at 90% or better, from at most eight starts.
+- Two complete 10-minute Continuous games at 80% or better, from at most five starts.
 
-```bash
-pnpm db:generate
-```
+Hints/reveals are disabled during certification. Every game start consumes a
+local attempt. Full restarts are unlimited and reset all round evidence together,
+while keeping practice history and previous round summaries. Seeds are assigned
+deterministically from round ID, mode and attempt number to prevent reusing the
+same game recording in several attempt slots.
+
+Local success means **Ready for verification**, not certified. The final issue
+contains a gzip-compressed evidence packet. The reviewer runs trusted
+default-branch code in a bounded, secret-free process, regrades canonical rule
+answers and replays the actual fixed-tick game decisions. Claimed accuracy and
+summary counters do not determine eligibility. Only the publisher possesses
+the signing private key in a GitHub Actions secret. Public pages verify ECDSA
+P-256 signatures and directory hashes against the bundled public key.
+
+This is a **mock/training credential**, not an official RoboCup appointment.
+It raises the barrier above editing a browser score or unsigned table, but is
+unproctored: a determined programmer can fabricate consistent answer/action
+evidence, automate the public engine, alter local first-answer history or choose
+a new round. Replay validation proves consistency, not honest human participation.
+Repository administrators who can change the verifier or trusted public key are
+also trusted issuers. Do not use this as high-stakes identity or anti-cheat proof.
+
+## GitHub operations and limits
+
+See [the operator guide](docs/github-academy.md) for setup, trust boundaries,
+recovery and capacity testing. The application code is on `main`; signed public
+records are on the separate `academy-data` branch. A batch publisher handles
+open submissions and retries interrupted work without losing queued issues.
+The directory reads 16 static shards—not 10,000 per-user API calls.
+
+This targets zero hosting subscription cost on a public GitHub repository using
+standard runners, **within GitHub's policies and quotas**. It is not a promise
+of unlimited traffic, zero future cost or no maintenance. GitHub's Actions
+permitted-use restrictions still apply to this experimental publication workflow;
+seek GitHub confirmation before operating it as a large production credential
+service. Review dependencies, rule changes, runner usage and availability.
 
 ## Languages
 
@@ -144,8 +171,7 @@ Machine-generated rule explanations should receive native-speaker committee
 review before being treated as publication-ready wording.
 
 Every push to `main` is also type-checked, statically exported, and deployed
-to GitHub Pages by `.github/workflows/deploy-pages.yml`. The normal local and
-Sites/Cloudflare builds remain unchanged.
+to GitHub Pages by `.github/workflows/deploy-pages.yml`. Local development uses the same static application.
 
 ## Play simulated games
 

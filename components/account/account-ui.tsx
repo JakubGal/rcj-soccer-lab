@@ -4,10 +4,8 @@ import {
   CircleCheckBig,
   CircleDashed,
   CircleX,
-  ExternalLink,
   LogIn,
   RotateCcw,
-  ShieldCheck,
 } from 'lucide-react';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
@@ -62,7 +60,13 @@ export function CertificationStatusBadge({
   if (status === 'qualified')
     return (
       <Badge className="bg-emerald-500/15 text-emerald-300">
-        <CircleCheckBig /> {t('Certified')}
+        <CircleCheckBig /> {t('Training certified')}
+      </Badge>
+    );
+  if (status === 'ready')
+    return (
+      <Badge className="bg-sky-500/15 text-sky-300">
+        <CircleDashed /> {t('Ready for verification')}
       </Badge>
     );
   if (status === 'failed')
@@ -86,35 +90,27 @@ export function CertificationStatusBadge({
   return <Badge variant="outline">{t('Not started')}</Badge>;
 }
 
-export function AccountAccessCard({ page = 'profile' }: { page?: string }) {
+export function AccountAccessCard(_props: { page?: string }) {
   const { t } = useLocalization();
-  const { status, signIn, openSecureApp } = useAccount();
-  const unavailable = status === 'unavailable';
+  const { signIn } = useAccount();
   return (
     <Alert className="border-sky-400/30 bg-sky-400/5 p-4">
-      {unavailable ? <ShieldCheck /> : <LogIn />}
-      <AlertTitle>
-        {t(
-          unavailable
-            ? 'Open the secure training site'
-            : 'Sign in only when you want to save progress',
-        )}
-      </AlertTitle>
+      <LogIn />
+      <AlertTitle>{t('An optional profile, on this device')}</AlertTitle>
       <AlertDescription className="space-y-3">
         <p>
           {t(
-            unavailable
-              ? 'Practice remains available here. Accounts, certification attempts and the public referee directory are stored on the secure hosted version.'
-              : 'Rules, Play and Referee practice always work as a guest. Sign in or create an account to keep your results and begin certification.',
+            'Rules, Play and Referee practice always work as a guest. A local profile saves progress in this browser without a password. GitHub is needed only when you submit your identity or completed certification for verification.',
           )}
         </p>
-        <Button
-          size="sm"
-          onClick={() => (unavailable ? openSecureApp(page) : signIn())}
-        >
-          {unavailable ? <ExternalLink /> : <LogIn />}
-          {t(unavailable ? 'Open secure site' : 'Sign in or create account')}
+        <Button size="sm" onClick={signIn}>
+          <LogIn /> {t('Create local profile')}
         </Button>
+        <p className="text-xs">
+          {t(
+            'Progress does not sync between devices. Export a backup before clearing browser data or moving to another device.',
+          )}
+        </p>
       </AlertDescription>
     </Alert>
   );

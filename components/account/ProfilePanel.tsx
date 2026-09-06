@@ -6,11 +6,13 @@ import {
   BookCheck,
   CalendarDays,
   Check,
+  Download,
   Gamepad2,
   Globe2,
   Pencil,
   Save,
   ShieldCheck,
+  Upload,
   X,
 } from 'lucide-react';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
@@ -45,6 +47,7 @@ import {
 } from '@/components/ui/table';
 import { useLocalization } from '@/components/i18n/LocalizationProvider';
 import { useAccount } from './AccountProvider';
+import { GitHubSubmissionPanel } from './GitHubSubmissionPanel';
 import {
   AccountAccessCard,
   CertificationStatusBadge,
@@ -93,7 +96,15 @@ function MetricCard({
 export function ProfilePanel() {
   const { t } = useLocalization();
   const format = useAccountFormatting();
-  const { status, account, error, busyAction, updateProfile } = useAccount();
+  const {
+    status,
+    account,
+    error,
+    busyAction,
+    updateProfile,
+    exportProgress,
+    importProgress,
+  } = useAccount();
   const profile = account?.profile ?? null;
   const [editing, setEditing] = useState(false);
   const [displayName, setDisplayName] = useState('');
@@ -101,6 +112,27 @@ export function ProfilePanel() {
   const [publicProfile, setPublicProfile] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
+  const [backupError, setBackupError] = useState<string | null>(null);
+  const [importing, setImporting] = useState(false);
+  const [imported, setImported] = useState(false);
+
+  const restoreBackup = async (file: File) => {
+    setImporting(true);
+    setImported(false);
+    setBackupError(null);
+    try {
+      await importProgress(file);
+      setImported(true);
+    } catch (caught) {
+      setBackupError(
+        caught instanceof Error
+          ? caught.message
+          : 'The progress backup could not be imported.',
+      );
+    } finally {
+      setImporting(false);
+    }
+  };
 
   const submit = async (event: SyntheticEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -175,7 +207,7 @@ export function ProfilePanel() {
                     {profile.refereeNumber}
                   </span>
                 ) : (
-                  t('Referee number will be assigned by the server')
+                  t('Connect GitHub to receive your referee number')
                 )}
                 <CertificationStatusBadge status={certificationStatus} />
               </CardDescription>
@@ -251,6 +283,11 @@ export function ProfilePanel() {
                     )}
                   </FieldLabel>
                 </Field>
+                <p className="text-xs leading-5 text-slate-400">
+                  {t(
+                    'This preference controls the directory listing for your next submission. To update an existing registry entry, submit an updated GitHub profile below. The GitHub issue and its verification result remain public even if directory listing is disabled.',
+                  )}
+                </p>
                 <Button
                   className="w-fit"
                   type="submit"
@@ -273,7 +310,8 @@ export function ProfilePanel() {
               </div>
               <div>
                 <dt className="flex items-center gap-1.5 text-slate-400">
-                  <CalendarDays className="size-4" /> {t('Member since')}
+                  <CalendarDays className="size-4" />{' '}
+                  {t('Local profile created')}
                 </dt>
                 <dd className="mt-1 text-slate-100" data-i18n-skip>
                   {format.date(profile.createdAt)}
@@ -291,6 +329,56 @@ export function ProfilePanel() {
           )}
         </CardContent>
       </Card>
+
+      <Card className="border-white/10 bg-[#101c28]">
+        <CardHeader>
+          <CardTitle>{t('Your progress stays on this device')}</CardTitle>
+          <CardDescription className="leading-6">
+            {t(
+              'Progress is saved in this browser, not synced to an account online. Download a backup to move it to another device or protect it before clearing browser data. A backup may contain your private profile and training history; keep it somewhere safe.',
+            )}
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="grid gap-3">
+          <div className="flex flex-wrap items-center gap-3">
+            <Button variant="outline" onClick={exportProgress}>
+              <Download /> {t('Export progress backup')}
+            </Button>
+            <label className="flex flex-wrap items-center gap-2 text-sm text-slate-300">
+              <Upload className="size-4" />{' '}
+              {t(importing ? 'Importing backup…' : 'Import progress backup')}
+              <input
+                className="max-w-full text-xs file:mr-2 file:rounded-md file:border file:border-white/15 file:bg-slate-800 file:px-2 file:py-1.5 file:text-slate-200"
+                type="file"
+                accept=".json,application/json"
+                disabled={importing}
+                onChange={(event) => {
+                  const file = event.target.files?.[0];
+                  event.target.value = '';
+                  if (file) void restoreBackup(file);
+                }}
+              />
+            </label>
+          </div>
+          <p className="text-xs text-slate-400">
+            {t(
+              'Importing a backup replaces this browser’s current local profile and progress. Export your current progress first. Imported scores cannot issue a verified certificate.',
+            )}
+          </p>
+          {imported && (
+            <output className="text-sm text-emerald-300">
+              {t('Progress backup imported')}
+            </output>
+          )}
+          {backupError && (
+            <p className="text-sm text-rose-300" role="alert">
+              {t(backupError)}
+            </p>
+          )}
+        </CardContent>
+      </Card>
+
+      <GitHubSubmissionPanel kind="connect" />
 
       <section aria-labelledby="practice-summary-heading">
         <div className="mb-3 flex items-center justify-between gap-3">
@@ -344,10 +432,12 @@ export function ProfilePanel() {
             label={t('Certification')}
             value={t(
               certificationStatus === 'qualified'
-                ? 'Certified'
-                : certificationStatus === 'in-progress'
-                  ? 'In progress'
-                  : 'Not certified',
+                ? 'Training certified'
+                : certificationStatus === 'ready'
+                  ? 'Ready for verification'
+                  : certificationStatus === 'in-progress'
+                    ? 'In progress'
+                    : 'Not certified',
             )}
             detail={
               account.certification
@@ -364,7 +454,7 @@ export function ProfilePanel() {
             <CardTitle>{t('Recent referee games')}</CardTitle>
             <CardDescription>
               {t(
-                'Practice and completed simulator sessions saved to your account.',
+                'Practice and completed simulator sessions saved in this browser.',
               )}
             </CardDescription>
           </CardHeader>

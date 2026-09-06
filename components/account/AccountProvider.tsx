@@ -9,30 +9,41 @@ import {
   useState,
   type ReactNode,
 } from 'react';
-import {
-  AccountApiError,
-  finishCertificationGame,
-  getAccount,
-  getCertificationState,
-  patchAccount,
-  restartCertification,
-  startCertification,
-  startCertificationGame,
-  submitRuleLearningEvent,
-  type AccountLoadStatus,
-  type AccountProfilePatch,
-  type AccountSnapshot,
-  type CertificationGameLaunch,
-  type FinishGamePayload,
-  type StartGamePayload,
-} from '@/lib/account';
+import type {
+  AccountLoadStatus,
+  AccountProfilePatch,
+  AccountSnapshot,
+  CertificationGameLaunch,
+  FinishGamePayload,
+  StartGamePayload,
+} from '@/lib/account/types';
 import type {
   RefereePracticeTrackingBridge,
   RuleLearningBridge,
   RuleLearningEvent,
 } from '@/lib/certification/client-types';
-
-const DEFAULT_SECURE_APP_URL = 'https://rcj-soccer-lab.bukajlag.chatgpt.site/';
+import {
+  accountSnapshot,
+  acceptGitHubReceipt,
+  assertCanPrepareGitHubRequest,
+  changeProgress,
+  enableProfile,
+  finishLocalGame,
+  loadProgress,
+  newRound,
+  recordLocalRule,
+  startLocalGame,
+  trustedReceipt,
+  updateLocalProfile,
+  validateBackup,
+  type LocalProgress,
+} from '@/lib/account/local';
+import {
+  prepareSubmission,
+  type GitHubReceipt,
+  type PreparedSubmission,
+} from '@/lib/github/protocol';
+import { readReceipt } from '@/lib/github/registry';
 
 export type AccountContextValue = {
   status: AccountLoadStatus;
@@ -40,8 +51,12 @@ export type AccountContextValue = {
   error: string | null;
   busyAction: string | null;
   apiBaseUrl: string;
-  secureAppUrl: string;
   isStaticHost: boolean;
+  github: {
+    request: PreparedSubmission | null;
+    receipt: GitHubReceipt | null;
+    connected: boolean;
+  };
   refresh: () => Promise<AccountSnapshot | null>;
   updateProfile: (patch: AccountProfilePatch) => Promise<void>;
   beginCertification: () => Promise<void>;
@@ -59,233 +74,141 @@ export type AccountContextValue = {
   practiceTrackingBridge: RefereePracticeTrackingBridge;
   signIn: () => void;
   signOut: () => void;
-  openSecureApp: (page?: string) => void;
+  prepareGitHubSubmission: (kind: 'connect' | 'certify') => Promise<void>;
+  checkGitHubSubmission: () => Promise<void>;
+  exportProgress: () => void;
+  importProgress: (file: File) => Promise<void>;
 };
-
 const AccountContext = createContext<AccountContextValue | null>(null);
 
-function currentReturnTo(page = 'profile') {
-  const url = new URL(window.location.href);
-  url.searchParams.set('mode', 'academy');
-  url.searchParams.set('academy', page);
-  return `${url.pathname}${url.search}${url.hash}`;
-}
-
-function isGitHubPagesHost() {
-  return (
-    typeof window !== 'undefined' &&
-    window.location.hostname.toLowerCase().endsWith('.github.io')
-  );
-}
-
-export function AccountProvider({
-  children,
-  apiBaseUrl = '',
-  secureAppUrl = DEFAULT_SECURE_APP_URL,
-  onSignIn,
-  onSignOut,
-}: {
-  children: ReactNode;
-  apiBaseUrl?: string;
-  secureAppUrl?: string;
-  onSignIn?: () => void;
-  onSignOut?: () => void;
-}) {
+export function AccountProvider({ children }: { children: ReactNode }) {
   const [status, setStatus] = useState<AccountLoadStatus>('loading');
   const [account, setAccount] = useState<AccountSnapshot | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busyAction, setBusyAction] = useState<string | null>(null);
-  const [isStaticHost, setIsStaticHost] = useState(false);
-  const [queueRuleEvent] = useState(() => {
-    let queue = Promise.resolve();
-    return <T,>(operation: () => Promise<T>) => {
-      const pending = queue.then(operation);
-      queue = pending.then(
-        () => undefined,
-        () => undefined,
-      );
-      return pending;
-    };
+  const [github, setGithub] = useState<AccountContextValue['github']>({
+    request: null,
+    receipt: null,
+    connected: false,
   });
-  const load = useCallback(
-    async (showLoading = false, signal?: AbortSignal) => {
-      const staticHost = isGitHubPagesHost();
-      setIsStaticHost(staticHost);
-      if (staticHost && !apiBaseUrl) {
-        setAccount(null);
-        setStatus('unavailable');
-        setError(null);
-        return null;
-      }
-      if (showLoading) setStatus('loading');
-      try {
-        const next = await getAccount(apiBaseUrl, signal);
-        if (next.authenticated) {
-          try {
-            next.certification =
-              (await getCertificationState(apiBaseUrl, signal)) ??
-              next.certification;
-          } catch (certificationError) {
-            if (
-              certificationError instanceof DOMException &&
-              certificationError.name === 'AbortError'
-            )
-              return null;
-            // Older deployments may not expose the state endpoint yet.
-          }
-        }
-        setAccount(next);
-        setStatus(next.authenticated ? 'authenticated' : 'guest');
-        setError(null);
-        return next.authenticated ? next : null;
-      } catch (caught) {
-        if (caught instanceof DOMException && caught.name === 'AbortError')
-          return null;
-        if (caught instanceof AccountApiError && caught.status === 401) {
-          setAccount(null);
-          setStatus('guest');
-          setError(null);
-          return null;
-        }
-        setAccount(null);
-        setStatus('unavailable');
-        setError(
-          caught instanceof Error
-            ? caught.message
-            : 'Account services are temporarily unavailable.',
-        );
-        return null;
-      }
-    },
-    [apiBaseUrl],
-  );
-
-  useEffect(() => {
-    const controller = new AbortController();
-    const frame = requestAnimationFrame(() => {
-      void load(true, controller.signal);
+  const applyData = useCallback(async (data: LocalProgress) => {
+    const snapshot = await accountSnapshot(data);
+    const receipt = await trustedReceipt(data.receipt);
+    const connection = await trustedReceipt(data.connection);
+    setAccount(snapshot);
+    setStatus(snapshot.authenticated ? 'authenticated' : 'guest');
+    setGithub({
+      request: data.request,
+      receipt,
+      connected: connection?.status === 'accepted',
     });
+    return snapshot;
+  }, []);
+  const refresh = useCallback(async () => {
+    try {
+      setError(null);
+      return await applyData(await loadProgress());
+    } catch (caught) {
+      setStatus('unavailable');
+      setError(
+        caught instanceof Error
+          ? caught.message
+          : 'Progress could not be loaded.',
+      );
+      return null;
+    }
+  }, [applyData]);
+  useEffect(() => {
+    const frame = requestAnimationFrame(() => {
+      void refresh();
+    });
+    const channel =
+      typeof BroadcastChannel === 'undefined'
+        ? null
+        : new BroadcastChannel('rcj-academy');
+    if (channel)
+      channel.onmessage = () => {
+        void refresh();
+      };
     return () => {
       cancelAnimationFrame(frame);
-      controller.abort();
+      channel?.close();
     };
-  }, [load]);
-
-  const refresh = useCallback(() => load(false), [load]);
-
-  const perform = useCallback(
-    async <T,>(name: string, operation: () => Promise<T>) => {
+  }, [refresh]);
+  const mutate = useCallback(
+    async <T,>(
+      name: string,
+      operation: (data: LocalProgress) => T | Promise<T>,
+    ) => {
       setBusyAction(name);
       setError(null);
       try {
-        const result = await operation();
-        await load(false);
+        const { data, result } = await changeProgress(operation);
+        await applyData(data);
+        if (typeof BroadcastChannel !== 'undefined') {
+          const channel = new BroadcastChannel('rcj-academy');
+          channel.postMessage('updated');
+          channel.close();
+        }
         return result;
       } catch (caught) {
-        const message =
+        setError(
           caught instanceof Error
             ? caught.message
-            : 'The account action could not be completed.';
-        setError(message);
+            : 'The profile action could not be completed.',
+        );
         throw caught;
       } finally {
         setBusyAction(null);
       }
     },
-    [load],
+    [applyData],
   );
-
+  const signIn = useCallback(() => {
+    void mutate('profile', enableProfile).catch(() => {});
+  }, [mutate]);
+  const signOut = useCallback(() => {
+    void mutate('profile', (data) => {
+      data.enabled = false;
+    }).catch(() => {});
+  }, [mutate]);
   const updateProfile = useCallback(
     async (patch: AccountProfilePatch) => {
-      await perform('profile', () => patchAccount(patch, apiBaseUrl));
+      await mutate('profile', (data) => updateLocalProfile(data, patch));
     },
-    [apiBaseUrl, perform],
+    [mutate],
   );
   const beginCertification = useCallback(async () => {
-    await perform('start-certification', () => startCertification(apiBaseUrl));
-  }, [apiBaseUrl, perform]);
+    await mutate('start-certification', (data) => {
+      if (data.round)
+        throw new Error('A certification round is already active.');
+      return newRound(data);
+    });
+  }, [mutate]);
   const resetCertification = useCallback(async () => {
-    await perform('restart-certification', () =>
-      restartCertification(apiBaseUrl),
-    );
-  }, [apiBaseUrl, perform]);
+    await mutate('restart-certification', newRound);
+  }, [mutate]);
   const beginCertificationGame = useCallback(
     (payload: StartGamePayload) =>
-      perform('start-game', () => startCertificationGame(payload, apiBaseUrl)),
-    [apiBaseUrl, perform],
+      mutate('start-game', (data) => startLocalGame(data, payload)),
+    [mutate],
   );
   const completeCertificationGame = useCallback(
-    async (attemptId: string, payload: FinishGamePayload) => {
-      await perform('finish-game', () =>
-        finishCertificationGame(attemptId, payload, apiBaseUrl),
-      );
+    async (id: string, payload: FinishGamePayload) => {
+      await mutate('finish-game', (data) => finishLocalGame(data, id, payload));
     },
-    [apiBaseUrl, perform],
+    [mutate],
   );
   const recordRuleLearning = useCallback(
     async (event: RuleLearningEvent) => {
       if (status !== 'authenticated') return false;
-      if (event.type === 'assistance') return true;
-      return queueRuleEvent(async () => {
-        await perform(
-          event.mode === 'certification' ? 'rule-answer' : 'practice-rule',
-          () => submitRuleLearningEvent(event, apiBaseUrl),
-        );
-        return true;
-      });
+      await mutate(
+        event.mode === 'certification' ? 'rule-answer' : 'practice-rule',
+        (data) => recordLocalRule(data, event),
+      );
+      return true;
     },
-    [apiBaseUrl, perform, queueRuleEvent, status],
-  );
-  const [practiceAttemptIds] = useState(
-    () => new Map<string, Promise<CertificationGameLaunch | null>>(),
-  );
-  const practiceTrackingBridge = useMemo<RefereePracticeTrackingBridge>(
-    () => ({
-      onStartSession: async (started) => {
-        if (status !== 'authenticated') return;
-        const launch = perform('start-practice-game', () =>
-          startCertificationGame(
-            {
-              mode: started.mode,
-              purpose: 'practice',
-              clientSessionId: started.clientSessionId,
-              seed: started.seed,
-              durationSeconds: started.durationSeconds,
-              topics: started.topics,
-            },
-            apiBaseUrl,
-          ),
-        ).catch(() => null);
-        practiceAttemptIds.set(started.clientSessionId, launch);
-        await launch;
-      },
-      onFinishSession: async (finished) => {
-        if (status !== 'authenticated') return;
-        const launch = await practiceAttemptIds.get(finished.clientSessionId);
-        practiceAttemptIds.delete(finished.clientSessionId);
-        if (!launch?.attemptId) return;
-        try {
-          await perform('finish-practice-game', () =>
-            finishCertificationGame(
-              launch.attemptId,
-              {
-                elapsedSeconds: finished.simulatedSeconds,
-                correct: finished.report.correct,
-                wrong: finished.report.wrong,
-                missed: finished.report.missed,
-                assisted: finished.report.assisted,
-                accuracy: finished.report.accuracy,
-                purpose: 'practice',
-              },
-              apiBaseUrl,
-            ),
-          );
-        } catch {
-          // Progress syncing must never interrupt an otherwise valid guest-style match.
-        }
-      },
-    }),
-    [apiBaseUrl, perform, practiceAttemptIds, status],
+    [mutate, status],
   );
   const practiceRuleLearningBridge = useMemo<RuleLearningBridge>(
     () => ({
@@ -300,108 +223,159 @@ export function AccountProvider({
   const certificationRuleLearningBridge = useMemo<RuleLearningBridge>(
     () => ({
       mode: 'certification',
-      certificationRunId: account?.certification?.id ?? null,
+      certificationRunId:
+        status === 'authenticated'
+          ? (account?.certification?.id ?? null)
+          : null,
       completedSituationIds:
         account?.certification?.rules.answeredQuestionIds ?? [],
       onEvent: async (event) => {
         await recordRuleLearning(event);
       },
     }),
-    [
-      account?.certification?.id,
-      account?.certification?.rules.answeredQuestionIds,
-      recordRuleLearning,
-    ],
+    [status, account?.certification, recordRuleLearning],
   );
-
-  const openSecureApp = useCallback(
-    (page = 'profile') => {
-      const destination = new URL(secureAppUrl);
-      destination.searchParams.set('mode', 'academy');
-      destination.searchParams.set('academy', page);
-      if (typeof window !== 'undefined') {
-        const locale = new URL(window.location.href).searchParams.get('lang');
-        if (locale) destination.searchParams.set('lang', locale);
-        window.location.assign(destination);
-      }
-    },
-    [secureAppUrl],
-  );
-
-  const signIn = useCallback(() => {
-    if (onSignIn) return onSignIn();
-    if (isStaticHost) return openSecureApp('profile');
-    const target = account?.links.signIn ?? '/signin-with-chatgpt';
-    const url = new URL(target, window.location.origin);
-    if (!url.searchParams.has('return_to'))
-      url.searchParams.set('return_to', currentReturnTo('profile'));
-    window.location.assign(url);
-  }, [account?.links.signIn, isStaticHost, onSignIn, openSecureApp]);
-
-  const signOut = useCallback(() => {
-    if (onSignOut) return onSignOut();
-    const target = account?.links.signOut ?? '/signout-with-chatgpt';
-    const url = new URL(target, window.location.origin);
-    if (!url.searchParams.has('return_to'))
-      url.searchParams.set('return_to', '/');
-    window.location.assign(url);
-  }, [account?.links.signOut, onSignOut]);
-
-  const value = useMemo<AccountContextValue>(
+  const practiceTrackingBridge = useMemo<RefereePracticeTrackingBridge>(
     () => ({
-      status,
-      account,
-      error,
-      busyAction,
-      apiBaseUrl,
-      secureAppUrl,
-      isStaticHost,
-      refresh,
-      updateProfile,
-      beginCertification,
-      resetCertification,
-      beginCertificationGame,
-      completeCertificationGame,
-      recordRuleLearning,
-      practiceRuleLearningBridge,
-      certificationRuleLearningBridge,
-      practiceTrackingBridge,
-      signIn,
-      signOut,
-      openSecureApp,
+      onFinishSession: async (game) => {
+        if (status !== 'authenticated') return;
+        try {
+          await mutate('practice-game', (data) => {
+            if (
+              data.practiceGames.some(
+                (entry) => entry.id === game.clientSessionId,
+              )
+            )
+              return;
+            data.practiceGames.push({
+              id: game.clientSessionId,
+              mode: game.mode,
+              durationSeconds: game.simulatedSeconds,
+              accuracy: game.report.accuracy,
+              completedAt: new Date().toISOString(),
+            });
+          });
+        } catch {
+          /* Saving practice must not interrupt gameplay. The profile shows the storage error. */
+        }
+      },
     }),
-    [
-      status,
-      account,
-      error,
-      busyAction,
-      apiBaseUrl,
-      secureAppUrl,
-      isStaticHost,
-      refresh,
-      updateProfile,
-      beginCertification,
-      resetCertification,
-      beginCertificationGame,
-      completeCertificationGame,
-      recordRuleLearning,
-      practiceRuleLearningBridge,
-      certificationRuleLearningBridge,
-      practiceTrackingBridge,
-      signIn,
-      signOut,
-      openSecureApp,
-    ],
+    [status, mutate],
   );
-
+  const prepareGitHubSubmission = useCallback(
+    async (kind: 'connect' | 'certify') => {
+      await mutate('github-submission', async (data) => {
+        if (!data.enabled || !data.profile)
+          throw new Error('Create a local profile first.');
+        await assertCanPrepareGitHubRequest(data, kind);
+        if (kind === 'certify') {
+          const state = await accountSnapshot(data);
+          if (state.certification?.status !== 'ready')
+            throw new Error(
+              'Complete all certification requirements before submitting.',
+            );
+        }
+        const requestId = [...crypto.getRandomValues(new Uint8Array(16))]
+          .map((byte) => byte.toString(16).padStart(2, '0'))
+          .join('');
+        data.request = await prepareSubmission({
+          schema: 1,
+          requestId,
+          kind,
+          profile: {
+            displayName: data.profile.displayName,
+            country: data.profile.country,
+            publicProfile: data.profile.publicProfile,
+          },
+          ...(kind === 'certify' && data.round ? { round: data.round } : {}),
+        });
+        data.receipt = null;
+      });
+    },
+    [mutate],
+  );
+  const checkGitHubSubmission = useCallback(async () => {
+    const data = await loadProgress();
+    if (!data.request)
+      throw new Error('Prepare and submit a GitHub issue first.');
+    const request = data.request;
+    const result = await readReceipt(request.requestId);
+    if (!result)
+      throw new Error(
+        'No signed result yet. Submit the GitHub issue, then check again in a few minutes.',
+      );
+    await mutate('github-check', async (current) => {
+      if (current.request?.requestId !== request.requestId)
+        throw new Error(
+          'The pending submission has changed. Check the new request.',
+        );
+      await acceptGitHubReceipt(current, result.envelope);
+    });
+  }, [mutate]);
+  const exportProgress = useCallback(() => {
+    void loadProgress()
+      .then((data) => {
+        const blob = new Blob([JSON.stringify(data)], {
+          type: 'application/json',
+        });
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = 'rcj-soccer-progress.json';
+        link.click();
+        setTimeout(() => URL.revokeObjectURL(url), 10000);
+      })
+      .catch((caught) =>
+        setError(
+          caught instanceof Error
+            ? caught.message
+            : 'Progress could not be exported.',
+        ),
+      );
+  }, []);
+  const importProgress = useCallback(
+    async (file: File) => {
+      if (file.size > 16 * 1024 * 1024)
+        throw new Error('Progress backups must be smaller than 16 MB.');
+      const incoming = await validateBackup(JSON.parse(await file.text()));
+      await mutate('import-progress', (data) => {
+        Object.assign(data, incoming);
+      });
+    },
+    [mutate],
+  );
+  const value: AccountContextValue = {
+    status,
+    account,
+    error,
+    busyAction,
+    apiBaseUrl: '',
+    isStaticHost: true,
+    github,
+    refresh,
+    updateProfile,
+    beginCertification,
+    resetCertification,
+    beginCertificationGame,
+    completeCertificationGame,
+    recordRuleLearning,
+    practiceRuleLearningBridge,
+    certificationRuleLearningBridge,
+    practiceTrackingBridge,
+    signIn,
+    signOut,
+    prepareGitHubSubmission,
+    checkGitHubSubmission,
+    exportProgress,
+    importProgress,
+  };
   return (
     <AccountContext.Provider value={value}>{children}</AccountContext.Provider>
   );
 }
-
 export function useAccount() {
-  const value = useContext(AccountContext);
-  if (!value)
-    throw new Error('useAccount must be used inside an AccountProvider.');
-  return value;
+  const context = useContext(AccountContext);
+  if (!context)
+    throw new Error('useAccount must be used inside AccountProvider.');
+  return context;
 }
