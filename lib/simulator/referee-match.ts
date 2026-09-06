@@ -1,6 +1,10 @@
 import { SoccerMatch, MATCH_STEP, MATCH_ROBOTS, type MatchTeam } from './match';
 import { NEUTRAL_SPOTS } from '../rulebook/animations';
-import { RCJ_FIELD_DERIVED as FIELD, RCJ_SIMULATOR_GUIDES } from './field-spec';
+import {
+  RCJ_FIELD_DERIVED as FIELD,
+  RCJ_FIELD_SPEC_2026 as SPEC,
+  RCJ_SIMULATOR_GUIDES,
+} from './field-spec';
 import { clonePoses, MANUAL_ROBOT_BALL_CENTER_DISTANCE } from './manual-layout';
 import type { Pose } from './types';
 import type { DamageCue } from './damage-effects';
@@ -227,6 +231,9 @@ export class RefereeMatch {
   private lastSampledMatchTime = Number.NEGATIVE_INFINITY;
   private readonly recordMatchReplay: boolean;
   private invalidGoalPassage: { robot: string; team: MatchTeam } | null = null;
+  // One incident per goal-pocket passage, even if another correction resets
+  // the physics latch. This is spatial, not a time-based scoring cooldown.
+  private openGoalTeams = new Set<MatchTeam>();
   private multipleDefenseOffenses: Record<MatchTeam, number> = {
     blue: 0,
     yellow: 0,
@@ -1547,6 +1554,26 @@ export class RefereeMatch {
   }
 
   private detectLiveIncident() {
+    // Once the ball has actually left the goal pocket, an earlier goal
+    // passage is over; a later pendingEvent for that team is a fresh one.
+    if (this.mode === 'continuous') {
+      const ball = this.match.state.actors.ball;
+      for (const team of this.openGoalTeams) {
+        const end = this.match.blueAttackDirection * (team === 'blue' ? 1 : -1);
+        if (
+          ball.z * end < FIELD.goalMouthZ - 0.03 ||
+          ball.z * end >
+            FIELD.goalBackInnerFaceZ +
+              SPEC.goal.constructionPanelThickness +
+              SPEC.ball.diameter / 2 ||
+          Math.abs(ball.x) >
+            SPEC.goal.innerWidth / 2 +
+              SPEC.goal.constructionPanelThickness +
+              SPEC.ball.diameter / 2
+        )
+          this.openGoalTeams.delete(team);
+      }
+    }
     if (this.mode === 'continuous' && this.match.stationarySeconds >= 1) {
       for (const item of this.observations.values())
         if (
@@ -1569,7 +1596,16 @@ export class RefereeMatch {
         ),
       );
     }
-    const pending = this.match.state.pendingEvent;
+    let pending = this.match.state.pendingEvent;
+    if (
+      this.mode === 'continuous' &&
+      pending?.kind === 'goal' &&
+      this.openGoalTeams.has(pending.team)
+    ) {
+      // Drop only the duplicate goal, not this tick's other infringements.
+      this.match.state.pendingEvent = null;
+      pending = null;
+    }
     const boundaries = MATCH_ROBOTS.filter((r) => {
       const p = this.match.state.actors[r.id];
       return (
@@ -1715,7 +1751,10 @@ export class RefereeMatch {
             'The live ball has remained within a small area for several seconds. Assess the lack of progress and give a count.',
           ),
         );
-      if (this.mode === 'continuous') this.match.state.pendingEvent = null;
+      if (this.mode === 'continuous') {
+        if (pending.kind === 'goal') this.openGoalTeams.add(pending.team);
+        this.match.state.pendingEvent = null;
+      }
       this.syncMotion();
       return this.motionHeld;
     }

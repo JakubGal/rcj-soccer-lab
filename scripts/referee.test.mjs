@@ -478,6 +478,166 @@ test('another robot touch clears an out-carrier goal passage', () => {
   assert.deepEqual(session.expected(), [{ action: 'goal', target: 'blue' }]);
 });
 
+test('a ball rattling in the goal produces exactly one goal incident', () => {
+  const session = continuous({ topics: ['scoring'] });
+  session.match.place({
+    ball: { x: 0, z: FIELD.goalMouthZ - 0.001, yaw: 0 },
+  });
+  session.match.state.ballVelocity = { x: 0, z: 0.8 };
+  session.match.state.ballOwner = null;
+  for (
+    let tick = 0;
+    tick < 240 && session.active?.definition.id !== 'live-goal';
+    tick += 1
+  )
+    session.step();
+  assert.equal(session.active.definition.id, 'live-goal');
+
+  // The ball keeps bouncing around inside the shallow goal pocket without
+  // ever actually leaving it; each re-placement mimics an unrelated referee
+  // correction resetting the match engine's own single-shot goal latch.
+  for (let tick = 0; tick < Math.ceil(3 / MATCH_STEP); tick++) {
+    if (tick % 20 === 0) {
+      session.match.place({
+        ball: { x: 0, z: FIELD.goalMouthZ + 0.02, yaw: 0 },
+      });
+      session.match.state.ballVelocity = { x: 0, z: 0.4 };
+    }
+    session.step();
+  }
+
+  const numbers = new Set(
+    [session.active, ...session.pending, ...session.observations.values()]
+      .filter((item) => item && /goal/.test(item.definition.id))
+      .map((item) => item.number),
+  );
+  assert.equal(numbers.size, 1);
+});
+
+test('a genuinely new passage after the ball leaves the pocket is a separate goal incident', () => {
+  const session = continuous({ topics: ['scoring'] });
+  session.match.place({
+    ball: { x: 0, z: FIELD.goalMouthZ - 0.001, yaw: 0 },
+  });
+  session.match.state.ballVelocity = { x: 0, z: 0.8 };
+  session.match.state.ballOwner = null;
+  for (
+    let tick = 0;
+    tick < 240 && session.active?.definition.id !== 'live-goal';
+    tick += 1
+  )
+    session.step();
+  assert.equal(session.active.definition.id, 'live-goal');
+  const firstGoal = session.active.number;
+
+  // The ball genuinely returns to open play and leaves the pocket, then
+  // scores again: this is a fresh passage, not the same one bouncing back.
+  session.match.place({ ball: { x: 0, z: 0, yaw: 0 } });
+  session.match.state.ballVelocity = { x: 0, z: 0 };
+  advance(session, 1);
+  session.match.place({
+    ball: { x: 0, z: FIELD.goalMouthZ - 0.001, yaw: 0 },
+  });
+  session.match.state.ballVelocity = { x: 0, z: 0.8 };
+  session.match.state.ballOwner = null;
+
+  let secondGoal = null;
+  for (let tick = 0; tick < 240 && !secondGoal; tick += 1) {
+    session.step();
+    secondGoal = [session.active, ...session.pending].find(
+      (item) =>
+        item?.definition.id === 'live-goal' && item.number !== firstGoal,
+    );
+  }
+  assert.ok(secondGoal, 'expected a second, separate goal incident');
+});
+
+test('a goal at the other end is not swallowed by an open cooldown for the other team', () => {
+  const session = continuous({ topics: ['scoring'] });
+  session.match.place({
+    ball: { x: 0, z: FIELD.goalMouthZ - 0.001, yaw: 0 },
+  });
+  session.match.state.ballVelocity = { x: 0, z: 0.8 };
+  session.match.state.ballOwner = null;
+  for (
+    let tick = 0;
+    tick < 240 && session.active?.definition.id !== 'live-goal';
+    tick += 1
+  )
+    session.step();
+  assert.equal(session.active.definition.id, 'live-goal');
+  assert.deepEqual(session.expected(), [{ action: 'goal', target: 'blue' }]);
+  const blueGoal = session.active.number;
+
+  // Move the same ball to the other end without a sampled midfield frame.
+  // Its new passage must still raise an incident for the other scoring team.
+  session.match.place({
+    ball: { x: 0, z: -(FIELD.goalMouthZ - 0.001), yaw: 0 },
+  });
+  session.match.state.ballVelocity = { x: 0, z: -0.8 };
+  session.match.state.ballOwner = null;
+
+  let yellowGoal = null;
+  for (let tick = 0; tick < 240 && !yellowGoal; tick += 1) {
+    session.step();
+    yellowGoal = [session.active, ...session.pending].find(
+      (item) => item?.definition.id === 'live-goal' && item.number !== blueGoal,
+    );
+  }
+  assert.ok(yellowGoal, 'expected a separate goal incident for yellow');
+  assert.deepEqual(yellowGoal.definition.steps[0], [
+    { action: 'goal', target: 'yellow' },
+  ]);
+});
+
+test('suppressing a duplicate goal does not suppress a new wall infringement on the same tick', () => {
+  const session = continuous({ topics: ['scoring', 'out'] });
+  session.match.place({
+    ball: { x: 0, z: FIELD.goalBackContactBallCenterZ, yaw: 0 },
+  });
+  session.match.state.pendingEvent = { kind: 'goal', team: 'blue' };
+  session.detectLiveIncident();
+  const first = session.active.number;
+  session.match.state.actors['yellow-1'] = wallPose(session.robotVisual, 0.2);
+  session.match.state.pendingEvent = { kind: 'goal', team: 'blue' };
+  session.detectLiveIncident();
+  const incidents = [session.active, ...session.pending];
+  assert.equal(
+    incidents.filter((item) => item?.definition.id === 'live-goal').length,
+    1,
+  );
+  assert.ok(incidents.some((item) => item?.number === first));
+  assert.ok(incidents.some((item) => item?.definition.id === 'live-wall'));
+});
+
+test('goal-pocket dedup follows swapped ends and a ball leaving sideways', () => {
+  for (const direction of [-1, 1])
+    for (const team of ['blue', 'yellow']) {
+      const session = continuous({ topics: ['scoring'] });
+      session.match.blueAttackDirection = direction;
+      const end = direction * (team === 'blue' ? 1 : -1);
+      const ball = { x: 0, z: end * FIELD.goalBackContactBallCenterZ, yaw: 0 };
+      session.match.place({ ball });
+      session.match.state.pendingEvent = { kind: 'goal', team };
+      session.detectLiveIncident();
+      const first = session.active.number;
+      session.match.state.pendingEvent = { kind: 'goal', team };
+      session.detectLiveIncident();
+      assert.equal(session.pending.length, 0);
+      session.match.place({ ball: { ...ball, x: 0.6 } });
+      session.detectLiveIncident();
+      session.match.place({ ball });
+      session.match.state.pendingEvent = { kind: 'goal', team };
+      session.detectLiveIncident();
+      assert.ok(
+        [session.active, ...session.pending].some(
+          (item) =>
+            item && item.number !== first && item.definition.id === 'live-goal',
+        ),
+      );
+    }
+});
+
 test('simultaneous outs can be called in either order and stale continuous commands are still enacted', () => {
   const session = continuous({ topics: ['out'] });
   session.match.state.actors['blue-1'] = wallPose(session.robotVisual, -0.2);
