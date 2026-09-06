@@ -1046,7 +1046,10 @@ function buildScene(
       return;
     }
 
-    const url = new URL(selection.assetPath, document.baseURI).href;
+    const assetUrl = new URL(selection.assetPath, document.baseURI);
+    if ('assetRevision' in selection)
+      assetUrl.searchParams.set('v', selection.assetRevision);
+    const url = assetUrl.href;
     let resource: PC.ContainerResource;
     try {
       resource = await loadContainer(url);

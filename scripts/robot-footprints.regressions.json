@@ -4,78 +4,78 @@
     "id": "circle-false-positive",
     "end": 1,
     "pose": {
-      "x": 0.4232411613907041,
-      "z": 0.8017588386092959,
+      "x": 0.4198035742714028,
+      "z": 0.8051964257285972,
       "yaw": 0
     },
     "partialOverlap": false,
-    "meshGapMetres": 0.0028099309759493096,
-    "convexHullGapMetres": 0.0028099309759493096
+    "meshGapMetres": 0.0019999999999462115,
+    "convexHullGapMetres": 0.0019999999999462115
   },
   {
     "model": "xlc-open-2020",
     "id": "circle-false-positive-turned",
     "end": 1,
     "pose": {
-      "x": 0.4232411613907041,
-      "z": 0.8017588386092959,
+      "x": 0.41939624862889113,
+      "z": 0.8056037513711088,
       "yaw": 1.5707963267948966
     },
     "partialOverlap": false,
-    "meshGapMetres": 0.049179514347595654,
-    "convexHullGapMetres": 0.049179514347595654
+    "meshGapMetres": 0.0019999999999757434,
+    "convexHullGapMetres": 0.0019999999999757434
   },
   {
     "model": "xlc-open-2020",
     "id": "partial-positive",
     "end": 1,
     "pose": {
-      "x": 0.41970562748477136,
-      "z": 0.8052943725152286,
+      "x": 0.4169745221021818,
+      "z": 0.8080254778978182,
       "yaw": 0
     },
     "partialOverlap": true,
-    "meshGapMetres": -0.002093495273395085,
-    "convexHullGapMetres": -0.002093495273395085
+    "meshGapMetres": -0.001999999999979518,
+    "convexHullGapMetres": -0.001999999999979518
   },
   {
     "model": "xlc-open-2020",
     "id": "partial-turned-clear",
     "end": 1,
     "pose": {
-      "x": 0.41970562748477136,
-      "z": 0.8052943725152286,
+      "x": 0.41833555026192476,
+      "z": 0.8066644497380753,
       "yaw": 1.5707963267948966
     },
     "partialOverlap": false,
-    "meshGapMetres": 0.044196377046497815,
-    "convexHullGapMetres": 0.044196377046497815
+    "meshGapMetres": 0.0004999999999721338,
+    "convexHullGapMetres": 0.0004999999999721338
   },
   {
     "model": "xlc-open-2020",
     "id": "concave-hull-phantom",
     "end": 1,
     "pose": {
-      "x": 0.3874338623837238,
-      "z": 0.8375661376162762,
-      "yaw": 1.2222632663494064
+      "x": 0.4168985455998569,
+      "z": 0.808101454400143,
+      "yaw": 5.497787143782138
     },
     "partialOverlap": false,
-    "meshGapMetres": 0.003051815874024172,
-    "convexHullGapMetres": -0.003000001179005285
+    "meshGapMetres": 0.000432251111138815,
+    "convexHullGapMetres": -0.00043272327233792596
   },
   {
     "model": "xlc-open-2020",
     "id": "concave-positive",
     "end": 1,
     "pose": {
-      "x": 0.3846592665574634,
-      "z": 0.8403407334425366,
-      "yaw": 1.2182262182373735
+      "x": 0.4158846709977294,
+      "z": 0.8091153290022706,
+      "yaw": 5.497787143782138
     },
     "partialOverlap": true,
-    "meshGapMetres": -0.0008569886004430316,
-    "convexHullGapMetres": -0.007000001179005233
+    "meshGapMetres": -0.0010000000000291165,
+    "convexHullGapMetres": -0.0018665584852122774
   },
   {
     "model": "xlc-innovation-2021",

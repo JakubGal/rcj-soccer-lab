@@ -274,6 +274,14 @@ objects, merge materials, decimate, fit the current 180 mm envelope, and export
 a compact GLB. `scripts/inspect-robot-glb.py` reports mesh bounds and materials
 for QA.
 
+The 2020 web asset has its single stray CAD triangle removed and its real body
+centered and uniformly resized to the same 176 mm width as the 2021 model.
+`scripts/repair-2020-robot.py` reproduces that correction from the original
+asset, guarded by its source hash. After any mesh change, regenerate
+`lib/simulator/robot-footprints.json` using `scripts/extract-robot-footprints.py`
+so penalty-area evidence follows the visible body. Number badges sit above
+each model's actual height; the shared collision circle contains both bodies.
+
 A folder of individual STL or SolidWorks part files is insufficient when it
 does not include assembly occurrence transforms, repeats, and material data.
 Export the resolved top-level assembly instead. The selectable CAD mesh is only

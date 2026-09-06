@@ -10,7 +10,8 @@ export const ROBOT_VISUALS = [
     id: 'xlc-open-2020',
     label: 'XLC Open 2020',
     assetPath: 'models/robots/xlc-open-2020.glb',
-    markerHeight: 0.158,
+    assetRevision: '65e95596d8c8',
+    markerHeight: 0.212,
   },
   {
     id: 'xlc-innovation-2021',

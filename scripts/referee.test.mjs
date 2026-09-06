@@ -388,6 +388,12 @@ test('body footprints match current GLBs and preserve the shapes that a circle o
       asset.models[visual.id].sha256,
       `${visual.id}: regenerate footprints after changing the mesh`,
     );
+    if ('assetRevision' in visual)
+      assert.equal(
+        visual.assetRevision,
+        asset.models[visual.id].sha256.slice(0, 12),
+        'invalidate browser caches when the body asset changes',
+      );
     assert.ok(
       robotFootprint(visual.id).some((polygon) => polygon.holes.length),
     );
@@ -422,6 +428,111 @@ test('body footprints match current GLBs and preserve the shapes that a circle o
         `visual evidence: ${fixture.model} ${fixture.id} end ${end}`,
       );
     }
+});
+
+test('both imported robot bodies are centered, equally wide and fit their collision circle', () => {
+  for (const visual of ROBOT_VISUALS.filter((model) => model.assetPath)) {
+    const file = readFileSync(
+      new URL(`../public/${visual.assetPath}`, import.meta.url),
+    );
+    assert.equal(file.readUInt32LE(8), file.length, 'valid GLB length');
+    const jsonLength = file.readUInt32LE(12);
+    const document = JSON.parse(file.subarray(20, 20 + jsonLength).toString());
+    const binary = file.subarray(28 + jsonLength);
+    const read = (index) => {
+      const accessor = document.accessors[index];
+      const view = document.bufferViews[accessor.bufferView];
+      const columns = accessor.type === 'VEC3' ? 3 : 1;
+      const size = accessor.componentType === 5123 ? 2 : 4;
+      const offset = (view.byteOffset ?? 0) + (accessor.byteOffset ?? 0);
+      const stride = view.byteStride ?? columns * size;
+      return Array.from({ length: accessor.count }, (_, row) =>
+        Array.from({ length: columns }, (_, column) => {
+          const at = offset + row * stride + column * size;
+          return accessor.componentType === 5126
+            ? binary.readFloatLE(at)
+            : size === 2
+              ? binary.readUInt16LE(at)
+              : binary.readUInt32LE(at);
+        }),
+      );
+    };
+    const points = [];
+    for (const node of document.nodes)
+      for (const key of ['matrix', 'translation', 'rotation', 'scale'])
+        assert.equal(
+          node[key],
+          undefined,
+          'normalization is baked into vertices',
+        );
+    for (const mesh of document.meshes)
+      for (const primitive of mesh.primitives) {
+        const positionId = primitive.attributes.POSITION;
+        const positions = read(positionId);
+        const indices = read(primitive.indices).flat();
+        assert.equal(indices.length % 3, 0);
+        for (const index of new Set(indices)) {
+          assert.ok(index >= 0 && index < positions.length);
+          points.push(positions[index]);
+        }
+        for (let axis = 0; axis < 3; axis++) {
+          const coordinates = positions
+            .map((point) => point[axis])
+            .sort((a, b) => a - b);
+          assert.equal(
+            document.accessors[positionId].min[axis],
+            coordinates[0],
+          );
+          assert.equal(
+            document.accessors[positionId].max[axis],
+            coordinates.at(-1),
+          );
+        }
+      }
+    const axes = [0, 1, 2].map((axis) =>
+      points.map((point) => point[axis]).sort((a, b) => a - b),
+    );
+    const low = axes.map((values) => values[0]);
+    const high = axes.map((values) => values.at(-1));
+    assert.ok(
+      Math.abs(high[0] - low[0] - 0.176) < 1e-7,
+      visual.id + ': 176 mm body width',
+    );
+    for (const axis of [0, 2])
+      assert.ok(
+        Math.abs(high[axis] + low[axis]) < 1e-7,
+        visual.id + ': centered body',
+      );
+    assert.ok(Math.abs(low[1]) < 1e-7, 'wheels sit on the ground');
+    assert.ok(
+      visual.markerHeight > high[1] + 0.01,
+      'number badge clears the body',
+    );
+    assert.ok(
+      points.every(([x, , z]) => Math.hypot(x, z) <= 0.1),
+      'visible body fits physics clearance',
+    );
+    // A single distant CAD vertex must not determine the model's size.
+    const trim = Math.floor(points.length * 0.001);
+    const substantialWidth = axes[0][points.length - 1 - trim] - axes[0][trim];
+    assert.ok(
+      substantialWidth > 0.176 * 0.9,
+      visual.id + ': full-size body, not an outlier-sized envelope',
+    );
+    const outline = robotFootprint(visual.id).flatMap(
+      (polygon) => polygon.outer,
+    );
+    for (const [coordinate, axis] of [
+      [0, 0],
+      [1, 2],
+    ]) {
+      const values = outline
+        .map((point) => point[coordinate])
+        .sort((a, b) => a - b);
+      assert.ok(Math.abs(values[0] - low[axis]) < 0.00002);
+      assert.ok(Math.abs(values.at(-1) - high[axis]) < 0.00002);
+    }
+  }
 });
 
 test('a visible gap does not stop live play as multiple defense; actual entry does and remains frozen', () => {
