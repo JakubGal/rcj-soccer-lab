@@ -105,6 +105,18 @@ export const MATCH_ROBOTS = MATCH_ACTORS.filter(
   (actor) => actor.kind === 'robot',
 );
 
+// Rule 2.7's five neutral spots: centre plus one inside each penalty area.
+const NEUTRAL_SPOTS: Pose[] = [
+  { x: 0, z: 0, yaw: 0 },
+  ...([-1, 1] as const).flatMap((x) =>
+    ([-1, 1] as const).map((z) => ({
+      x: x * FIELD.neutralSpotX,
+      z: z * FIELD.neutralSpotZ,
+      yaw: 0,
+    })),
+  ),
+];
+
 // The same solid goal panels drawn by the viewport. Live play is planar;
 // ramps, ball height, and the referee's discretionary rules are not simulated.
 const GOAL_PANELS = ([-1, 1] as const).flatMap((end) => {
@@ -283,6 +295,24 @@ export class SoccerMatch {
     this.state.phase = 'playing';
   }
 
+  /** Nearest rule 2.7 neutral spot to the ball, clear of every robot. */
+  private nearestNeutralSpot(): Pose | null {
+    const ball = this.state.actors.ball;
+    const robots = MATCH_ROBOTS.filter(
+      (robot) => this.state.actors[robot.id],
+    ).map((robot) => this.state.actors[robot.id]);
+    const available = NEUTRAL_SPOTS.filter(
+      (spot) =>
+        distance(spot, ball) > 1e-6 &&
+        robots.every((robot) => distance(spot, robot) >= 0.123),
+    );
+    return (
+      [...available].sort(
+        (a, b) => distance(a, ball) - distance(b, ball),
+      )[0] ?? null
+    );
+  }
+
   private kickoff(team: MatchTeam) {
     const mirror = team === 'blue' ? 1 : -1;
     for (const robot of MATCH_ROBOTS) {
@@ -298,13 +328,22 @@ export class SoccerMatch {
         yaw: this.attackDirection(robot.team as MatchTeam) === 1 ? 0 : Math.PI,
       };
     }
-    const kicker = this.state.actors[`${team}-1`] ??
-      this.state.actors[`${team}-2`] ?? { x: 0, z: -mirror * 0.14 };
-    this.state.actors.ball = {
-      x: kicker.x,
-      z: kicker.z + mirror * this.blueAttackDirection * 0.14,
-      yaw: 0,
-    };
+    // Rule 2.3: the referee places the ball at the centre of the field. The
+    // kicking team may stand inside the centre circle, so its first robot is
+    // placed just behind and beside the ball, as teams do at a real kickoff.
+    // The small lateral offset keeps the deterministic AI match balanced.
+    const kickerId = ['1', '2']
+      .map((number) => `${team}-${number}`)
+      .find((id) => this.state.actors[id]);
+    if (kickerId) {
+      const direction = this.attackDirection(team);
+      this.state.actors[kickerId] = {
+        x: 0.13 * direction,
+        z: -direction * (ATTACHMENT + 0.02),
+        yaw: direction === 1 ? 0 : Math.PI,
+      };
+    }
+    this.state.actors.ball = { x: 0, z: 0, yaw: 0 };
     this.state.ballVelocity = { x: 0, z: 0 };
     this.state.ballOwner = null;
     this.cooldown = 0.35;
@@ -583,17 +622,7 @@ export class SoccerMatch {
     const dt = MATCH_STEP;
     if (this.state.phase === 'finished' || this.state.phase === 'referee')
       return;
-    if (this.state.phase === 'goal') {
-      this.goalPause -= dt;
-      if (this.goalPause <= 0) {
-        this.kickoff(this.kickoffTeam);
-        this.state.phase = 'playing';
-        this.state.message = `${this.kickoffTeam === 'blue' ? 'Blue' : 'Yellow'} kickoff`;
-      }
-      return;
-    }
-    this.lastBoundaryPushers.clear();
-    this.lastTouchedBall = null;
+    // Rule 2.8/2.11: the clock never stops, including during a goal pause.
     this.state.elapsed = Math.min(settings.duration, this.state.elapsed + dt);
     if (this.state.elapsed >= settings.duration) {
       this.state.phase = 'finished';
@@ -606,6 +635,17 @@ export class SoccerMatch {
       this.state.ballVelocity = { x: 0, z: 0 };
       return;
     }
+    if (this.state.phase === 'goal') {
+      this.goalPause -= dt;
+      if (this.goalPause <= 0) {
+        this.kickoff(this.kickoffTeam);
+        this.state.phase = 'playing';
+        this.state.message = `${this.kickoffTeam === 'blue' ? 'Blue' : 'Yellow'} kickoff`;
+      }
+      return;
+    }
+    this.lastBoundaryPushers.clear();
+    this.lastTouchedBall = null;
     this.cooldown = Math.max(0, this.cooldown - dt);
     const activeRobots = MATCH_ROBOTS.filter(
       (robot) => this.state.actors[robot.id],
@@ -801,9 +841,17 @@ export class SoccerMatch {
         this.state.message = 'Stationary contest · referee assessment';
         return;
       }
-      this.kickoffTeam = this.kickoffTeam === 'blue' ? 'yellow' : 'blue';
-      this.kickoff(this.kickoffTeam);
-      this.state.message = 'Stalled play · Ball reset for kickoff';
+      // Rule 2.7: the referee moves only the ball to the nearest neutral
+      // spot; robots are left where they are.
+      const spot = this.nearestNeutralSpot();
+      if (spot) {
+        this.state.actors.ball = { ...spot };
+        this.state.ballVelocity = { x: 0, z: 0 };
+        this.state.ballOwner = null;
+        this.stalledFor = 0;
+        this.ballAnchor = { ...spot };
+      }
+      this.state.message = 'Stalled play · Ball moved to nearest neutral spot';
     }
   }
 }
