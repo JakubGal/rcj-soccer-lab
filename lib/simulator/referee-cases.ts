@@ -6,6 +6,9 @@ import {
 } from '../rulebook/animations';
 import type { Pose } from './types';
 import { COMMITTEE_TRAINING_POLICY } from './training-policy';
+import { RCJ_FIELD_DERIVED as FIELD } from './field-spec';
+import { clampRobotToField } from './referee-geometry';
+import { DEFAULT_ROBOT_VISUAL_ID, type RobotVisualId } from './robot-models';
 
 export const REFEREE_ACTIONS = [
   { id: 'play-on', label: 'Play on', target: false, group: 'Play' },
@@ -647,18 +650,35 @@ export function caseScene(
   item: RefereeCase,
   time: number,
   variant: Variant,
+  robotVisual: RobotVisualId = DEFAULT_ROBOT_VISUAL_ID,
 ): RuleScene {
   const scene = sampleClip(
     evidenceClip(item),
     Math.min(item.stopAt ?? item.end, (item.start ?? 0) + time),
   );
+  const poses = Object.fromEntries(
+    Object.entries(scene.poses).map(([id, value]) => [
+      transformId(id, variant),
+      transformPose(value, variant),
+    ]),
+  );
+  if (item.id === 'out-goal') {
+    // The shared shot reaches the mouth at 3 s and the back wall at 4 s.
+    // Show the earlier infringement, not just a text-only assertion: Blue 2
+    // reaches the physical wall at 1.5 s and stays there until removed.
+    // Clamp AFTER variant transforms so asymmetric imported bodies touch too.
+    const id = transformId('blue-2', variant);
+    const start = poses[id];
+    const contact = clampRobotToField(
+      { ...start, x: Math.sign(start.x) * FIELD.floorHalfWidth },
+      robotVisual,
+    );
+    const progress = Math.max(0, Math.min(1, time / 1.5));
+    const eased = progress * progress * (3 - 2 * progress);
+    poses[id] = { ...start, x: start.x + (contact.x - start.x) * eased };
+  }
   return {
-    poses: Object.fromEntries(
-      Object.entries(scene.poses).map(([id, value]) => [
-        transformId(id, variant),
-        transformPose(value, variant),
-      ]),
-    ),
+    poses,
     heights: Object.fromEntries(
       Object.entries(scene.heights).map(([id, value]) => [
         transformId(id, variant),

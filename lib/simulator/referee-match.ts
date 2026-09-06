@@ -869,7 +869,7 @@ export class RefereeMatch {
     return true;
   }
   private scene(definition: RefereeCase, time: number, variant: Variant) {
-    const scene = caseScene(definition, time, variant);
+    const scene = caseScene(definition, time, variant, this.robotVisual);
     if (this.match.blueAttackDirection === -1)
       for (const pose of Object.values(scene.poses)) {
         pose.x = -pose.x;

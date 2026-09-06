@@ -211,6 +211,32 @@ test('every concrete UI case answer is engine-graded correctly across locked rob
       );
 });
 
+test('saved v2 out-goal answers keep their decision ticks and grade after the visual fix', () => {
+  for (const { id: robotVisual } of ROBOT_VISUALS) {
+    const calls = [{ action: 'no-goal' }, { action: 'out', target: 'blue-2' }];
+    const answer = {
+      kind: 'case',
+      calls,
+      evidence: {
+        schema: 'rcj-case-evidence/v2',
+        engineVersion: 'referee-match-2026-v2',
+        seed: 2026,
+        robotVisual,
+        operations: [
+          { op: 'call', tick: 480, decisionKey: '1:0', call: calls[0] },
+          { op: 'continue', tick: 480 },
+          { op: 'call', tick: 480, decisionKey: '1:1', call: calls[1] },
+        ],
+      },
+    };
+    assert.deepEqual(makeCaseAnswer('out-goal', { robotVisual }), answer);
+    assert.deepEqual(verdict('case:out-goal', answer), {
+      valid: true,
+      correct: true,
+    });
+  }
+});
+
 test('case evidence rejects symbolic-only legacy answers and tampered operations/versions', () => {
   assert.equal(
     verdict('case:multiple', {

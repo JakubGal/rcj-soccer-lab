@@ -1132,6 +1132,86 @@ test('goal decisions award the correct team once, with duplicate protection', ()
   assert.ok(session.match.state.elapsed > 0);
 });
 
+test('out-goal visibly reaches the wall before the goal for every model, team and end', () => {
+  for (const visual of ROBOT_VISUALS)
+    for (const swap of [false, true])
+      for (const reflect of [false, true])
+        for (const direction of [-1, 1]) {
+          const transform = { swap, reflect };
+          const id = transformId('blue-2', transform);
+          const session = new RefereeMatch(2026, { robotVisual: visual.id });
+          session.match.blueAttackDirection = direction;
+          session.beginCase(definition('out-goal'), transform);
+          let previous = { ...session.snapshot().actors[id] };
+          const initial = { ...previous };
+          assert.ok(robotWallClearance(initial, visual.id).gap > 0.4);
+          let contactTick = null;
+          let goalTick = null;
+          for (let tick = 1; tick <= 480; tick++) {
+            session.step();
+            const actors = session.snapshot().actors;
+            const robot = actors[id];
+            assert.ok(robot, 'the robot stays on the field until removed');
+            assert.ok(
+              distance(robot, previous) < 0.005,
+              'no teleport to the wall',
+            );
+            assert.ok(
+              robotWallClearance(robot, visual.id).gap >= -1e-8,
+              'no wall penetration',
+            );
+            const touches = robotTouchesFieldWall(robot, visual.id);
+            if (touches) contactTick ??= tick;
+            if (tick >= 180)
+              assert.ok(touches, `${visual.id}: must remain against the wall`);
+            if (
+              Math.abs(actors.ball.z) >=
+              FIELD.goalBackContactBallCenterZ - 1e-8
+            )
+              goalTick ??= tick;
+            if (tick < 480) assert.equal(session.phase, 'evidence');
+            previous = { ...robot };
+          }
+          assert.ok(contactTick !== null && contactTick <= 180);
+          assert.equal(goalTick, 480);
+          assert.ok(
+            distance(initial, previous) > 0.4,
+            'the infringement is visibly demonstrated',
+          );
+          assert.equal(
+            session.trainingTick,
+            480,
+            'preserve saved v2 decision timing',
+          );
+          assert.equal(session.phase, 'decision');
+          correct(session, 'no-goal');
+          assert.ok(session.snapshot().actors[id]);
+          session.continue();
+          correct(session, 'out', id);
+          assert.equal(session.snapshot().actors[id], undefined);
+          assert.equal(session.snapshot().bench[0].robot, id);
+          assert.deepEqual(session.snapshot().score, { blue: 0, yellow: 0 });
+        }
+});
+
+test('out-goal movement does not leak into the shared ordinary-goal scene', () => {
+  for (const visual of ROBOT_VISUALS) {
+    const start = caseScene(definition('goal'), 0, variant, visual.id);
+    for (const time of [0, 0.5, 1.5, 3, 4]) {
+      const ordinary = caseScene(definition('goal'), time, variant, visual.id);
+      const penalized = caseScene(
+        definition('out-goal'),
+        time,
+        variant,
+        visual.id,
+      );
+      assert.deepEqual(ordinary.poses['blue-2'], start.poses['blue-2']);
+      for (const id of ['ball', 'blue-1', 'yellow-1', 'yellow-2'])
+        assert.deepEqual(penalized.poses[id], ordinary.poses[id]);
+    }
+  }
+});
+
 test('wrong team is explained and a corrected retry does not earn first-try credit', () => {
   const session = prepare('own-goal');
   assert.equal(submit(session, 'goal', 'blue').verdict, 'wrong-target');
