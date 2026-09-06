@@ -43,6 +43,8 @@ const {
   MAX_MATCH_REPLAY_EVENTS,
   MatchReplayError,
   makeMatchReplay,
+  makeMatchReplayCheckpoint,
+  hydrateMatchReplay,
   verifyMatchReplay,
 } = await import('../lib/certification/replay.ts');
 const { makePerfectReplay } = await import('./replay-fixtures.mjs');
@@ -82,6 +84,43 @@ test('state-changing tampering is rejected', () => {
   const tampered = continuousReplay();
   tampered.events[0].op = 'resume';
   expectReplayError('state_diverged', () => verifyMatchReplay(tampered));
+});
+
+test('certification models are immutable and old engine evidence is explicitly rejected', () => {
+  const replay = continuousReplay();
+  const changed = structuredClone(replay);
+  changed.events[0] = {
+    seq: 0,
+    tick: 0,
+    op: 'set-robot-visual',
+    robotVisual: 'lab',
+  };
+  expectReplayError('invalid_replay', () => verifyMatchReplay(changed));
+  const legacy = structuredClone(replay);
+  legacy.engineVersion = 'referee-match-2026-v1';
+  expectReplayError('unsupported_engine', () => verifyMatchReplay(legacy));
+});
+
+test('unfinished checkpoints restore deterministic state but cannot earn completion credit', () => {
+  const replay = continuousReplay();
+  const events = replay.events.slice(0, Math.min(20, replay.events.length));
+  const checkpoint = makeMatchReplayCheckpoint({
+    mode: replay.mode,
+    seed: replay.seed,
+    robotVisual: replay.robotVisual,
+    topics: replay.topics,
+    events,
+    terminal: { tick: events.at(-1).tick, reason: 'checkpoint' },
+  });
+  const restored = hydrateMatchReplay(checkpoint);
+  assert.equal(restored.trainingTick, checkpoint.terminal.tick);
+  assert.equal(restored.snapshot().sessionFinished, false);
+  const reloaded = hydrateMatchReplay(JSON.parse(JSON.stringify(checkpoint)));
+  assert.deepEqual(reloaded.snapshot(), restored.snapshot());
+  expectReplayError('invalid_replay', () => verifyMatchReplay(checkpoint));
+  const tampered = structuredClone(checkpoint);
+  tampered.events[0].op = 'resume';
+  expectReplayError('state_diverged', () => hydrateMatchReplay(tampered));
 });
 
 test('unknown actions and nonmonotonic ticks are rejected before replay', () => {

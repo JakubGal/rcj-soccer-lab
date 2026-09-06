@@ -1,4 +1,8 @@
-import type { MatchReplay } from '../certification/replay';
+import type {
+  MatchReplay,
+  MatchReplayCheckpoint,
+} from '../certification/replay';
+import type { RobotVisualId } from '../simulator/robot-models';
 
 export type AccountLoadStatus =
   | 'loading'
@@ -14,6 +18,7 @@ export type CertificationStatus =
   | 'ready'
   | 'qualified'
   | 'failed'
+  | 'upgrade-required'
   | 'restarted';
 
 export type AccountProfile = {
@@ -61,6 +66,8 @@ export type CertificationGameAttempt = {
   qualifying: boolean;
   startedAt: string | null;
   completedAt: string | null;
+  inProgress?: boolean;
+  canReview?: boolean;
 };
 
 export type GameCertificationProgress = {
@@ -85,6 +92,7 @@ export type CertificationRound = {
   rules: RulesCertificationProgress;
   step: GameCertificationProgress;
   continuous: GameCertificationProgress;
+  policyVersion?: string;
 };
 
 export type PracticeGame = {
@@ -93,6 +101,7 @@ export type PracticeGame = {
   durationSeconds: number;
   accuracy: number | null;
   completedAt: string | null;
+  canReview?: boolean;
 };
 
 export type CertificationHistoryEntry = {
@@ -133,6 +142,7 @@ export type StartGamePayload = {
   seed?: number;
   durationSeconds?: number;
   topics?: readonly string[];
+  robotVisual?: RobotVisualId;
 };
 
 export type CertificationGameLaunch = {
@@ -144,6 +154,9 @@ export type CertificationGameLaunch = {
   topics: string[];
   startedAt: string | null;
   clientSessionId: string | null;
+  attemptNumber?: number;
+  robotVisual?: RobotVisualId;
+  checkpoint?: MatchReplayCheckpoint;
 };
 
 export type FinishGamePayload = {

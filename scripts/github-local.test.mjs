@@ -6,6 +6,8 @@ import {
   makeSigner,
 } from './github-academy.mjs';
 import { generateKeyPairSync } from 'node:crypto';
+import { spawnSync } from 'node:child_process';
+import { fileURLToPath } from 'node:url';
 registerTrustedTypes();
 const { prepareSubmission } = await import('../lib/github/protocol.ts');
 const { verifyEnvelope } = await import('../lib/github/registry.ts');
@@ -24,7 +26,9 @@ const {
 } = await import('../lib/account/local.ts');
 const { RULE_CLIPS } = await import('../lib/rulebook/animations.ts');
 const { SCENARIOS } = await import('../lib/simulator/scenarios.ts');
-const { REFEREE_CASES } = await import('../lib/simulator/referee-cases.ts');
+const { RULE_QUESTIONS } = await import('../lib/rulebook/questions.ts');
+const { CERTIFICATION_POLICY } = await import('../lib/certification/policy.ts');
+const { makeCaseAnswer } = await import('./replay-fixtures.mjs');
 const { LEARNING_SITUATIONS } = await import('../lib/rulebook/learning.ts');
 
 const profile = {
@@ -46,6 +50,11 @@ function eventFor(id, roundId, override) {
       kind,
       selectedIndex: RULE_CLIPS.find((item) => item.id === sourceId).answer,
     };
+  if (kind === 'question')
+    answer = {
+      kind,
+      selectedIndex: RULE_QUESTIONS.find((item) => item.id === sourceId).answer,
+    };
   if (kind === 'scenario')
     answer = {
       kind,
@@ -53,13 +62,7 @@ function eventFor(id, roundId, override) {
         (item) => ['correct', 'acceptable'].includes(item.grade),
       ).id,
     };
-  if (kind === 'case')
-    answer = {
-      kind,
-      calls: REFEREE_CASES.find((item) => item.id === sourceId).steps.map(
-        (step) => ({ ...step[0] }),
-      ),
-    };
+  if (kind === 'case') answer = makeCaseAnswer(sourceId);
   return {
     type: 'complete',
     mode: 'certification',
@@ -111,7 +114,7 @@ test('all canonical rule answers grade correctly; later answers cannot repair fi
   );
   assert.equal(
     summarizeRuleEvidence(events, data.round.id).correctFirstTry,
-    73,
+    CERTIFICATION_POLICY.ruleQuestionCount,
   );
   const clip = events.find((item) => item.kind === 'clip');
   const wrong = {
@@ -122,12 +125,15 @@ test('all canonical rule answers grade correctly; later answers cannot repair fi
     },
   };
   const result = summarizeRuleEvidence([wrong, ...events], data.round.id);
-  assert.equal(result.correctFirstTry, 72);
-  assert.equal(result.answered, 73);
+  assert.equal(
+    result.correctFirstTry,
+    CERTIFICATION_POLICY.ruleQuestionCount - 1,
+  );
+  assert.equal(result.answered, CERTIFICATION_POLICY.ruleQuestionCount);
   const helped = { ...clip, type: 'assistance', assistance: 'hint' };
   assert.equal(
     summarizeRuleEvidence([helped, ...events], data.round.id).correctFirstTry,
-    72,
+    CERTIFICATION_POLICY.ruleQuestionCount - 1,
   );
   assert.throws(() => summarizeRuleEvidence(events, 'different-round'));
 });
@@ -137,19 +143,61 @@ test('first case steps remain immutable when later complete prefixes replace the
     item.id.startsWith('case:'),
   );
   const correct = eventFor(definition.id, data.round.id);
-  const wrongCall = {
-    action: correct.answer.calls[0].action === 'goal' ? 'out' : 'goal',
-    target: 'yellow-1',
-  };
   // Both are known referee actions but the initial choice is intentionally wrong.
   const wrong = {
     ...correct,
     type: 'answer',
-    answer: { kind: 'case', calls: [wrongCall] },
+    answer: makeCaseAnswer(definition.sourceId, { wrongFirst: true }),
   };
   const result = summarizeRuleEvidence([wrong, correct], data.round.id);
   assert.equal(result.correctFirstTry, 0);
   assert.equal(result.answered, 1);
+});
+
+test('actual lesson answer prefixes survive browser transport and pass the issuer rules gate', async () => {
+  const data = await newData();
+  for (const item of LEARNING_SITUATIONS) {
+    const final = eventFor(item.id, data.round.id);
+    if (item.kind === 'case')
+      makeCaseAnswer(item.sourceId, {
+        onAnswer: (answer, completed) => {
+          data.round.ruleEvents.push({
+            ...final,
+            type: 'answer',
+            answer,
+            completed,
+            accepted: true,
+            firstAnswer: true,
+            attemptNumber: 1,
+            score: 1,
+            decisionId: answer.evidence.operations.at(-1).decisionKey,
+          });
+        },
+      });
+    data.round.ruleEvents.push(final);
+  }
+  const request = await prepareSubmission({
+    schema: 1,
+    kind: 'certify',
+    requestId: 'e'.repeat(32),
+    profile,
+    round: data.round,
+  });
+  const decoded = decodeSubmission(request.body);
+  const summary = summarizeRuleEvidence(
+    decoded.round.ruleEvents,
+    data.round.id,
+  );
+  assert.equal(summary.correctFirstTry, CERTIFICATION_POLICY.ruleQuestionCount);
+  assert.equal(summary.passed, true);
+  // No fake game scores: successful rules validation must reach the games gate.
+  await assert.rejects(() => validateSubmission(decoded), /replayed games/);
+  const legacy = structuredClone(decoded);
+  delete legacy.round.policyVersion;
+  await assert.rejects(
+    () => validateSubmission(legacy),
+    /older certification policy/,
+  );
 });
 test('attempt seeds are bound to round, mode and attempt index; starts consume attempts', async () => {
   const data = await newData();
@@ -521,8 +569,13 @@ test('complete seven-game round survives browser compression, issue decoding and
   });
   assert.ok(request.body.length < 65536, `issue size ${request.body.length}`);
   const payload = decodeSubmission(request.body);
+  const sevenStarted = performance.now();
   const validated = await validateSubmission(payload);
-  assert.equal(validated.summary.rulesCorrect, 73);
+  const sevenValidationMs = Math.round(performance.now() - sevenStarted);
+  assert.equal(
+    validated.summary.rulesCorrect,
+    CERTIFICATION_POLICY.ruleQuestionCount,
+  );
   assert.equal(validated.summary.stepQualifying, 5);
   assert.equal(validated.summary.continuousQualifying, 2);
   const fake = structuredClone(payload);
@@ -537,7 +590,7 @@ test('complete seven-game round survives browser compression, issue decoding and
   );
   await assert.rejects(() => validateSubmission(countersOnly), /requirements/);
   console.log(
-    `Seven-game certification issue: ${request.body.length} characters; ${JSON.stringify(payload).length} uncompressed bytes.`,
+    `Seven-game certification issue: ${request.body.length} characters; ${JSON.stringify(payload).length} uncompressed bytes; validation ${sevenValidationMs} ms.`,
   );
   for (const mode of ['step', 'continuous'])
     for (
@@ -561,10 +614,30 @@ test('complete seven-game round survives browser compression, issue decoding and
     profile,
     round: data.round,
   });
-  const full = await validateSubmission(decodeSubmission(fullRequest.body));
+  const fullStarted = performance.now();
+  const child = spawnSync(
+    process.execPath,
+    [
+      '--max-old-space-size=256',
+      fileURLToPath(new URL('./github-academy.mjs', import.meta.url)),
+      '--validate',
+    ],
+    {
+      input: JSON.stringify(decodeSubmission(fullRequest.body)),
+      encoding: 'utf8',
+      timeout: 120000,
+      maxBuffer: 1024 * 1024,
+      windowsHide: true,
+      // The real issuer validation process receives no token or signing key.
+      env: process.env.SystemRoot ? { SystemRoot: process.env.SystemRoot } : {},
+    },
+  );
+  assert.equal(child.error, undefined, String(child.error));
+  assert.equal(child.status, 0, child.stderr);
+  const full = JSON.parse(child.stdout);
   assert.equal(full.summary.stepAttempts, 8);
   assert.equal(full.summary.continuousAttempts, 5);
   console.log(
-    `Maximum 13-game round: ${fullRequest.body.length} issue characters.`,
+    `Maximum 13-game round: ${fullRequest.body.length} issue characters; real 256MiB/120s validator child ${Math.round(performance.now() - fullStarted)} ms.`,
   );
 });

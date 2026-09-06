@@ -75,6 +75,10 @@ export function CertificationStatusBadge({
         <CircleX /> {t('Round not completed')}
       </Badge>
     );
+  if (status === 'upgrade-required')
+    return (
+      <Badge variant="outline">{t('Updated examination available')}</Badge>
+    );
   if (status === 'in-progress')
     return (
       <Badge variant="secondary">

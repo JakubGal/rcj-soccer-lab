@@ -17,6 +17,8 @@ export type GitHubGameEvidence = {
   replay?: MatchReplay;
 };
 export type GitHubRoundEvidence = {
+  /** Missing on legacy device backups, which remain read-only. */
+  policyVersion?: string;
   id: string;
   number: number;
   startedAt: string;

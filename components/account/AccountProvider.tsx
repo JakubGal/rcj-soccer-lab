@@ -18,6 +18,10 @@ import type {
   StartGamePayload,
 } from '@/lib/account/types';
 import type {
+  MatchReplay,
+  MatchReplayCheckpoint,
+} from '@/lib/certification/replay';
+import type {
   RefereePracticeTrackingBridge,
   RuleLearningBridge,
   RuleLearningEvent,
@@ -33,6 +37,9 @@ import {
   newRound,
   recordLocalRule,
   startLocalGame,
+  resumeLocalGame,
+  saveLocalCheckpoint,
+  savedLocalReplay,
   trustedReceipt,
   updateLocalProfile,
   validateBackup,
@@ -68,6 +75,14 @@ export type AccountContextValue = {
     attemptId: string,
     payload: FinishGamePayload,
   ) => Promise<void>;
+  resumeCertificationGame: (
+    attemptId: string,
+  ) => Promise<CertificationGameLaunch>;
+  saveCertificationCheckpoint: (
+    attemptId: string,
+    checkpoint: MatchReplayCheckpoint,
+  ) => Promise<void>;
+  getGameReplay: (attemptId: string) => Promise<MatchReplay>;
   recordRuleLearning: (event: RuleLearningEvent) => Promise<boolean>;
   practiceRuleLearningBridge: RuleLearningBridge;
   certificationRuleLearningBridge: RuleLearningBridge;
@@ -198,6 +213,22 @@ export function AccountProvider({ children }: { children: ReactNode }) {
       await mutate('finish-game', (data) => finishLocalGame(data, id, payload));
     },
     [mutate],
+  );
+  const resumeCertificationGame = useCallback(
+    async (id: string) => resumeLocalGame(await loadProgress(), id),
+    [],
+  );
+  const getGameReplay = useCallback(
+    async (id: string) => savedLocalReplay(await loadProgress(), id),
+    [],
+  );
+  const saveCertificationCheckpoint = useCallback(
+    async (id: string, checkpoint: MatchReplayCheckpoint) => {
+      // Checkpoint writes share the same cross-tab transaction lock without
+      // regrading every quiz answer or rerendering the entire Academy each time.
+      await changeProgress((data) => saveLocalCheckpoint(data, id, checkpoint));
+    },
+    [],
   );
   const recordRuleLearning = useCallback(
     async (event: RuleLearningEvent) => {
@@ -358,6 +389,9 @@ export function AccountProvider({ children }: { children: ReactNode }) {
     resetCertification,
     beginCertificationGame,
     completeCertificationGame,
+    resumeCertificationGame,
+    saveCertificationCheckpoint,
+    getGameReplay,
     recordRuleLearning,
     practiceRuleLearningBridge,
     certificationRuleLearningBridge,

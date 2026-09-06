@@ -79,7 +79,11 @@ export function MatchPlay({
   onArrangeChange,
   onReferee,
 }: Props) {
-  const [engine, setEngine] = useState(() => new SoccerMatch());
+  const [engine, setEngine] = useState(() => {
+    const match = new SoccerMatch();
+    match.robotVisual = robotVisual;
+    return match;
+  });
   const [frame, setFrame] = useState(() => engine.snapshot());
   const [running, setRunning] = useState(false);
   const [settings, setSettings] = useState<MatchSettings>({
@@ -116,17 +120,19 @@ export function MatchPlay({
     clearInput();
     setRunning(false);
     const next = new SoccerMatch();
+    next.robotVisual = robotVisual;
     baseline.current = clonePoses(next.state.actors);
     setLayoutName('match');
     setEngine(next);
     setFrame(next.snapshot());
-  }, [clearInput]);
+  }, [clearInput, robotVisual]);
 
   const toggleRunning = useCallback(() => {
     if (!ready) return;
     clearInput();
     if (arrange) onArrangeChange(false);
     const next = preparePracticeMatch(engine, settings.duration);
+    next.robotVisual = robotVisual;
     if (next !== engine) {
       setEngine(next);
       setFrame(next.snapshot());
@@ -141,7 +147,12 @@ export function MatchPlay({
     engine,
     focusField,
     settings.duration,
+    robotVisual,
   ]);
+
+  useEffect(() => {
+    engine.setRobotVisual(robotVisual);
+  }, [engine, robotVisual]);
 
   useEffect(() => {
     if (active && !arrange) return;

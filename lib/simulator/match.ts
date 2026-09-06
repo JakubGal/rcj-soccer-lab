@@ -4,6 +4,8 @@ import {
   RCJ_SIMULATOR_GUIDES,
 } from './field-spec';
 import { moveManualActor } from './manual-layout';
+import { clampRobotToField } from './referee-geometry';
+import { DEFAULT_ROBOT_VISUAL_ID, type RobotVisualId } from './robot-models';
 import type { ActorDefinition, Pose } from './types';
 
 export type MatchTeam = 'blue' | 'yellow';
@@ -139,6 +141,15 @@ const GOAL_PANELS = ([-1, 1] as const).flatMap((end) => {
 /** Small fixed-step match model, independent of React, rendering, and wall time. */
 export class SoccerMatch {
   state: MatchState;
+  robotVisual: RobotVisualId = DEFAULT_ROBOT_VISUAL_ID;
+  setRobotVisual(visual: RobotVisualId): void {
+    this.robotVisual = visual;
+    for (const robot of MATCH_ROBOTS) {
+      const pose = this.state?.actors[robot.id];
+      if (pose)
+        this.state.actors[robot.id] = clampRobotToField(pose, this.robotVisual);
+    }
+  }
   blueAttackDirection: 1 | -1 = 1;
   attackDirection(team: MatchTeam) {
     return team === 'blue'
@@ -157,8 +168,10 @@ export class SoccerMatch {
   private trail: Pose[] = [];
   private trailTick = 0;
   private goalEntry: -1 | 1 | null = null;
-  private lastBoundaryPushers = new Map<string, string>();
+  private lastOpponentPushers = new Map<string, string>();
   private lastTouchedBall: string | null = null;
+  private lastBallTouchActor: string | null = null;
+  private ballPassageSerial = 0;
 
   constructor() {
     this.state = {
@@ -193,14 +206,30 @@ export class SoccerMatch {
     };
   }
 
-  /** Opponent whose outward drive caused this robot's current wall contact. */
+  /** Opponent currently driving through this robot with greater forward speed. */
   opponentPusher(robot: string) {
-    return this.lastBoundaryPushers.get(robot) ?? null;
+    return this.lastOpponentPushers.get(robot) ?? null;
   }
 
   /** Robot that most recently touched the ball during the last physics step. */
   get lastBallTouch() {
     return this.lastTouchedBall;
+  }
+
+  /**
+   * Changes on referee placement or when possession/touch passes to a different
+   * robot. It lets adjudication link a later goal to the same passage of play.
+   */
+  get ballPassageRevision() {
+    return this.ballPassageSerial;
+  }
+
+  private noteBallTouch(robot: string) {
+    this.lastTouchedBall = robot;
+    if (this.lastBallTouchActor !== robot) {
+      this.lastBallTouchActor = robot;
+      this.ballPassageSerial++;
+    }
   }
 
   ballTrail() {
@@ -224,8 +253,10 @@ export class SoccerMatch {
     this.stalledFor = 0;
     this.ballAnchor = { ...this.state.actors.ball };
     this.trail = [];
-    this.lastBoundaryPushers.clear();
+    this.lastOpponentPushers.clear();
     this.lastTouchedBall = null;
+    this.lastBallTouchActor = null;
+    this.ballPassageSerial++;
   }
 
   removeRobot(id: string) {
@@ -394,27 +425,14 @@ export class SoccerMatch {
     };
   }
 
-  private observeBoundaryPushes(
+  private observeOpponentPushes(
     activeRobots: ActorDefinition[],
     intendedVelocities: Record<string, { x: number; z: number }>,
   ) {
-    this.lastBoundaryPushers.clear();
-    const limitX = FIELD.floorHalfWidth - ROBOT_RADIUS;
-    const limitZ = FIELD.floorHalfLength - ROBOT_RADIUS;
+    this.lastOpponentPushers.clear();
     for (const victim of activeRobots) {
       const pose = this.state.actors[victim.id];
-      const walls = [
-        { gap: limitX - pose.x, x: 1, z: 0 },
-        { gap: limitX + pose.x, x: -1, z: 0 },
-        { gap: limitZ - pose.z, x: 0, z: 1 },
-        { gap: limitZ + pose.z, x: 0, z: -1 },
-      ].sort((first, second) => first.gap - second.gap);
-      const wall = walls[0];
-      if (wall.gap > 0.0002) continue;
-
       const victimVelocity = intendedVelocities[victim.id] ?? { x: 0, z: 0 };
-      const victimOutward =
-        victimVelocity.x * wall.x + victimVelocity.z * wall.z;
       let strongest: { id: string; pressure: number } | null = null;
       for (const candidate of activeRobots) {
         if (candidate.team === victim.team) continue;
@@ -424,23 +442,22 @@ export class SoccerMatch {
         const separation = Math.hypot(deltaX, deltaZ);
         if (separation > ROBOT_RADIUS * 2 + 0.0005) continue;
 
-        // The opponent must be behind the boundary robot and actively drive
-        // through it toward the wall. Nearby or tangential contact is not a push.
-        const outwardAlignment = deltaX * wall.x + deltaZ * wall.z;
-        const lateralAlignment = Math.abs(deltaX * wall.z - deltaZ * wall.x);
-        if (
-          outwardAlignment < ROBOT_RADIUS * 1.45 ||
-          lateralAlignment > ROBOT_RADIUS * 0.8
-        )
-          continue;
+        if (separation < 1e-9) continue;
+        // The opponent must actively drive through the victim. Project both
+        // intended velocities along their centre-to-centre contact normal so
+        // nearby, tangential, self-driven and same-speed motion is rejected.
+        const normalX = deltaX / separation;
+        const normalZ = deltaZ / separation;
         const velocity = intendedVelocities[candidate.id] ?? { x: 0, z: 0 };
-        const pusherOutward = velocity.x * wall.x + velocity.z * wall.z;
-        const pressure = pusherOutward - victimOutward;
-        if (pusherOutward < 0.08 || pressure < 0.06) continue;
+        const pusherForward = velocity.x * normalX + velocity.z * normalZ;
+        const victimForward =
+          victimVelocity.x * normalX + victimVelocity.z * normalZ;
+        const pressure = pusherForward - victimForward;
+        if (pusherForward < 0.08 || pressure < 0.06) continue;
         if (!strongest || pressure > strongest.pressure)
           strongest = { id: candidate.id, pressure };
       }
-      if (strongest) this.lastBoundaryPushers.set(victim.id, strongest.id);
+      if (strongest) this.lastOpponentPushers.set(victim.id, strongest.id);
     }
   }
 
@@ -592,7 +609,7 @@ export class SoccerMatch {
       }
       return;
     }
-    this.lastBoundaryPushers.clear();
+    this.lastOpponentPushers.clear();
     this.lastTouchedBall = null;
     this.state.elapsed = Math.min(settings.duration, this.state.elapsed + dt);
     if (this.state.elapsed >= settings.duration) {
@@ -665,17 +682,31 @@ export class SoccerMatch {
       const vz =
         (Math.cos(yaw) * input.forward - Math.sin(yaw) * input.strafe) * scale;
       intendedVelocities[robot.id] = { x: vx, z: vz };
-      const next = moveManualActor(activeRobots, this.state.actors, robot.id, {
-        x: pose.x + vx * dt,
-        z: pose.z + vz * dt,
-      })!;
+      const next = moveManualActor(
+        activeRobots,
+        this.state.actors,
+        robot.id,
+        {
+          x: pose.x + vx * dt,
+          z: pose.z + vz * dt,
+        },
+        {
+          fieldClamp: (position) => {
+            const clamped = clampRobotToField(
+              { ...position, yaw },
+              this.robotVisual,
+            );
+            return { x: clamped.x, z: clamped.z };
+          },
+        },
+      )!;
       velocities[robot.id] = {
         x: (next.x - pose.x) / dt,
         z: (next.z - pose.z) / dt,
       };
       this.state.actors[robot.id] = { ...next, yaw };
     }
-    this.observeBoundaryPushes(activeRobots, intendedVelocities);
+    this.observeOpponentPushes(activeRobots, intendedVelocities);
     this.state.ballOwner = null;
     for (const robot of activeRobots) {
       const pose = this.state.actors[robot.id];
@@ -691,7 +722,7 @@ export class SoccerMatch {
           x: Math.sin(pose.yaw) * 3,
           z: Math.cos(pose.yaw) * 3,
         };
-        this.lastTouchedBall = robot.id;
+        this.noteBallTouch(robot.id);
         this.cooldown = 0.32;
         break;
       }
@@ -714,7 +745,7 @@ export class SoccerMatch {
           z: velocities[robot.id].z + (targetZ - ball.z) * 18,
         };
         this.state.ballOwner = robot.id;
-        this.lastTouchedBall = robot.id;
+        this.noteBallTouch(robot.id);
         break;
       }
     }
@@ -736,7 +767,7 @@ export class SoccerMatch {
         const dz = ball.z - pose.z;
         const length = Math.hypot(dx, dz);
         if (length >= ROBOT_RADIUS + BALL_RADIUS) continue;
-        this.lastTouchedBall = robot.id;
+        this.noteBallTouch(robot.id);
         const nx = length > 1e-9 ? dx / length : Math.sin(pose.yaw);
         const nz = length > 1e-9 ? dz / length : Math.cos(pose.yaw);
         const correction = ROBOT_RADIUS + BALL_RADIUS - length;

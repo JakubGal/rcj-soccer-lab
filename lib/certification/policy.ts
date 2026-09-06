@@ -1,12 +1,14 @@
 import { TRAINING_TOPICS } from '@/lib/simulator/referee-training';
+import { LEARNING_SITUATIONS } from '@/lib/rulebook/learning';
+import { CERTIFICATION_ENGINE_VERSION } from './versions';
 
 export const CERTIFICATION_POLICY = {
-  policyVersion: 'rcj-soccer-2026-v1',
+  policyVersion: 'rcj-soccer-2026-v2',
   rulesetVersion: 'rcj-soccer-rules-2026',
-  engineVersion: 'referee-match-2026-v1',
-  ruleQuestionCount: 73,
+  engineVersion: CERTIFICATION_ENGINE_VERSION,
+  ruleQuestionCount: LEARNING_SITUATIONS.length,
   ruleFirstTryPercent: 95,
-  ruleFirstTryRequired: 70,
+  ruleFirstTryRequired: Math.ceil(LEARNING_SITUATIONS.length * 0.95),
   topics: TRAINING_TOPICS.map((topic) => topic.id),
   games: {
     step: {

@@ -38,6 +38,7 @@ import { AccountMenu, AcademyHub, useAccount } from '@/components/account';
 import type { CertificationGameLaunch } from '@/lib/account';
 import type { RefereeCertificationBridge } from '@/lib/certification/client-types';
 import { LEARNING_SITUATIONS } from '@/lib/rulebook/learning';
+import type { MatchReplay } from '@/lib/certification/replay';
 
 const tabs = [
   { id: 'rules', label: 'Rules', icon: BookOpen },
@@ -52,6 +53,7 @@ export function SimulatorApp() {
     account,
     beginCertificationGame,
     completeCertificationGame,
+    saveCertificationCheckpoint,
     practiceRuleLearningBridge,
     certificationRuleLearningBridge,
     practiceTrackingBridge,
@@ -63,6 +65,10 @@ export function SimulatorApp() {
   );
   const [certificationLaunch, setCertificationLaunch] =
     useState<CertificationGameLaunch | null>(null);
+  const [savedReview, setSavedReview] = useState<{
+    id: string;
+    replay: MatchReplay;
+  } | null>(null);
   const certificationRound = account?.certification ?? null;
   useEffect(() => {
     const restore = () => {
@@ -80,12 +86,12 @@ export function SimulatorApp() {
     };
   }, []);
   const navigate = useCallback(
-    (patch: Partial<AppNavigation>) => {
+    (patch: Partial<AppNavigation>, visual = robotVisual) => {
       const next = { ...nav, ...patch, embed: null };
       setNav(next);
       setVisited((current) => [...new Set([...current, next.mode])]);
       const url = new URL(window.location.href);
-      url.search = navigationSearch(next, robotVisual, locale);
+      url.search = navigationSearch(next, visual, locale);
       window.history.pushState(null, '', url);
     },
     [locale, nav, robotVisual],
@@ -116,11 +122,16 @@ export function SimulatorApp() {
   );
   const launchCertificationGame = useCallback(
     (launch: CertificationGameLaunch) => {
+      setSavedReview(null);
       setCertificationLaunch(launch);
-      navigate({
-        mode: 'referee',
-        certificationTrack: launch.mode,
-      });
+      if (launch.robotVisual) setRobotVisual(launch.robotVisual);
+      navigate(
+        {
+          mode: 'referee',
+          certificationTrack: launch.mode,
+        },
+        launch.robotVisual,
+      );
     },
     [navigate],
   );
@@ -132,7 +143,7 @@ export function SimulatorApp() {
     if (
       (track !== 'step' && track !== 'continuous') ||
       !round ||
-      round.status !== 'in-progress'
+      round.status === 'upgrade-required'
     )
       return undefined;
     const asAttempt = (launch: CertificationGameLaunch) => ({
@@ -140,6 +151,9 @@ export function SimulatorApp() {
       certificationRunId: round.id,
       mode: launch.mode,
       seed: launch.seed,
+      attemptNumber: launch.attemptNumber,
+      robotVisual: launch.robotVisual,
+      checkpoint: launch.checkpoint,
     });
     return {
       certificationRunId: round.id,
@@ -154,10 +168,12 @@ export function SimulatorApp() {
           roundId: round.id,
           mode: track,
           purpose: 'certification',
+          robotVisual,
         });
         setCertificationLaunch(launch);
         return asAttempt(launch);
       },
+      onCheckpoint: saveCertificationCheckpoint,
       onFinishAttempt: async (result) => {
         await completeCertificationGame(result.attemptId, {
           elapsedSeconds:
@@ -180,6 +196,8 @@ export function SimulatorApp() {
     certificationLaunch,
     completeCertificationGame,
     nav.certificationTrack,
+    robotVisual,
+    saveCertificationCheckpoint,
   ]);
   const changeRobotVisual = (value: RobotVisualId) => {
     setRobotVisual(value);
@@ -249,7 +267,10 @@ export function SimulatorApp() {
               size="sm"
               variant={nav.mode === id ? 'secondary' : 'ghost'}
               aria-pressed={nav.mode === id}
-              onClick={() => navigate({ mode: id, certificationTrack: null })}
+              onClick={() => {
+                setSavedReview(null);
+                navigate({ mode: id, certificationTrack: null });
+              }}
             >
               <Icon />
               <span>{label}</span>
@@ -263,6 +284,11 @@ export function SimulatorApp() {
               size="sm"
               aria-label="Robot visual style"
               value={robotVisual}
+              disabled={
+                Boolean(savedReview && nav.mode === 'referee') ||
+                (nav.certificationTrack !== null &&
+                  certificationRound?.status !== 'upgrade-required')
+              }
               onChange={(event) => {
                 if (isRobotVisualId(event.target.value))
                   changeRobotVisual(event.target.value);
@@ -337,14 +363,23 @@ export function SimulatorApp() {
       {visited.includes('referee') && (
         <RefereePlay
           key={
-            nav.certificationTrack === 'step' ||
-            nav.certificationTrack === 'continuous'
-              ? `certification:${nav.certificationTrack}`
-              : 'practice'
+            savedReview
+              ? `review:${savedReview.id}`
+              : nav.certificationTrack === 'step' ||
+                  nav.certificationTrack === 'continuous'
+                ? `certification:${nav.certificationTrack}`
+                : 'practice'
           }
           robotVisual={robotVisual}
+          savedReview={savedReview?.replay}
           active={nav.mode === 'referee'}
-          onExit={() => navigate({ mode: 'play', certificationTrack: null })}
+          onExit={() => {
+            setSavedReview(null);
+            navigate({
+              mode: savedReview ? 'academy' : 'play',
+              certificationTrack: null,
+            });
+          }}
           onOpenRule={openRule}
           tracking={practiceTrackingBridge}
           certification={certificationBridge}
@@ -358,6 +393,15 @@ export function SimulatorApp() {
           }
           onOpenRules={openCertificationRules}
           onLaunchGame={launchCertificationGame}
+          robotVisual={robotVisual}
+          onReviewGame={(id, replay) => {
+            setSavedReview({ id, replay });
+            setRobotVisual(replay.robotVisual);
+            navigate(
+              { mode: 'referee', certificationTrack: null },
+              replay.robotVisual,
+            );
+          }}
         />
       )}
     </main>

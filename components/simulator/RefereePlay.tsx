@@ -48,6 +48,7 @@ import { robotPenaltyOverlap } from '@/lib/simulator/referee-geometry';
 import { cn } from '@/lib/utils';
 import { useLocalization } from '@/components/i18n/LocalizationProvider';
 import { appendLocaleToSearch } from '@/lib/i18n';
+import { createResultSaveTracker } from '@/lib/account/result-save';
 import {
   CERTIFICATION_MATCH_DURATION_SECONDS,
   type RefereeCertificationAttempt,
@@ -59,6 +60,9 @@ import {
 import {
   MAX_MATCH_REPLAY_EVENTS,
   makeMatchReplay,
+  makeMatchReplayCheckpoint,
+  hydrateMatchReplay,
+  type MatchReplay,
   type MatchReplayEvent,
   type MatchReplayOperation,
 } from '@/lib/certification/replay';
@@ -127,8 +131,8 @@ const replayCaptureFor = (
   session,
   mode: attempt.mode,
   seed: attempt.seed,
-  initialRobotVisual: robotVisual,
-  events: [],
+  initialRobotVisual: attempt.checkpoint?.robotVisual ?? robotVisual,
+  events: attempt.checkpoint ? structuredClone(attempt.checkpoint.events) : [],
   overflow: false,
 });
 
@@ -139,6 +143,7 @@ export function RefereePlay({
   onOpenRule,
   tracking,
   certification,
+  savedReview,
 }: {
   robotVisual: RobotVisualId;
   onExit: () => void;
@@ -146,33 +151,57 @@ export function RefereePlay({
   onOpenRule?: (sectionId: string) => void;
   tracking?: RefereePracticeTrackingBridge;
   certification?: RefereeCertificationBridge;
+  savedReview?: MatchReplay;
 }) {
   const { locale } = useLocalization();
   const initialCertificationAttempt = certification?.attempt ?? null;
-  const initialMode = certification?.mode ?? 'step';
-  const initialDuration = certification
-    ? CERTIFICATION_MATCH_DURATION_SECONDS
-    : 180;
+  const initialMode = savedReview?.mode ?? certification?.mode ?? 'step';
+  const initialDuration =
+    certification || savedReview ? CERTIFICATION_MATCH_DURATION_SECONDS : 180;
   const initialSeed = initialCertificationAttempt?.seed ?? randomSeed();
   const [certificationAttempt, setCertificationAttempt] =
     useState<RefereeCertificationAttempt | null>(initialCertificationAttempt);
   const [practiceId, setPracticeId] = useState(practiceSessionId);
-  const [sessionKind, setSessionKind] = useState<'practice' | 'certification'>(
-    certification ? 'certification' : 'practice',
-  );
-  const [session, setSession] = useState(
-    () =>
+  const [sessionKind, setSessionKind] = useState<
+    'practice' | 'certification' | 'review'
+  >(savedReview ? 'review' : certification ? 'certification' : 'practice');
+  const [initialSession] = useState(() => {
+    const create = () =>
       new RefereeMatch(initialSeed, {
         preMatch: true,
-        robotVisual,
+        robotVisual: initialCertificationAttempt?.robotVisual ?? robotVisual,
         mode: initialMode,
         duration: initialDuration,
         topics: ALL_TRAINING_TOPICS,
-      }),
-  );
+        lockRobotVisual: Boolean(certification),
+      });
+    try {
+      const evidence = savedReview ?? initialCertificationAttempt?.checkpoint;
+      return {
+        session: evidence
+          ? hydrateMatchReplay(evidence, { recordMatchReplay: true })
+          : create(),
+        error: null,
+      };
+    } catch (error) {
+      return {
+        session: create(),
+        error:
+          error instanceof Error
+            ? error.message
+            : 'The recording could not be restored.',
+      };
+    }
+  });
+  const [session, setSession] = useState(initialSession.session);
+  const [restoreError, setRestoreError] = useState(initialSession.error);
   const replayCapture = useRef<ReplayCapture | null>(
     initialCertificationAttempt
-      ? replayCaptureFor(initialCertificationAttempt, session, robotVisual)
+      ? replayCaptureFor(
+          initialCertificationAttempt,
+          session,
+          session.robotVisual,
+        )
       : null,
   );
   const [mode, setMode] = useState<TrainingMode>(initialMode);
@@ -199,11 +228,15 @@ export function RefereePlay({
   const resultsHeading = useRef<HTMLHeadingElement>(null);
   const practiceStartsReported = useRef(new Set<string>());
   const practiceFinishesReported = useRef(new Set<string>());
-  const certificationFinishesReported = useRef(new Set<string>());
+  const certificationFinishesReported = useRef(createResultSaveTracker());
   const [startingCertification, setStartingCertification] = useState(false);
   const [certificationError, setCertificationError] = useState<string | null>(
     null,
   );
+  const [saveFailed, setSaveFailed] = useState(false);
+  const [saveRetry, setSaveRetry] = useState(0);
+  const [checkpointError, setCheckpointError] = useState<string | null>(null);
+  const checkpointSaveRef = useRef<(() => void) | null>(null);
   const recordReplayOperation = useCallback(
     (subject: RefereeMatch, operation: MatchReplayOperation) => {
       const capture = replayCapture.current;
@@ -217,6 +250,8 @@ export function RefereePlay({
         seq: capture.events.length,
         tick: subject.trainingTick,
       } as MatchReplayEvent);
+      if (operation.op !== 'end')
+        queueMicrotask(() => checkpointSaveRef.current?.());
     },
     [],
   );
@@ -242,13 +277,14 @@ export function RefereePlay({
       ? certificationAttempt
       : null;
   const certificationSessionReady =
-    !certification || Boolean(activeCertificationAttempt);
+    !restoreError && (!certification || Boolean(activeCertificationAttempt));
   const displayedMode = certification?.mode ?? mode;
   const displayedDuration = certification
     ? CERTIFICATION_MATCH_DURATION_SECONDS
     : duration;
   const displayedTopics = certification ? ALL_TRAINING_TOPICS : trainingTopics;
   const effectiveSpeed = certification ? 1 : speed;
+  const onCheckpoint = certification?.onCheckpoint;
 
   const installCertificationAttempt = useCallback(
     (attempt: RefereeCertificationAttempt) => {
@@ -265,14 +301,29 @@ export function RefereePlay({
         );
         return false;
       }
-      const next = new RefereeMatch(attempt.seed, {
-        preMatch: true,
-        robotVisual,
-        mode: attempt.mode,
-        duration: CERTIFICATION_MATCH_DURATION_SECONDS,
-        topics: ALL_TRAINING_TOPICS,
-      });
-      replayCapture.current = replayCaptureFor(attempt, next, robotVisual);
+      let next: RefereeMatch;
+      try {
+        next = attempt.checkpoint
+          ? hydrateMatchReplay(attempt.checkpoint, { recordMatchReplay: true })
+          : new RefereeMatch(attempt.seed, {
+              preMatch: true,
+              robotVisual: attempt.robotVisual ?? robotVisual,
+              mode: attempt.mode,
+              duration: CERTIFICATION_MATCH_DURATION_SECONDS,
+              topics: ALL_TRAINING_TOPICS,
+              lockRobotVisual: true,
+            });
+      } catch (error) {
+        const message =
+          error instanceof Error
+            ? error.message
+            : 'The recording could not be restored.';
+        setRestoreError(message);
+        setCertificationError(message);
+        setRunning(false);
+        return false;
+      }
+      replayCapture.current = replayCaptureFor(attempt, next, next.robotVisual);
       setReplay(null);
       setReplayKind(null);
       setReviewEventId(null);
@@ -288,6 +339,8 @@ export function RefereePlay({
       setTopic('random');
       setRunning(false);
       setCertificationError(null);
+      setRestoreError(null);
+      setSaveFailed(false);
       return true;
     },
     [certification, robotVisual],
@@ -317,7 +370,7 @@ export function RefereePlay({
   }, [certification, installCertificationAttempt, startingCertification]);
 
   useEffect(() => {
-    if (session.robotVisual !== robotVisual) {
+    if (sessionKind === 'practice' && session.robotVisual !== robotVisual) {
       session.setRobotVisual(robotVisual);
       recordReplayOperation(session, {
         op: 'set-robot-visual',
@@ -326,7 +379,72 @@ export function RefereePlay({
     }
     const update = requestAnimationFrame(sync);
     return () => cancelAnimationFrame(update);
-  }, [session, robotVisual, sync, recordReplayOperation]);
+  }, [session, sessionKind, robotVisual, sync, recordReplayOperation]);
+
+  useEffect(() => {
+    if (
+      sessionKind !== 'certification' ||
+      !activeCertificationAttempt ||
+      !onCheckpoint ||
+      restoreError
+    )
+      return;
+    let cancelled = false;
+    const save = () => {
+      const capture = replayCapture.current;
+      if (
+        !capture ||
+        capture.session !== session ||
+        capture.overflow ||
+        session.snapshot().sessionFinished
+      )
+        return;
+      try {
+        const checkpoint = makeMatchReplayCheckpoint({
+          mode: capture.mode,
+          seed: capture.seed,
+          robotVisual: capture.initialRobotVisual,
+          topics: [...ALL_TRAINING_TOPICS],
+          events: capture.events,
+          terminal: { tick: session.trainingTick, reason: 'checkpoint' },
+        });
+        void Promise.resolve(onCheckpoint(capture.attemptId, checkpoint))
+          .then(() => {
+            if (!cancelled) setCheckpointError(null);
+          })
+          .catch((error: unknown) => {
+            if (!cancelled)
+              setCheckpointError(
+                error instanceof Error
+                  ? error.message
+                  : 'Checkpoint could not be saved.',
+              );
+          });
+      } catch (error) {
+        if (!cancelled)
+          setCheckpointError(
+            error instanceof Error
+              ? error.message
+              : 'Checkpoint could not be saved.',
+          );
+      }
+    };
+    checkpointSaveRef.current = save;
+    const interval = window.setInterval(save, 3000);
+    save();
+    return () => {
+      save();
+      cancelled = true;
+      checkpointSaveRef.current = null;
+      window.clearInterval(interval);
+    };
+  }, [
+    session,
+    sessionKind,
+    onCheckpoint,
+    activeCertificationAttempt,
+    restoreError,
+  ]);
 
   useEffect(() => {
     const attempt = certification?.attempt;
@@ -417,14 +535,12 @@ export function RefereePlay({
       !certification ||
       !activeCertificationAttempt ||
       !frame.sessionFinished ||
+      saveFailed ||
       certificationFinishesReported.current.has(
         activeCertificationAttempt.attemptId,
       )
     )
       return;
-    certificationFinishesReported.current.add(
-      activeCertificationAttempt.attemptId,
-    );
     const simulatedSeconds = Math.max(
       0,
       CERTIFICATION_MATCH_DURATION_SECONDS - frame.trainingRemaining,
@@ -437,6 +553,7 @@ export function RefereePlay({
       capture.attemptId !== activeCertificationAttempt.attemptId ||
       capture.overflow
     ) {
+      setSaveFailed(true);
       setCertificationError(
         capture?.overflow
           ? 'This attempt contains too many actions to submit as certification evidence.'
@@ -467,6 +584,7 @@ export function RefereePlay({
         claimedReport: report,
       });
     } catch (error) {
+      setSaveFailed(true);
       setCertificationError(
         error instanceof Error
           ? `Certification evidence could not be prepared: ${error.message}`
@@ -487,15 +605,22 @@ export function RefereePlay({
       replay: replayEvidence,
       report,
     };
-    void Promise.resolve()
-      .then(() => certification.onFinishAttempt(result))
-      .catch((error: unknown) =>
+    void certificationFinishesReported.current
+      .save(activeCertificationAttempt.attemptId, () =>
+        certification.onFinishAttempt(result),
+      )
+      .then(() => {
+        setSaveFailed(false);
+        setCertificationError(null);
+      })
+      .catch((error: unknown) => {
+        setSaveFailed(true);
         setCertificationError(
           error instanceof Error
             ? error.message
             : 'The certification result could not be saved.',
-        ),
-      );
+        );
+      });
   }, [
     certification,
     activeCertificationAttempt,
@@ -504,7 +629,27 @@ export function RefereePlay({
     frame.trainingRemaining,
     session,
     sessionKind,
+    saveRetry,
+    saveFailed,
   ]);
+  useEffect(() => {
+    if (sessionKind !== 'certification') return;
+    const warn = (event: BeforeUnloadEvent) => {
+      if (
+        !session.snapshot().sessionFinished ||
+        saveFailed ||
+        (activeCertificationAttempt &&
+          !certificationFinishesReported.current.isSaved(
+            activeCertificationAttempt.attemptId,
+          ))
+      ) {
+        checkpointSaveRef.current?.();
+        event.preventDefault();
+      }
+    };
+    window.addEventListener('beforeunload', warn);
+    return () => window.removeEventListener('beforeunload', warn);
+  }, [session, sessionKind, saveFailed, activeCertificationAttempt]);
   const pause = useCallback(() => {
     if (replay) {
       setReplayRunning(false);
@@ -830,7 +975,7 @@ export function RefereePlay({
                   : 'Review the recorded play and make your own assessment.'
                 : frame.facts
           }
-          robotVisual={robotVisual}
+          robotVisual={session.robotVisual}
           selectedActorId={view.actors[target] ? target : null}
           onReady={onReady}
         />
@@ -971,7 +1116,7 @@ export function RefereePlay({
                       robotPenaltyOverlap(
                         view.actors[robot.id],
                         end,
-                        robotVisual,
+                        session.robotVisual,
                       ),
                     );
                     return (
@@ -1224,6 +1369,7 @@ export function RefereePlay({
           <details
             className="referee-details referee-session-setup"
             open={Boolean(frame.opening)}
+            hidden={sessionKind === 'review'}
           >
             <summary>
               {certification ? 'Certification attempt' : 'Match setup'} ·{' '}
@@ -1281,7 +1427,7 @@ export function RefereePlay({
             </fieldset>
             <p>
               {certification
-                ? 'Certification uses all topics, a server-issued shuffle, 10:00 of simulated play and 1× speed. Starting consumes one attempt. Hints and answer assistance are unavailable.'
+                ? 'Certification uses all topics, a reproducible shuffle, 10:00 of simulated play and 1× speed. The robot model is locked. Starting consumes one attempt; saved games can be resumed from Academy. Hints and answer assistance are unavailable.'
                 : displayedMode === 'continuous'
                   ? 'Selected faults develop during AI play. Every call you make is applied—even a wrong removal, goal, placement or early return—and evaluated privately after the match. Other natural incidents can still happen, but only selected topics affect your score.'
                   : 'The next practice drill comes from your selected topics. Each decision pauses in place.'}
@@ -1320,6 +1466,37 @@ export function RefereePlay({
               </>
             )}
           </details>
+          {restoreError && <p role="alert">{restoreError}</p>}
+          {checkpointError && (
+            <p role="alert">
+              {checkpointError} Keep this tab open and check browser storage.
+            </p>
+          )}
+          {saveFailed && (
+            <div
+              role="alert"
+              className="my-3 rounded-lg border border-amber-400/40 p-3"
+            >
+              <p>
+                {certificationError} Your result is still here. Retry saving
+                before leaving this page.
+              </p>
+              <Button
+                onClick={() => {
+                  setSaveFailed(false);
+                  setSaveRetry((value) => value + 1);
+                }}
+              >
+                Retry saving result
+              </Button>
+            </div>
+          )}
+          {sessionKind === 'review' && (
+            <p className="my-3 text-sm text-sky-200">
+              Saved game review. Replaying does not change your result or
+              consume an attempt.
+            </p>
+          )}
           <div className="my-3 flex flex-wrap items-center justify-between gap-2">
             <strong>
               {Math.floor(remainingSeconds / 60)}:
@@ -1665,20 +1842,20 @@ export function RefereePlay({
             <section className="referee-checkpoint" aria-live="polite">
               <h2>
                 {frame.kickoffReturns.length > 0
-                  ? 'Return ready robots before kickoff'
+                  ? 'Optional returns before kickoff'
                   : frame.canArrangeKickoff
                     ? 'Kickoff needs your signal'
                     : 'Next practice situation is ready'}
               </h2>
               <p>
                 {frame.kickoffReturns.length > 0
-                  ? 'Use Return in Off the field for each eligible robot. Then arrange the kickoff and give the start signal.'
+                  ? 'Eligible robots may return with your permission, or remain off the field. Arrange the kickoff when the teams are ready.'
                   : frame.canArrangeKickoff
                     ? 'Check any return requests, then arrange the kickoff. The field stays here until you press the button.'
                     : 'The match keeps playing. Start another situation when you want to load a new practice layout.'}
               </p>
               <Button
-                disabled={!ready || frame.kickoffReturns.length > 0}
+                disabled={!ready}
                 onClick={() => {
                   if (frame.canArrangeKickoff) {
                     if (session.arrangeKickoff()) {

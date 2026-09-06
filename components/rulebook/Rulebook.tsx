@@ -26,9 +26,11 @@ import {
   findSections,
   guideFor,
   sectionUrl,
+  sectionReference,
   type RuleSection,
 } from '@/lib/rulebook/catalog';
 import { clipsFor, RULE_CLIPS } from '@/lib/rulebook/animations';
+import { RULE_QUESTIONS } from '@/lib/rulebook/questions';
 import type { RobotVisualId } from '@/lib/simulator/robot-models';
 import { InspectionWorkbench } from './InspectionWorkbench';
 import { RuleAnimationPlayer } from './RuleAnimationPlayer';
@@ -51,6 +53,8 @@ import { REFEREE_CASES } from '@/lib/simulator/referee-cases';
 import { SCENARIOS } from '@/lib/simulator/scenarios';
 import { CaseLesson } from './CaseLesson';
 import { ScenarioLesson } from './ScenarioLesson';
+import { QuestionLesson } from './QuestionLesson';
+import { COMMITTEE_TRAINING_POLICY } from '@/lib/simulator/training-policy';
 import { useLocalization } from '@/components/i18n/LocalizationProvider';
 import { translateText } from '@/lib/i18n';
 import type { RuleLearningBridge } from '@/lib/certification/client-types';
@@ -431,7 +435,7 @@ export function Rulebook({
                       {completedSituationIds.includes(item.id) ? (
                         <Check aria-label="Check passed" />
                       ) : (
-                        section.number
+                        section.number || 'A'
                       )}
                     </span>
                     <span>
@@ -441,8 +445,10 @@ export function Rulebook({
                           ? 'Referee decisions'
                           : item.kind === 'scenario'
                             ? 'Explore & judge'
-                            : 'Replay & question'}{' '}
-                        · §{section.number}
+                            : item.kind === 'question'
+                              ? 'Knowledge check'
+                              : 'Replay & question'}{' '}
+                        · {sectionReference(section)}
                       </small>
                     </span>
                   </button>
@@ -671,7 +677,9 @@ export function Rulebook({
                             ? 'decision practice'
                             : item.kind === 'scenario'
                               ? 'detailed study'
-                              : 'guided replay'}
+                              : item.kind === 'question'
+                                ? 'knowledge check'
+                                : 'guided replay'}
                         </NativeSelectOption>
                       ))}
                     </NativeSelect>
@@ -743,6 +751,18 @@ export function Rulebook({
                     onLearningEvent={learning?.onEvent}
                   />
                 )}
+                {situation?.kind === 'question' && (
+                  <QuestionLesson
+                    key={`${learningContextKey}:${situation.id}`}
+                    item={RULE_QUESTIONS.find(
+                      (item) => item.id === situation.sourceId,
+                    )!}
+                    onPassed={passSituation}
+                    learningMode={learningMode}
+                    certificationRunId={certificationRunId}
+                    onLearningEvent={learning?.onEvent}
+                  />
+                )}
                 {guide === 'animation' && !situation && clips.length > 0 && (
                   <div className="rule-example-list">
                     {clips.map((clip) => (
@@ -802,10 +822,9 @@ export function Rulebook({
                 <div className="rule-guide-footnote">
                   <BookOpen />
                   <span>
-                    {RULE_CLIPS.length} authored gameplay examples across the
-                    main gameplay chapter. Complete rule coverage comes from the
-                    official documents; local amendments must be checked with
-                    your event.
+                    {COMMITTEE_TRAINING_POLICY.scope} {RULE_CLIPS.length}{' '}
+                    authored gameplay examples · {RULE_QUESTIONS.length}{' '}
+                    technical, safety and administration checks.
                   </span>
                 </div>
               </div>

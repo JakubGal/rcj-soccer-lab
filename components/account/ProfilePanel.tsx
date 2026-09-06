@@ -47,6 +47,7 @@ import {
 } from '@/components/ui/table';
 import { useLocalization } from '@/components/i18n/LocalizationProvider';
 import { useAccount } from './AccountProvider';
+import type { MatchReplay } from '@/lib/certification/replay';
 import { GitHubSubmissionPanel } from './GitHubSubmissionPanel';
 import {
   AccountAccessCard,
@@ -93,7 +94,11 @@ function MetricCard({
   );
 }
 
-export function ProfilePanel() {
+export function ProfilePanel({
+  onReviewGame,
+}: {
+  onReviewGame?: (id: string, replay: MatchReplay) => void;
+} = {}) {
   const { t } = useLocalization();
   const format = useAccountFormatting();
   const {
@@ -104,6 +109,7 @@ export function ProfilePanel() {
     updateProfile,
     exportProgress,
     importProgress,
+    getGameReplay,
   } = useAccount();
   const profile = account?.profile ?? null;
   const [editing, setEditing] = useState(false);
@@ -115,6 +121,17 @@ export function ProfilePanel() {
   const [backupError, setBackupError] = useState<string | null>(null);
   const [importing, setImporting] = useState(false);
   const [imported, setImported] = useState(false);
+  const reviewGame = async (id: string) => {
+    try {
+      onReviewGame?.(id, await getGameReplay(id));
+    } catch (caught) {
+      setBackupError(
+        caught instanceof Error
+          ? caught.message
+          : 'The recording could not be opened.',
+      );
+    }
+  };
 
   const restoreBackup = async (file: File) => {
     setImporting(true);
@@ -467,6 +484,7 @@ export function ProfilePanel() {
                     <TableHead>{t('Length')}</TableHead>
                     <TableHead>{t('Accuracy')}</TableHead>
                     <TableHead>{t('Date')}</TableHead>
+                    <TableHead>{t('Recording')}</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -483,6 +501,21 @@ export function ProfilePanel() {
                       </TableCell>
                       <TableCell data-i18n-skip>
                         {format.date(game.completedAt)}
+                      </TableCell>
+                      <TableCell>
+                        {game.canReview && onReviewGame && (
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => void reviewGame(game.id)}
+                          >
+                            {t(
+                              game.mode === 'step'
+                                ? 'Review summary'
+                                : 'Review game',
+                            )}
+                          </Button>
+                        )}
                       </TableCell>
                     </TableRow>
                   ))}

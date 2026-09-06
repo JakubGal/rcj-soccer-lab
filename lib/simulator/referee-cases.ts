@@ -5,6 +5,7 @@ import {
   type RuleScene,
 } from '../rulebook/animations';
 import type { Pose } from './types';
+import { COMMITTEE_TRAINING_POLICY } from './training-policy';
 
 export const REFEREE_ACTIONS = [
   { id: 'play-on', label: 'Play on', target: false, group: 'Play' },
@@ -189,8 +190,7 @@ export const REFEREE_CASES: RefereeCase[] = [
     facts:
       'Blue 2 has already been called out of bounds but is still on the field when Blue scores.',
     steps: [one('no-goal')[0], one('out', 'blue-2')[0]],
-    explanation:
-      'Disallow the penalized team’s goal while its out-of-bounds robot remains on the field, then remove that robot. A ball passage released by an out carrier also stays invalid after the robot is removed.',
+    explanation: `Disallow the penalized team’s goal while its out-of-bounds robot remains on the field, then remove that robot. ${COMMITTEE_TRAINING_POLICY.outCarrierPassage}`,
     anchor: 'out-of-bounds',
   },
   {
@@ -337,14 +337,14 @@ export const REFEREE_CASES: RefereeCase[] = [
   },
   {
     id: 'pushed-out',
-    title: 'Opponent-caused wall contact',
+    title: 'Opponent-caused wall contact · training policy',
     family: 'Out of bounds',
     clip: 'pushed-out',
     end: 2.5,
-    facts: 'Yellow 1 accidentally pushes Blue 1 into the wall.',
+    facts:
+      'Yellow 1 accidentally pushes Blue 1 into the wall. For this exercise, committee training policy v1 selects the permitted pushed-out waiver.',
     steps: one('waive-out', 'blue-1'),
-    explanation:
-      'Call pushed out, keep Blue 1 in the game, and make only the small correction needed to restore safe field clearance. The published rule describes the waiver as referee discretion; this trainer uses the committee’s requested keep-in-play decision.',
+    explanation: COMMITTEE_TRAINING_POLICY.pushedOut,
   },
   {
     id: 'ball-out',

@@ -32,12 +32,13 @@ function canonical(
 ) {
   if (
     !event.answer ||
-    !['clip', 'scenario', 'case'].includes(event.answer.kind)
+    !['clip', 'question', 'scenario', 'case'].includes(event.answer.kind)
   )
     return fail('Invalid rule answer.');
-  if (event.answer.kind === 'clip') return event.answer.selectedIndex;
+  if (event.answer.kind === 'clip' || event.answer.kind === 'question')
+    return event.answer.selectedIndex;
   if (event.answer.kind === 'scenario') return event.answer.choiceId;
-  return event.answer.calls;
+  return event.answer;
 }
 
 /** First observed answers/steps win. Claimed scores and firstAnswer flags never do. */
@@ -88,7 +89,7 @@ export function summarizeRuleEvidence(
       for (const step of prefix.steps)
         if (!entry.steps.has(step.index))
           entry.steps.set(step.index, step.correct);
-      entry.complete = entry.steps.size === prefix.totalSteps;
+      entry.complete ||= prefix.complete;
       entry.correct =
         entry.complete && [...entry.steps.values()].every(Boolean);
     } else if (!entry.complete) {
@@ -112,7 +113,7 @@ export function summarizeRuleEvidence(
     accuracy: completed.length
       ? Math.round((10000 * correctFirstTry) / completed.length) / 100
       : null,
-    requiredAccuracy: 95,
+    requiredAccuracy: CERTIFICATION_POLICY.ruleFirstTryPercent,
     passed:
       completed.length === CERTIFICATION_POLICY.ruleQuestionCount &&
       correctFirstTry >= CERTIFICATION_POLICY.ruleFirstTryRequired,
@@ -143,6 +144,10 @@ export async function validateSubmission(input: unknown) {
   };
   if (submission.kind === 'connect') return { profile };
   const round = submission.round;
+  if (round?.policyVersion !== CERTIFICATION_POLICY.policyVersion)
+    return fail(
+      'This round uses an older certification policy. Keep its saved history and start a new current-version round.',
+    );
   if (
     !round ||
     !uuid.test(round.id) ||
@@ -154,7 +159,7 @@ export async function validateSubmission(input: unknown) {
   const rules = summarizeRuleEvidence(round.ruleEvents, round.id);
   if (!rules.passed)
     return fail(
-      'The rules examination did not meet 70 of 73 correct first answers.',
+      `The rules examination did not meet ${CERTIFICATION_POLICY.ruleFirstTryRequired} of ${CERTIFICATION_POLICY.ruleQuestionCount} correct first answers.`,
     );
   if (!Array.isArray(round.games) || round.games.length > 13)
     return fail('Too many game attempts.');
@@ -209,7 +214,11 @@ export async function validateSubmission(input: unknown) {
       qualifying: verified.complete && result.qualifying,
     });
   }
-  if (qualifying.step < 5 || qualifying.continuous < 2)
+  if (
+    qualifying.step < CERTIFICATION_POLICY.games.step.requiredQualifying ||
+    qualifying.continuous <
+      CERTIFICATION_POLICY.games.continuous.requiredQualifying
+  )
     return fail(
       'The replayed games did not meet the certification requirements.',
     );

@@ -270,7 +270,7 @@ const legalDribblerChoices: RefereeChoice[] = [
   },
   {
     id: 'call-holding',
-    label: 'Stop play for ball holding',
+    label: 'Call ball holding and require the mechanism to be checked',
     grade: 'incorrect',
     score: 0,
     feedback:
@@ -297,11 +297,11 @@ const legalDribblerChoices: RefereeChoice[] = [
 const holdingChoices: RefereeChoice[] = [
   {
     id: 'call-holding',
-    label: 'Stop play for ball holding',
+    label: 'Call ball holding and require the mechanism to be checked',
     grade: 'correct',
     score: 1,
     feedback:
-      'Correct. The ball is trapped with almost no independent motion and remains unavailable during a genuine challenge.',
+      'Correct. The ball remains inaccessible during a genuine challenge. Require a compliant mechanism; this does not prescribe an automatic all-robot stoppage or an invented restart.',
   },
   {
     id: 'brief-observation',
@@ -367,19 +367,19 @@ const multipleDefenseChoices: RefereeChoice[] = [
 const pushingChoices: RefereeChoice[] = [
   {
     id: 'call-pushing',
-    label: 'Call pushing because the contact materially blocks play',
+    label: 'Call pushing under the penalty-area contact conditions',
     grade: 'correct',
     score: 1,
     feedback:
-      'Supported. From this angle the sustained drive can reasonably be judged to have created the disadvantage.',
+      'Supported. Opponents touch, at least one overlaps the penalty area, and at least one contacts the ball. Rule 2.6 leaves the pushing call to referee discretion.',
   },
   {
     id: 'play-on',
-    label: 'Play on because both robots contribute to the contact',
+    label: 'Exercise referee discretion and allow play to continue',
     grade: 'acceptable',
     score: 1,
     feedback:
-      'Also defensible. Pushing requires referee judgment; the balanced contact and continuing access to the ball support no call.',
+      'Also permitted. The conditions make a pushing call available, not automatic. The rule does not require proving blame or a material disadvantage.',
   },
   {
     id: 'automatic-contact-call',
@@ -387,7 +387,7 @@ const pushingChoices: RefereeChoice[] = [
     grade: 'incorrect',
     score: 0,
     feedback:
-      'Contact is an objective observation, but it is not an automatic pushing decision. Consider cause and effect on play.',
+      'Opponent contact alone is insufficient: check penalty-area overlap and ball contact. Even when those conditions are met, the pushing call remains discretionary.',
   },
   {
     id: 'guess-from-color',
@@ -395,7 +395,7 @@ const pushingChoices: RefereeChoice[] = [
     grade: 'incorrect',
     score: 0,
     feedback:
-      'Arrival order alone does not establish responsibility for the sustained contact shown here.',
+      'Arrival order is not a Rule 2.6 condition. Check the stated contact, ball and penalty-area conditions and exercise referee discretion.',
   },
 ];
 
@@ -406,7 +406,7 @@ const combinedChoices: RefereeChoice[] = [
     grade: 'correct',
     score: 1,
     feedback:
-      'Correct for this exercise. The contact may have caused the penalty-area arrangement, so resolve that judgment before applying the objective defense count.',
+      'When pushing and multiple defense occur together, resolve pushing first, then reassess multiple defense using the new ball position. This ordering does not require proving that one event caused the other.',
   },
   {
     id: 'defense-first',
@@ -414,7 +414,7 @@ const combinedChoices: RefereeChoice[] = [
     grade: 'partial',
     score: 0.45,
     feedback:
-      'You noticed the two defenders, but acting first can ignore that the judged pushing event created the situation.',
+      'You noticed the two defenders, but the rule resolves simultaneous pushing first. Moving the ball can change which defender is farther away.',
   },
   {
     id: 'call-both',
@@ -422,7 +422,7 @@ const combinedChoices: RefereeChoice[] = [
     grade: 'partial',
     score: 0.3,
     feedback:
-      'Both conditions deserve attention, but the sequence matters. First decide whether pushing caused the later geometry, then reassess.',
+      'Both conditions deserve attention, but the rule specifies an order: resolve pushing, then reassess multiple defense. A causal link between the two is not a prerequisite.',
   },
   {
     id: 'ignore-both',
@@ -780,7 +780,7 @@ export const SCENARIOS: ScenarioDefinition[] = [
     publicSummary:
       'Blue and yellow meet while both can play the ball. Their contact becomes sustained, but both keep driving. Camera angle and effect on play matter.',
     refereeCue:
-      'Separate facts from judgment: observe contact, drive directions and ball access, then decide whether one robot caused a material disadvantage.',
+      'Check opponent contact, at least one robot overlapping the penalty area, and at least one robot touching the ball. Then exercise referee discretion; blame and material disadvantage are not additional rule conditions.',
     duration: 10,
     actors: [
       robot('blue-1', 'Blue 1', 'blue', pose(-0.12, -1.02, 0), 1),
@@ -849,7 +849,7 @@ export const SCENARIOS: ScenarioDefinition[] = [
         },
         {
           kind: 'judgment',
-          text: 'Whether one robot caused a material disadvantage is intentionally ambiguous.',
+          text: 'The stated contact conditions allow a discretionary pushing call; they do not require one.',
         },
       ];
       return frame(
@@ -880,7 +880,7 @@ export const SCENARIOS: ScenarioDefinition[] = [
     },
     category: 'contact',
     publicSummary:
-      'A yellow attacker pushes a second blue robot into the blue penalty area. The result looks like multiple defense, but the preceding contact may have caused it.',
+      'Penalty-area contact and a two-defender arrangement occur together. If the contact is judged pushing, resolve it before multiple defense; the order does not depend on which event caused the other.',
     refereeCue:
       'Read the timeline, not one frozen frame. Decide the pushing question first, then reassess which objective conditions remain.',
     duration: 12,
@@ -951,7 +951,7 @@ export const SCENARIOS: ScenarioDefinition[] = [
         },
         {
           kind: 'judgment',
-          text: 'The referee must decide whether the contact caused the later defensive geometry.',
+          text: 'Judge pushing using its stated conditions. Simultaneous pushing is resolved before multiple defense without needing to prove a causal link.',
         },
         {
           kind: 'policy',
@@ -976,7 +976,7 @@ export const SCENARIOS: ScenarioDefinition[] = [
             twoDefenders ? '2' : '1',
             twoDefenders ? 'bad' : 'good',
           ),
-          causality: metric('Cause of entry', 'Requires judgment', 'warn'),
+          causality: metric('Pushing call', 'Referee judgment', 'warn'),
           priority: metric(
             'Training sequence',
             'Pushing → reassess',

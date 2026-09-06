@@ -1,12 +1,78 @@
 import assert from 'node:assert/strict';
 import { RefereeMatch } from '../lib/simulator/referee-match.ts';
 import { TRAINING_TOPICS } from '../lib/simulator/referee-training.ts';
+import { REFEREE_CASES } from '../lib/simulator/referee-cases.ts';
+import {
+  newCaseEvidence,
+  CASE_LESSON_SEED,
+} from '../lib/certification/case-evidence.ts';
 import {
   MATCH_REPLAY_DURATION_TICKS,
   makeMatchReplay,
 } from '../lib/certification/replay.ts';
 
 export const CERTIFICATION_TOPICS = TRAINING_TOPICS.map((topic) => topic.id);
+
+/** UI-equivalent watch/answer/continue trace. Engine keys are used only by tests. */
+export function makeCaseAnswer(
+  caseId,
+  { robotVisual = 'lab', wrongFirst = false, onAnswer } = {},
+) {
+  const item = REFEREE_CASES.find((candidate) => candidate.id === caseId);
+  assert.ok(item, caseId);
+  const session = new RefereeMatch(CASE_LESSON_SEED, {
+    robotVisual,
+    recordMatchReplay: false,
+  });
+  session.beginCase(item);
+  const evidence = newCaseEvidence(robotVisual),
+    calls = [],
+    seen = new Set();
+  let insertedWrong = false;
+  for (let tick = 0; tick < 120 * 90; tick++) {
+    const frame = session.snapshot();
+    if (frame.feedback) {
+      if (frame.feedback.final) return { kind: 'case', calls, evidence };
+      evidence.operations.push({ op: 'continue', tick: session.trainingTick });
+      session.continue();
+      continue;
+    }
+    if (frame.phase === 'evidence' || frame.count !== null) {
+      assert.ok(session.canAdvance, `${caseId} observation must advance`);
+      session.step();
+      continue;
+    }
+    const choice = session.acceptedCalls()[0];
+    assert.ok(choice, `${caseId} has a visible accepted call`);
+    const call =
+      wrongFirst && !insertedWrong
+        ? {
+            action: choice.action === 'goal' ? 'out' : 'goal',
+            target: 'yellow-1',
+          }
+        : {
+            action: choice.action,
+            ...(choice.target ? { target: choice.target } : {}),
+          };
+    if (wrongFirst) insertedWrong = true;
+    if (!seen.has(frame.help.step)) {
+      seen.add(frame.help.step);
+      calls.push(call);
+    }
+    evidence.operations.push({
+      op: 'call',
+      tick: session.trainingTick,
+      decisionKey: frame.decisionKey,
+      call,
+    });
+    assert.equal(session.submit(frame.decisionKey, call), true);
+    onAnswer?.(
+      structuredClone({ kind: 'case', calls, evidence }),
+      Boolean(session.snapshot().feedback?.final),
+    );
+  }
+  throw new Error(`Case ${caseId} did not finish in bounded simulated time`);
+}
 
 /** Test-only deterministic referee that produces qualifying replay fixtures. */
 export function makePerfectReplay(
@@ -87,9 +153,9 @@ export function makePerfectReplay(
     } else if (
       frame.count === null &&
       session.active &&
-      session.expected().length
+      session.acceptedCalls().length
     ) {
-      call(session.expected()[0]);
+      call(session.acceptedCalls()[0]);
       continue;
     }
 

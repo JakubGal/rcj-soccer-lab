@@ -22,7 +22,8 @@ Application: <https://jakubgal.github.io/rcj-soccer-lab/>
   numbers, game history/averages, and an opt-in signed training-referee directory.
 - Complete English, Slovak, German, and Japanese interface/catalogue support,
   including generated match feedback, referee reviews, quizzes, and embeds.
-- A situation library combining all 73 decision exercises, guided replays and
+- A situation library combining 105 decision exercises, guided replays,
+  technical/safety/administration questions and
   detailed studies with their matching official sections, questions and saved
   completion checks.
 - A Play mode with live 2v2 matches, manual driving, autonomous teams, and a
@@ -72,6 +73,7 @@ pnpm test:rules
 pnpm test:referee
 pnpm test:learning
 pnpm test:certification
+pnpm test:github
 pnpm test:i18n
 pnpm lint
 pnpm build
@@ -105,7 +107,7 @@ or the original public issues. Do not put children's private information here.
 
 A 2026 round requires:
 
-- All 73 rule questions, with at least 70 correct on the first recorded answer.
+- All 105 rule questions, with at least 100 correct on the first recorded answer.
 - Five complete 10-minute Step games at 90% or better, from at most eight starts.
 - Two complete 10-minute Continuous games at 80% or better, from at most five starts.
 
@@ -114,6 +116,32 @@ local attempt. Full restarts are unlimited and reset all round evidence together
 while keeping practice history and previous round summaries. Seeds are assigned
 deterministically from round ID, mode and attempt number to prevent reusing the
 same game recording in several attempt slots.
+
+Certification uses versioned assessment policy and replay evidence. Robot models
+are locked for an attempt, percentages are compared before rounding, and rule
+decisions are checked against the exact situation that was shown. The first
+recorded answer remains the first answer even after replaying a lesson.
+
+Active certification games save checkpoints on this device. Resume the same
+attempt from Academy after leaving or refreshing. Completed Continuous games have
+a read-only decision timeline and replay; Step games have a saved assessment
+summary. Saves can be retried after a storage error. Export
+a backup before clearing site data or changing browsers. Checkpoints are not cloud
+sync, and abrupt browser/device shutdown can lose the most recent unsaved seconds.
+
+The corrected examination is `rcj-soccer-2026-v2` (replay engine
+`referee-match-2026-v2`). Unfinished older rounds are read-only and require an
+explicit fresh-round restart. Existing practice history, older evidence in backups,
+and previously signed certificates are preserved; older recordings are not
+silently regraded using the new engine.
+
+The assessment covers main 2v2 Soccer, including 32 source-linked knowledge
+questions. It is not comprehensive Entry/SuperTeam or tournament-organizer
+qualification. The opponent-pushed robot return and out-carrier subsequent-goal
+decisions retain the committee training policy requested for this app and are
+labelled separately from published rule wording. A 10-minute training game is not
+a full official two-half match, and Step-mode teaching pauses intentionally differ
+from live refereeing. The planar simulator does not simulate ball height.
 
 Local success means **Ready for verification**, not certified. The final issue
 contains a gzip-compressed evidence packet. The reviewer runs trusted

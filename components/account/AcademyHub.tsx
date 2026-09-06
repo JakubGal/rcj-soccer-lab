@@ -1,5 +1,6 @@
 'use client';
 
+import { useEffect } from 'react';
 import { BadgeCheck, ShieldCheck, UserRound, UsersRound } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -9,20 +10,33 @@ import { useAccount } from './AccountProvider';
 import { CertificationPanel } from './CertificationPanel';
 import { CertifiedRefereesPanel } from './CertifiedRefereesPanel';
 import { ProfilePanel } from './ProfilePanel';
+import type { MatchReplay } from '@/lib/certification/replay';
+import type { RobotVisualId } from '@/lib/simulator/robot-models';
+import { COMMITTEE_TRAINING_POLICY } from '@/lib/simulator/training-policy';
 
 export function AcademyHub({
   page = 'profile',
   onPageChange,
   onOpenRules,
   onLaunchGame,
+  onReviewGame,
+  robotVisual,
 }: {
   page?: AcademyPage;
   onPageChange?: (page: AcademyPage) => void;
   onOpenRules?: (roundId: string) => void;
   onLaunchGame?: (launch: CertificationGameLaunch) => void;
+  onReviewGame?: (id: string, replay: MatchReplay) => void;
+  robotVisual?: RobotVisualId;
 }) {
   const { t } = useLocalization();
-  const { status, account } = useAccount();
+  const { status, account, refresh } = useAccount();
+  useEffect(() => {
+    // Checkpoint writes avoid expensive grading during play. Refresh the
+    // dashboard when it opens so its saved game lengths are current.
+    const frame = requestAnimationFrame(() => void refresh());
+    return () => cancelAnimationFrame(frame);
+  }, [refresh]);
   const effectivePage: AcademyPage =
     status !== 'authenticated' && page === 'profile' ? 'profile' : page;
   const roundStatus = account?.certification?.status;
@@ -72,6 +86,25 @@ export function AcademyHub({
             </div>
           )}
         </header>
+        <details className="rounded-xl border border-white/10 bg-[#101c28] p-4 text-sm leading-6">
+          <summary className="cursor-pointer font-medium">
+            {t('Certification scope and training policies')}
+          </summary>
+          <p className="mt-3 text-slate-300">
+            {t(COMMITTEE_TRAINING_POLICY.scope)}
+          </p>
+          <p className="mt-2 text-slate-300">
+            {t(COMMITTEE_TRAINING_POLICY.pushedOut)}
+          </p>
+          <p className="mt-2 text-slate-300">
+            {t(COMMITTEE_TRAINING_POLICY.outCarrierPassage)}
+          </p>
+          <p className="mt-2 text-slate-400">
+            {t(
+              'Ten-minute games are training sessions, not complete two-half matches. Pausing to make a decision is a training aid, not an official game-time stoppage.',
+            )}
+          </p>
+        </details>
 
         <Tabs
           value={effectivePage}
@@ -91,12 +124,14 @@ export function AcademyHub({
             </TabsList>
           </div>
           <TabsContent value="profile">
-            <ProfilePanel />
+            <ProfilePanel onReviewGame={onReviewGame} />
           </TabsContent>
           <TabsContent value="certification">
             <CertificationPanel
               onOpenRules={onOpenRules}
               onLaunchGame={onLaunchGame}
+              onReviewGame={onReviewGame}
+              robotVisual={robotVisual}
             />
           </TabsContent>
           <TabsContent value="referees">

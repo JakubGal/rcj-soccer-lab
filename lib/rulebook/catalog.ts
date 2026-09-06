@@ -55,6 +55,15 @@ export function sectionUrl(section: RuleSection) {
   return `${document.url}#${section.anchor}`;
 }
 
+/** Appendices have titles but no numeric section number in the official index. */
+export function sectionReference(section: RuleSection) {
+  if (section.number)
+    return /^\d/.test(section.number) ? `§${section.number}` : section.number;
+  if (section.title.startsWith('Appendix A:')) return 'Appendix A';
+  if (section.title.startsWith('Appendix B:')) return 'Appendix B';
+  return section.title;
+}
+
 export function findSections(
   query: string,
   document: string,

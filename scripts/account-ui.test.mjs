@@ -72,6 +72,7 @@ const { GitHubSubmissionPanel } =
   await import('../components/account/GitHubSubmissionPanel.tsx');
 const { ProfilePanel } = await import('../components/account/ProfilePanel.tsx');
 const { AcademyHub } = await import('../components/account/AcademyHub.tsx');
+const { CERTIFICATION_POLICY } = await import('../lib/certification/policy.ts');
 
 const noop = () => {};
 const timestamp = '2026-09-06T12:00:00.000Z';
@@ -125,7 +126,7 @@ function mockContext({
       },
       practice: {
         ruleChecksCompleted: 0,
-        ruleChecksTotal: 73,
+        ruleChecksTotal: CERTIFICATION_POLICY.ruleQuestionCount,
         refereeGamesPlayed: 0,
         stepGamesPlayed: 0,
         continuousGamesPlayed: 0,
@@ -138,13 +139,16 @@ function mockContext({
         number: 1,
         season: '2026',
         status: roundStatus,
+        policyVersion: CERTIFICATION_POLICY.policyVersion,
         startedAt: timestamp,
         completedAt: null,
         rules: {
-          total: 73,
-          answered: 73,
-          correctFirstTry: 70,
-          accuracy: (100 * 70) / 73,
+          total: CERTIFICATION_POLICY.ruleQuestionCount,
+          answered: CERTIFICATION_POLICY.ruleQuestionCount,
+          correctFirstTry: CERTIFICATION_POLICY.ruleFirstTryRequired,
+          accuracy:
+            (100 * CERTIFICATION_POLICY.ruleFirstTryRequired) /
+            CERTIFICATION_POLICY.ruleQuestionCount,
           requiredAccuracy: 95,
           passed: true,
           answeredQuestionIds: [],
@@ -314,4 +318,47 @@ test('academy headline never promotes local completion to certification', () => 
   const html = render(AcademyHub);
   assert.match(html, /Local profile/);
   assert.doesNotMatch(html, /Training certified|Signed in as|chatgpt/i);
+});
+
+test('step recordings are labelled Review summary while continuous recordings say Review game', () => {
+  for (const mode of ['step', 'continuous']) {
+    const context = mockContext();
+    const game = {
+      id: 'recorded-game',
+      mode,
+      attemptNumber: 1,
+      durationSeconds: 600,
+      accuracy: 90,
+      completed: true,
+      qualifying: true,
+      startedAt: timestamp,
+      completedAt: timestamp,
+      canReview: true,
+    };
+    context.account.certification[mode].attempts = [game];
+    context.account.recentGames = [game];
+    const expected = mode === 'step' ? />Review summary</ : />Review game</;
+    const unwanted = mode === 'step' ? />Review game</ : />Review summary</;
+    for (const component of [CertificationPanel, ProfilePanel]) {
+      const html = render(component, { onReviewGame: noop }, context);
+      assert.match(html, expected);
+      assert.doesNotMatch(html, unwanted);
+    }
+  }
+});
+
+test('a verified older round retains its certificate notice but cannot submit for the new examination', () => {
+  const context = mockContext({
+    roundStatus: 'qualified',
+    github: { request, receipt, connected: true },
+  });
+  context.account.certification.policyVersion = 'rcj-soccer-2026-v1';
+  const html = render(CertificationPanel, {}, context);
+  assert.match(html, /Training certification verified/);
+  assert.match(html, /Updated examination available/);
+  assert.match(html, /signed certificate are preserved/);
+  assert.doesNotMatch(
+    html,
+    /Prepare certification submission|Submit for verification/,
+  );
 });

@@ -1,5 +1,6 @@
 import { RULE_DOCUMENTS, RULE_SECTIONS, sectionUrl } from '../rulebook/catalog';
 import type { RefereeAction, RefereeCase } from './referee-cases';
+import { COMMITTEE_TRAINING_POLICY } from './training-policy';
 
 export type AppliedRule = {
   id: string;
@@ -41,7 +42,7 @@ const provisions = {
   out: ['out-of-bounds', 'Removal and waiting period'],
   outGoal: [
     'out-of-bounds',
-    'Scoring after an out carrier or while the penalized robot remains on field',
+    'Goals while the penalized robot remains on field',
   ],
   outReturn: ['out-of-bounds', 'Return position and direction'],
   pushed: ['out-of-bounds', 'Opponent-caused contact and pushed-out waiver'],
@@ -83,6 +84,11 @@ function reference(key: Provision): AppliedRule {
     ...(key === 'multiple'
       ? { quote: 'at least partially in a penalty area' }
       : {}),
+    ...(key === 'outGoal'
+      ? { note: COMMITTEE_TRAINING_POLICY.outCarrierPassage }
+      : key === 'pushed'
+        ? { note: COMMITTEE_TRAINING_POLICY.pushedOut }
+        : {}),
   };
 }
 function penaltyLine(): AppliedRule {

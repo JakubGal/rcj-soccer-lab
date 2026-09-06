@@ -6,9 +6,10 @@ import {
   type TrainingTopic,
 } from '../simulator/referee-training';
 import { isRobotVisualId, type RobotVisualId } from '../simulator/robot-models';
+import { CERTIFICATION_ENGINE_VERSION } from './versions';
 
 export const MATCH_REPLAY_SCHEMA = 'rcj-match-replay/v1' as const;
-export const MATCH_REPLAY_ENGINE_VERSION = 'referee-match-2026-v1' as const;
+export const MATCH_REPLAY_ENGINE_VERSION = CERTIFICATION_ENGINE_VERSION;
 export const MATCH_REPLAY_TICK_RATE = 120 as const;
 export const MATCH_REPLAY_DURATION_SECONDS = 600 as const;
 export const MATCH_REPLAY_DURATION_TICKS =
@@ -68,6 +69,17 @@ export type MatchReplay = {
 
 export type MatchReplayInput = Omit<
   MatchReplay,
+  'schema' | 'engineVersion' | 'durationSeconds'
+>;
+/** Device-local recovery only. A checkpoint is never accepted as a completed game. */
+export type MatchReplayCheckpoint = Omit<
+  MatchReplay,
+  'terminal' | 'claimedReport'
+> & {
+  terminal: { tick: number; reason: 'checkpoint' };
+};
+export type MatchReplayCheckpointInput = Omit<
+  MatchReplayCheckpoint,
   'schema' | 'engineVersion' | 'durationSeconds'
 >;
 
@@ -282,17 +294,19 @@ const validateEvent = (value: unknown, index: number): MatchReplayEvent => {
     return { ...base, op, reveal };
   }
   if (op === 'set-robot-visual') {
-    requireKeys(event, [...eventKeys, 'robotVisual'], `events[${index}]`);
-    const robotVisual = event.robotVisual;
-    if (!isRobotVisualId(robotVisual))
-      return fail('invalid_replay', `events[${index}].robotVisual is invalid.`);
-    return { ...base, op, robotVisual };
+    return fail(
+      'invalid_replay',
+      'The robot model is locked for the whole certification attempt.',
+    );
   }
   return fail('unknown_operation', `events[${index}].op is not known.`);
 };
 
 /** Parse, bound and canonicalize untrusted replay JSON before simulation. */
-export function validateMatchReplay(value: unknown): MatchReplay {
+function validateReplay(
+  value: unknown,
+  allowCheckpoint = false,
+): MatchReplay | MatchReplayCheckpoint {
   let jsonBytes: number;
   try {
     jsonBytes = new TextEncoder().encode(JSON.stringify(value)).byteLength;
@@ -376,7 +390,11 @@ export function validateMatchReplay(value: unknown): MatchReplay {
     'terminal.tick',
   );
   const reason = terminal.reason;
-  if (reason !== 'full-time' && reason !== 'ended-early')
+  if (
+    reason !== 'full-time' &&
+    reason !== 'ended-early' &&
+    !(allowCheckpoint && reason === 'checkpoint')
+  )
     return fail('invalid_replay', 'terminal.reason is invalid.');
   if (events.some((event) => event.tick > terminalTick))
     fail('invalid_replay', 'Replay contains an event after its terminal tick.');
@@ -386,6 +404,12 @@ export function validateMatchReplay(value: unknown): MatchReplay {
       fail(
         'invalid_replay',
         'A full-time replay must reach exactly 600 seconds without an early end event.',
+      );
+  } else if (reason === 'checkpoint') {
+    if (terminalTick >= MATCH_REPLAY_DURATION_TICKS || endEvents.length)
+      fail(
+        'invalid_replay',
+        'A checkpoint must be unfinished and contain no end event.',
       );
   } else {
     const last = events.at(-1);
@@ -410,11 +434,35 @@ export function validateMatchReplay(value: unknown): MatchReplay {
     durationSeconds: MATCH_REPLAY_DURATION_SECONDS,
     topics: [...allTopics],
     events,
-    terminal: { tick: terminalTick, reason },
+    terminal: { tick: terminalTick, reason } as
+      | MatchReplay['terminal']
+      | MatchReplayCheckpoint['terminal'],
     ...(replay.claimedReport === undefined
       ? {}
       : { claimedReport: validateReport(replay.claimedReport) }),
-  };
+  } as MatchReplay | MatchReplayCheckpoint;
+}
+
+export function validateMatchReplay(value: unknown): MatchReplay {
+  return validateReplay(value) as MatchReplay;
+}
+export function validateMatchReplayCheckpoint(
+  value: unknown,
+): MatchReplayCheckpoint {
+  const replay = validateReplay(value, true);
+  if (replay.terminal.reason !== 'checkpoint')
+    fail('invalid_replay', 'Expected an unfinished checkpoint.');
+  return replay as MatchReplayCheckpoint;
+}
+export function makeMatchReplayCheckpoint(
+  input: MatchReplayCheckpointInput,
+): MatchReplayCheckpoint {
+  return validateMatchReplayCheckpoint({
+    schema: MATCH_REPLAY_SCHEMA,
+    engineVersion: MATCH_REPLAY_ENGINE_VERSION,
+    durationSeconds: MATCH_REPLAY_DURATION_SECONDS,
+    ...input,
+  });
 }
 
 /** Create canonical bounded evidence from a browser-side capture. */
@@ -508,15 +556,22 @@ const applyEvent = (session: RefereeMatch, event: MatchReplayEvent) => {
  * Re-run untrusted evidence with the pinned deterministic engine. Client score
  * counters are intentionally ignored; only the replayed engine report is used.
  */
-export function verifyMatchReplay(value: unknown): VerifiedMatchReplay {
-  const replay = validateMatchReplay(value);
+export function hydrateMatchReplay(
+  value: MatchReplay | MatchReplayCheckpoint,
+  options: { recordMatchReplay?: boolean } = {},
+): RefereeMatch {
+  const replay =
+    value.terminal.reason === 'checkpoint'
+      ? validateMatchReplayCheckpoint(value)
+      : validateMatchReplay(value);
   const session = new RefereeMatch(replay.seed, {
     preMatch: true,
     robotVisual: replay.robotVisual,
+    lockRobotVisual: true,
     mode: replay.mode,
     duration: MATCH_REPLAY_DURATION_SECONDS,
     topics: replay.topics,
-    recordMatchReplay: false,
+    recordMatchReplay: options.recordMatchReplay ?? false,
   });
 
   for (const event of replay.events) {
@@ -542,12 +597,23 @@ export function verifyMatchReplay(value: unknown): VerifiedMatchReplay {
   }
 
   const frame = session.snapshot();
-  if (session.trainingTick !== replay.terminal.tick || !frame.sessionFinished)
+  if (
+    session.trainingTick !== replay.terminal.tick ||
+    (replay.terminal.reason === 'checkpoint'
+      ? frame.sessionFinished
+      : !frame.sessionFinished)
+  )
     fail(
       'state_diverged',
       'Replay did not finish at its declared terminal tick.',
     );
-  const report = frame.report;
+  return session;
+}
+
+export function verifyMatchReplay(value: unknown): VerifiedMatchReplay {
+  const replay = validateMatchReplay(value);
+  const session = hydrateMatchReplay(replay);
+  const report = session.snapshot().report;
   return {
     mode: replay.mode,
     seed: replay.seed,

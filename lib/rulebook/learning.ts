@@ -1,5 +1,6 @@
 import { RULE_SECTIONS } from './catalog';
 import { RULE_CLIPS } from './animations';
+import { RULE_QUESTIONS } from './questions';
 import { SCENARIOS } from '../simulator/scenarios';
 import {
   REFEREE_CASES,
@@ -10,7 +11,7 @@ import {
 export type LearningSituation = {
   id: string;
   sourceId: string;
-  kind: 'case' | 'clip' | 'scenario';
+  kind: 'case' | 'clip' | 'scenario' | 'question';
   title: string;
   sectionId: string;
 };
@@ -41,6 +42,13 @@ export const LEARNING_SITUATIONS: LearningSituation[] = [
     kind: 'scenario' as const,
     title: item.shortTitle,
     sectionId: sectionFor(item.ruleRef.url),
+  })),
+  ...RULE_QUESTIONS.map((item) => ({
+    id: `question:${item.id}`,
+    sourceId: item.id,
+    kind: 'question' as const,
+    title: item.title,
+    sectionId: sectionFor(`#${item.anchor}`),
   })),
 ];
 export const LEARNING_PROGRESS_KEY = 'rcj-rule-checks-2026-v1';

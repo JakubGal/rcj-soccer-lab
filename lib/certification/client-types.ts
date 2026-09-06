@@ -3,16 +3,19 @@ import type {
   TrainingTopic,
 } from '@/lib/simulator/referee-training';
 import type { RefereeCall } from '@/lib/simulator/referee-cases';
-import type { MatchReplay } from './replay';
+import type { MatchReplay, MatchReplayCheckpoint } from './replay';
+import type { RobotVisualId } from '@/lib/simulator/robot-models';
+import type { CaseEvidence } from './case-evidence';
 
 export type MaybePromise<T> = T | Promise<T>;
 
 export type RuleLearningMode = 'practice' | 'certification';
-export type RuleLearningKind = 'case' | 'clip' | 'scenario';
+export type RuleLearningKind = 'case' | 'clip' | 'scenario' | 'question';
 export type CanonicalRuleAnswer =
   | { kind: 'clip'; selectedIndex: number }
+  | { kind: 'question'; selectedIndex: number }
   | { kind: 'scenario'; choiceId: string }
-  | { kind: 'case'; calls: RefereeCall[] };
+  | { kind: 'case'; calls: RefereeCall[]; evidence?: CaseEvidence };
 
 /**
  * Browser-side learning telemetry. The server remains authoritative: answer
@@ -73,10 +76,12 @@ export type RefereeCertificationAttempt = {
   attemptId: string;
   certificationRunId: string;
   mode: TrainingMode;
-  /** The attempt seed must be issued by the server, never chosen in the UI. */
+  /** Derived from the round and attempt; independently checked by the issuer. */
   seed: number;
   attemptNumber?: number;
   maxAttempts?: number;
+  robotVisual?: RobotVisualId;
+  checkpoint?: MatchReplayCheckpoint;
 };
 
 export type RefereeCertificationStartRequest = {
@@ -145,5 +150,9 @@ export type RefereeCertificationBridge = {
   ) => MaybePromise<RefereeCertificationAttempt>;
   onFinishAttempt: (
     result: RefereeCertificationFinishPayload,
+  ) => MaybePromise<void>;
+  onCheckpoint?: (
+    attemptId: string,
+    checkpoint: MatchReplayCheckpoint,
   ) => MaybePromise<void>;
 };

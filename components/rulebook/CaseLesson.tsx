@@ -16,9 +16,22 @@ import type {
   RuleLearningEvent,
   RuleLearningMode,
 } from '@/lib/certification/client-types';
+import {
+  newCaseEvidence,
+  CASE_LESSON_SEED,
+  MAX_CASE_EVIDENCE_OPERATIONS,
+  type CaseEvidenceOperation,
+} from '@/lib/certification/case-evidence';
 
-function startLesson(item: RefereeCase, visual: RobotVisualId) {
-  const session = new RefereeMatch(2026, { robotVisual: visual });
+function startLesson(
+  item: RefereeCase,
+  visual: RobotVisualId,
+  lockRobotVisual = false,
+) {
+  const session = new RefereeMatch(CASE_LESSON_SEED, {
+    robotVisual: visual,
+    lockRobotVisual,
+  });
   session.beginCase(item);
   return session;
 }
@@ -37,7 +50,56 @@ export function CaseLesson({
   certificationRunId?: string | null;
   onLearningEvent?: (event: RuleLearningEvent) => void | Promise<void>;
 }) {
-  const [session, setSession] = useState(() => startLesson(item, robotVisual));
+  const [initialRobotVisual] = useState(robotVisual);
+  const lockedRobotVisual =
+    learningMode === 'certification' ? initialRobotVisual : robotVisual;
+  const [session, setSession] = useState(() =>
+    startLesson(item, lockedRobotVisual, learningMode === 'certification'),
+  );
+  const evidence = useRef(newCaseEvidence(initialRobotVisual));
+  const [evidenceError, setEvidenceError] = useState<string | null>(null);
+  const pendingLearningEvents = useRef<RuleLearningEvent[]>([]);
+  const savingLearning = useRef(false);
+  const [learningSaveError, setLearningSaveError] = useState<string | null>(
+    null,
+  );
+  const [learningSavePending, setLearningSavePending] = useState(false);
+  const flushLearningEvents = async () => {
+    if (savingLearning.current) return;
+    savingLearning.current = true;
+    setLearningSavePending(true);
+    setLearningSaveError(null);
+    try {
+      while (pendingLearningEvents.current.length) {
+        await onLearningEvent?.(pendingLearningEvents.current[0]);
+        pendingLearningEvents.current.shift();
+      }
+    } catch (error) {
+      setLearningSaveError(
+        error instanceof Error
+          ? error.message
+          : 'Your first answer could not be saved.',
+      );
+    } finally {
+      savingLearning.current = false;
+      setLearningSavePending(false);
+    }
+  };
+  const queueLearningEvent = (event: RuleLearningEvent) => {
+    pendingLearningEvents.current.push(event);
+    void flushLearningEvents();
+  };
+  const recordOperation = (operation: CaseEvidenceOperation) => {
+    if (learningMode !== 'certification') return true;
+    if (evidence.current.operations.length >= MAX_CASE_EVIDENCE_OPERATIONS) {
+      setEvidenceError(
+        'This lesson recording reached its safe action limit. Your first answers remain saved; return to this lesson to continue.',
+      );
+      return false;
+    }
+    evidence.current.operations.push(operation);
+    return true;
+  };
   const [frame, setFrame] = useState(() => session.snapshot());
   const [playing, setPlaying] = useState(false);
   const [ready, setReady] = useState(false);
@@ -57,8 +119,8 @@ export function CaseLesson({
     [frame.help, frame.decisionKey, item.id],
   );
   useEffect(() => {
-    session.setRobotVisual(robotVisual);
-  }, [session, robotVisual]);
+    if (learningMode !== 'certification') session.setRobotVisual(robotVisual);
+  }, [session, robotVisual, learningMode]);
   useEffect(() => {
     if (!playing) return;
     let raf = 0,
@@ -83,14 +145,30 @@ export function CaseLesson({
     return () => cancelAnimationFrame(raf);
   }, [playing, session]);
   const submit = (choice: RefereeCall) => {
+    const cleanCall: RefereeCall = {
+      action: choice.action,
+      ...(choice.target ? { target: choice.target } : {}),
+    };
+    if (
+      !recordOperation({
+        op: 'call',
+        tick: session.trainingTick,
+        decisionKey: frame.decisionKey,
+        call: cleanCall,
+      })
+    )
+      return;
     const decisionId = frame.decisionKey;
+    if (!session.submit(decisionId, cleanCall)) {
+      if (learningMode === 'certification') evidence.current.operations.pop();
+      return;
+    }
     const attemptNumber = (decisionAttempts.current.get(decisionId) ?? 0) + 1;
     decisionAttempts.current.set(decisionId, attemptNumber);
     if (!firstDecisionIds.current.has(decisionId)) {
       firstDecisionIds.current.add(decisionId);
-      firstCalls.current.push({ ...choice });
+      firstCalls.current.push(cleanCall);
     }
-    session.submit(frame.decisionKey, choice);
     const next = session.snapshot();
     setFrame(next);
     setPlaying(false);
@@ -99,7 +177,7 @@ export function CaseLesson({
     );
     if (!accepted) firstTryCorrect.current = false;
     const questionId = `case:${item.id}`;
-    void onLearningEvent?.({
+    queueLearningEvent({
       type: 'answer',
       mode: learningMode,
       certificationRunId,
@@ -110,6 +188,9 @@ export function CaseLesson({
       answer: {
         kind: 'case',
         calls: firstCalls.current.map((call) => ({ ...call })),
+        ...(learningMode === 'certification'
+          ? { evidence: structuredClone(evidence.current) }
+          : {}),
       },
       attemptNumber,
       firstAnswer: attemptNumber === 1,
@@ -125,7 +206,7 @@ export function CaseLesson({
       onPassed();
       if (!completionReported.current) {
         completionReported.current = true;
-        void onLearningEvent?.({
+        queueLearningEvent({
           type: 'complete',
           mode: learningMode,
           certificationRunId,
@@ -135,6 +216,9 @@ export function CaseLesson({
           answer: {
             kind: 'case',
             calls: firstCalls.current.map((call) => ({ ...call })),
+            ...(learningMode === 'certification'
+              ? { evidence: structuredClone(evidence.current) }
+              : {}),
           },
           firstTryCorrect: firstTryCorrect.current && !assisted.current,
           assisted: assisted.current,
@@ -157,7 +241,7 @@ export function CaseLesson({
           damageCue={frame.damage}
           motionStopped={!playing}
           cameraPreset="overhead"
-          robotVisual={robotVisual}
+          robotVisual={lockedRobotVisual}
           showRuleGeometry
           showPenaltyEvidence={frame.penaltyEvidence}
           showBallTrail
@@ -181,7 +265,13 @@ export function CaseLesson({
       </div>
       <div className="rule-player-controls rule-case-controls">
         <Button
-          disabled={!ready || !frame.canAdvance || Boolean(feedback)}
+          disabled={
+            !ready ||
+            !frame.canAdvance ||
+            Boolean(feedback) ||
+            learningSavePending ||
+            Boolean(learningSaveError)
+          }
           onClick={() => setPlaying((value) => !value)}
         >
           {playing ? <Pause /> : <Play />}
@@ -193,9 +283,15 @@ export function CaseLesson({
         </Button>
         <Button
           variant="outline"
-          disabled={!ready}
+          disabled={!ready || learningSavePending || Boolean(learningSaveError)}
           onClick={() => {
-            const next = startLesson(item, robotVisual);
+            if (!recordOperation({ op: 'restart', tick: session.trainingTick }))
+              return;
+            const next = startLesson(
+              item,
+              lockedRobotVisual,
+              learningMode === 'certification',
+            );
             setSession(next);
             setFrame(next.snapshot());
             setPlaying(true);
@@ -206,6 +302,19 @@ export function CaseLesson({
         </Button>
       </div>
       <p className="lesson-observation">{frame.facts}</p>
+      {evidenceError && <p role="alert">{evidenceError}</p>}
+      {learningSaveError && (
+        <div role="alert">
+          <p>
+            {learningSaveError} Keep this lesson open and retry so your first
+            answer is not lost.
+          </p>
+          <Button onClick={() => void flushLearningEvents()}>
+            Retry saving answer
+          </Button>
+        </div>
+      )}
+      {learningSavePending && <output>Saving your answer…</output>}
       <section
         className="rule-question"
         aria-label="Situation checking question"
@@ -229,7 +338,9 @@ export function CaseLesson({
                 <Button
                   key={`${choice.action}:${choice.target}`}
                   variant="outline"
-                  disabled={!ready}
+                  disabled={
+                    !ready || learningSavePending || Boolean(learningSaveError)
+                  }
                   onClick={() => submit(choice)}
                 >
                   {label(choice)}
@@ -265,7 +376,15 @@ export function CaseLesson({
             )}
             {!feedback.final && (
               <Button
+                disabled={learningSavePending || Boolean(learningSaveError)}
                 onClick={() => {
+                  if (
+                    !recordOperation({
+                      op: 'continue',
+                      tick: session.trainingTick,
+                    })
+                  )
+                    return;
                   session.continue();
                   setFrame(session.snapshot());
                   setPlaying(session.canAdvance);
@@ -284,7 +403,7 @@ export function CaseLesson({
             onClick={() => {
               assisted.current = true;
               firstTryCorrect.current = false;
-              void onLearningEvent?.({
+              queueLearningEvent({
                 type: 'assistance',
                 mode: learningMode,
                 certificationRunId,

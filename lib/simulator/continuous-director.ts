@@ -6,6 +6,7 @@ import {
   type SoccerMatch,
 } from './match';
 import { RCJ_FIELD_DERIVED as FIELD } from './field-spec';
+import { robotTouchesFieldWall } from './referee-geometry';
 import type { Pose } from './types';
 import type { TrainingTopic } from './referee-training';
 
@@ -102,10 +103,15 @@ export class ContinuousDirector {
     };
     if (plan.topic === 'out') {
       const destination = {
-        x: plan.side * (FIELD.floorHalfWidth - 0.1),
+        // Aim through the wall; body-aware match physics stops the selected
+        // model at actual contact, regardless of its yaw or footprint.
+        x: plan.side * FIELD.floorHalfWidth,
         z: Math.max(-0.65, Math.min(0.65, poses[plan.robot].z)),
       };
-      if (distance(poses[plan.robot], destination) < 0.012 && !plan.reached)
+      if (
+        robotTouchesFieldWall(poses[plan.robot], match.robotVisual, 0.0005) &&
+        !plan.reached
+      )
         plan.reached = plan.elapsed;
       // The robot touches the wall, hesitates, then drives back if the referee misses it.
       drive(

@@ -46,12 +46,15 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import { useLocalization } from '@/components/i18n/LocalizationProvider';
+import { CERTIFICATION_POLICY } from '@/lib/certification/policy';
 import type {
   CertificationGameLaunch,
   CertificationMode,
   GameCertificationProgress,
 } from '@/lib/account';
 import { useAccount } from './AccountProvider';
+import type { MatchReplay } from '@/lib/certification/replay';
+import type { RobotVisualId } from '@/lib/simulator/robot-models';
 import { GitHubSubmissionPanel } from './GitHubSubmissionPanel';
 import {
   AccountAccessCard,
@@ -107,7 +110,17 @@ function RequirementCard({
   );
 }
 
-function AttemptTable({ track }: { track: GameCertificationProgress }) {
+function AttemptTable({
+  track,
+  onResume,
+  onReview,
+  busy,
+}: {
+  track: GameCertificationProgress;
+  onResume: (id: string) => void;
+  onReview: (id: string) => void;
+  busy: boolean;
+}) {
   const { t } = useLocalization();
   const format = useAccountFormatting();
   if (!track.attempts.length)
@@ -125,6 +138,7 @@ function AttemptTable({ track }: { track: GameCertificationProgress }) {
           <TableHead>{t('Accuracy')}</TableHead>
           <TableHead>{t('Decision')}</TableHead>
           <TableHead>{t('Date')}</TableHead>
+          <TableHead>{t('Recording')}</TableHead>
         </TableRow>
       </TableHeader>
       <TableBody>
@@ -147,16 +161,40 @@ function AttemptTable({ track }: { track: GameCertificationProgress }) {
                 }
               >
                 {t(
-                  attempt.qualifying
-                    ? 'Qualifying'
-                    : attempt.completed
-                      ? 'Below target'
-                      : 'Incomplete',
+                  attempt.inProgress
+                    ? 'In progress'
+                    : attempt.qualifying
+                      ? 'Qualifying'
+                      : attempt.completed
+                        ? 'Below target'
+                        : 'Incomplete',
                 )}
               </Badge>
             </TableCell>
             <TableCell data-i18n-skip>
               {format.date(attempt.completedAt)}
+            </TableCell>
+            <TableCell>
+              {attempt.inProgress && (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  disabled={busy}
+                  onClick={() => onResume(attempt.id)}
+                >
+                  {t('Resume attempt')}
+                </Button>
+              )}
+              {attempt.canReview && (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  disabled={busy}
+                  onClick={() => onReview(attempt.id)}
+                >
+                  {t(track.mode === 'step' ? 'Review summary' : 'Review game')}
+                </Button>
+              )}
             </TableCell>
           </TableRow>
         ))}
@@ -168,9 +206,13 @@ function AttemptTable({ track }: { track: GameCertificationProgress }) {
 export function CertificationPanel({
   onOpenRules,
   onLaunchGame,
+  onReviewGame,
+  robotVisual,
 }: {
   onOpenRules?: (roundId: string) => void;
   onLaunchGame?: (launch: CertificationGameLaunch) => void;
+  onReviewGame?: (id: string, replay: MatchReplay) => void;
+  robotVisual?: RobotVisualId;
 }) {
   const { t } = useLocalization();
   const format = useAccountFormatting();
@@ -182,8 +224,11 @@ export function CertificationPanel({
     beginCertification,
     resetCertification,
     beginCertificationGame,
+    resumeCertificationGame,
+    getGameReplay,
   } = useAccount();
   const [launchError, setLaunchError] = useState<string | null>(null);
+  const [openingRecording, setOpeningRecording] = useState(false);
   const round = account?.certification ?? null;
 
   const launch = async (mode: CertificationMode) => {
@@ -194,6 +239,7 @@ export function CertificationPanel({
         roundId: round.id,
         mode,
         purpose: 'certification',
+        robotVisual,
       });
       if (!attempt.attemptId)
         throw new Error('The certification attempt could not be created.');
@@ -208,6 +254,22 @@ export function CertificationPanel({
           ? caught.message
           : 'The certification game could not be started.',
       );
+    }
+  };
+  const openRecording = async (id: string, resume: boolean) => {
+    setOpeningRecording(true);
+    setLaunchError(null);
+    try {
+      if (resume) onLaunchGame?.(await resumeCertificationGame(id));
+      else onReviewGame?.(id, await getGameReplay(id));
+    } catch (caught) {
+      setLaunchError(
+        caught instanceof Error
+          ? caught.message
+          : 'The recording could not be opened.',
+      );
+    } finally {
+      setOpeningRecording(false);
     }
   };
 
@@ -275,7 +337,10 @@ export function CertificationPanel({
     : 0;
   const allPassed =
     rules.passed && round.step.passed && round.continuous.passed;
-  const roundFailed = round.status === 'failed';
+  const upgradeRequired =
+    round.policyVersion !== CERTIFICATION_POLICY.policyVersion;
+  const roundFailed = round.status === 'failed' || upgradeRequired;
+  const unfinished = attempts.some((attempt) => attempt.inProgress);
   const verified = round.status === 'qualified';
 
   return (
@@ -339,7 +404,7 @@ export function CertificationPanel({
         </div>
       </section>
 
-      {allPassed && (
+      {(allPassed || verified) && (
         <Alert className="border-emerald-400/40 bg-emerald-400/10 p-4">
           <BadgeCheck />
           <AlertTitle>
@@ -359,9 +424,22 @@ export function CertificationPanel({
         </Alert>
       )}
 
-      {(allPassed || verified) && <GitHubSubmissionPanel kind="certify" />}
+      {!upgradeRequired && (allPassed || verified) && (
+        <GitHubSubmissionPanel kind="certify" />
+      )}
 
-      {roundFailed && (
+      {upgradeRequired && (
+        <Alert className="border-amber-400/40 bg-amber-400/10 p-4">
+          <CircleAlert />
+          <AlertTitle>{t('Updated examination available')}</AlertTitle>
+          <AlertDescription>
+            {t(
+              'This round uses an older grading version. Its records and any signed certificate are preserved. Restart certification to take the corrected examination; normal practice history is unchanged.',
+            )}
+          </AlertDescription>
+        </Alert>
+      )}
+      {round.status === 'failed' && (
         <Alert className="border-rose-400/40 bg-rose-400/10 p-4">
           <CircleAlert />
           <AlertTitle>{t('This certification round has failed')}</AlertTitle>
@@ -398,16 +476,23 @@ export function CertificationPanel({
         <GameRequirementCard
           track={round.step}
           onStart={() => void launch('step')}
-          busy={busyAction === 'start-game'}
+          busy={busyAction === 'start-game' || unfinished}
           roundFailed={roundFailed}
         />
         <GameRequirementCard
           track={round.continuous}
           onStart={() => void launch('continuous')}
-          busy={busyAction === 'start-game'}
+          busy={busyAction === 'start-game' || unfinished}
           roundFailed={roundFailed}
         />
       </div>
+      {unfinished && (
+        <p className="text-sm text-sky-200">
+          {t(
+            'An unfinished game is saved below. Resume it without using another attempt, or end it early in the simulator before starting a different game.',
+          )}
+        </p>
+      )}
 
       <Card className="border-white/10 bg-[#101c28]">
         <CardHeader>
@@ -425,13 +510,23 @@ export function CertificationPanel({
                 <h3 className="mb-2 flex items-center gap-2 font-medium">
                   <Gamepad2 /> {t('Step mode')}
                 </h3>
-                <AttemptTable track={round.step} />
+                <AttemptTable
+                  track={round.step}
+                  busy={openingRecording}
+                  onResume={(id) => void openRecording(id, true)}
+                  onReview={(id) => void openRecording(id, false)}
+                />
               </section>
               <section>
                 <h3 className="mb-2 flex items-center gap-2 font-medium">
                   <Timer /> {t('Continuous mode')}
                 </h3>
-                <AttemptTable track={round.continuous} />
+                <AttemptTable
+                  track={round.continuous}
+                  busy={openingRecording}
+                  onResume={(id) => void openRecording(id, true)}
+                  onReview={(id) => void openRecording(id, false)}
+                />
               </section>
             </div>
           ) : (

@@ -15,7 +15,7 @@ registerHooks({
     return nextResolve(specifier, context);
   },
   load(url, context, nextLoad) {
-    if (url.endsWith('.json') && url.includes('/lib/rulebook/'))
+    if (url.endsWith('.json') && url.includes('/lib/'))
       return {
         format: 'module',
         shortCircuit: true,

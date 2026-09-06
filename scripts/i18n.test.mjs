@@ -274,6 +274,116 @@ test('scoring action buttons use reviewed football wording', () => {
   assert.equal(translateText('Ball', 'de'), 'Ball');
 });
 
+test('reviewed translations preserve the called-pushing premise and farther-robot selection', () => {
+  const source = REFEREE_CASES.find((item) => item.id === 'pushing-goal').facts;
+  for (const team of [
+    source,
+    transformText(source, { swap: true, reflect: false }),
+  ]) {
+    const slovak = translateText(team, 'sk');
+    assert.match(slovak, /odpískal pushing/);
+    assert.doesNotMatch(slovak, /odvolaný/);
+    assert.match(translateText(team, 'de'), /pushing gepfiffen/);
+    assert.match(translateText(team, 'ja'), /pushing を宣告/);
+  }
+  assert.equal(translateText('Goal not granted', 'sk'), 'Gól nebol uznaný');
+  assert.equal(translateText('Goal not granted', 'de'), 'Tor nicht anerkannt');
+  assert.equal(
+    translateText('Goal not granted', 'ja'),
+    'ゴールは認められません',
+  );
+  assert.match(
+    translateText('Relocate farther defender', 'de'),
+    /weiter vom Ball entfernten/,
+  );
+  assert.match(translateText('Relocate farther defender', 'ja'), /より遠い方/);
+});
+
+test('all text knowledge checks have translations for every answer and explanation', async () => {
+  const { RULE_QUESTIONS } = await import('../lib/rulebook/questions.ts');
+  for (const item of RULE_QUESTIONS)
+    for (const text of [
+      item.title,
+      item.question,
+      item.feedback,
+      ...item.options,
+    ])
+      for (const locale of ['sk', 'de', 'ja']) {
+        assert.ok(
+          Object.hasOwn(generated.locales[locale].exact, text),
+          `${locale}:${item.id}:${text}`,
+        );
+        assert.notEqual(
+          translateText(text, locale),
+          text,
+          `${locale}:${item.id}`,
+        );
+      }
+});
+
+test('reviewed technical answers retain inclusive limits, test outcomes and repeated-entry meaning', async () => {
+  const { RULE_QUESTIONS } = await import('../lib/rulebook/questions.ts');
+  const correct = (id) => {
+    const item = RULE_QUESTIONS.find((question) => question.id === id);
+    assert.ok(item, id);
+    return item.options[item.answer];
+  };
+  const radio = translateText(correct('radio-limits'), 'ja');
+  assert.match(radio, /100 mW EIRP 以下/);
+  assert.doesNotMatch(radio, /未満/);
+  assert.match(
+    translateText(correct('kicker-test-result'), 'sk'),
+    /Test nevyhovel/,
+  );
+  assert.match(
+    translateText(correct('kicker-test-result'), 'de'),
+    /Test nicht bestanden/,
+  );
+  assert.match(translateText(correct('kicker-test-result'), 'ja'), /不合格/);
+  assert.doesNotMatch(
+    translateText(correct('kicker-test-result'), 'de'),
+    /Passabpraller/,
+  );
+  assert.match(
+    translateText(correct('repeated-out-damage'), 'sk'),
+    /úplné vchádzanie do pokutového územia/,
+  );
+  assert.match(
+    translateText(correct('repeated-out-damage'), 'de'),
+    /vollständiges Einfahren in den Strafraum/,
+  );
+  assert.match(
+    translateText(correct('repeated-out-damage'), 'ja'),
+    /ペナルティーエリアに完全に入る/,
+  );
+  assert.match(
+    translateText(correct('kicker-recheck'), 'ja'),
+    /各ハーフの開始前/,
+  );
+  for (const locale of ['sk', 'de', 'ja']) {
+    assert.match(
+      translateText(correct('infrared-ball-change'), locale),
+      /Soccer Infrared.*42 mm.*Entry/,
+    );
+    assert.match(
+      translateText(correct('event-scope'), locale),
+      /Entry.*SuperTeam/,
+    );
+  }
+});
+
+test('the separate Entry format name is not translated as registration or immigration', () => {
+  for (const source of Object.keys(generated.locales.sk.exact).filter((text) =>
+    /\bEntry\b/.test(text),
+  ))
+    for (const locale of ['sk', 'de', 'ja'])
+      assert.match(
+        translateText(source, locale),
+        /Entry/,
+        `${locale}:${source}`,
+      );
+});
+
 test('dynamic templates retain their values after translation', () => {
   for (const locale of ['sk', 'de', 'ja']) {
     const result = translateText('Goal · Blue scores!', locale);

@@ -44,6 +44,9 @@ const {
   robotFootprint,
   penaltyEvidenceSegments,
   penaltyAreaOutline,
+  clampRobotToField,
+  robotWallClearance,
+  robotTouchesFieldWall,
 } = await import('../lib/simulator/referee-geometry.ts');
 const { ROBOT_VISUALS } = await import('../lib/simulator/robot-models.ts');
 const {
@@ -79,6 +82,23 @@ function continuous(options = {}) {
 }
 const definition = (id) => REFEREE_CASES.find((item) => item.id === id);
 const distance = (a, b) => Math.hypot(a.x - b.x, a.z - b.z);
+const wallPose = (visual, z = 0, yaw = 0, side = 1) =>
+  clampRobotToField({ x: side * FIELD.floorHalfWidth, z, yaw }, visual);
+function alignWallScene(session, poses) {
+  const scene = structuredClone(poses);
+  for (const robot of MATCH_ROBOTS) {
+    const pose = scene[robot.id];
+    if (!pose) continue;
+    if (Math.abs(pose.x) >= FIELD.floorHalfWidth - 0.105)
+      scene[robot.id] = wallPose(
+        session.robotVisual,
+        pose.z,
+        pose.yaw,
+        Math.sign(pose.x) || 1,
+      );
+  }
+  return scene;
+}
 function advance(session, seconds) {
   for (let i = 0; i < Math.ceil(seconds / MATCH_STEP); i++) session.step();
 }
@@ -218,7 +238,7 @@ test('continuous pause freezes physics, clock, count and reaction windows until 
 
 test('out-and-back remains actionable, is missed once, and a late correction earns no extra credit', () => {
   const session = continuous({ topics: ['out'] });
-  session.match.state.actors['blue-1'] = { x: 0.81, z: -0.2, yaw: 0 };
+  session.match.state.actors['blue-1'] = wallPose(session.robotVisual, -0.2);
   session.detectLiveIncident();
   session.match.restart('neutral');
   advance(session, 9);
@@ -234,7 +254,7 @@ test('out-and-back remains actionable, is missed once, and a late correction ear
 test('opponent pressure at the wall becomes pushed out and keeps the robot in play', () => {
   const session = continuous({ topics: ['out'] });
   const radius = RCJ_SIMULATOR_GUIDES.robotCollisionRadius;
-  const wallX = FIELD.floorHalfWidth - radius;
+  const wallX = wallPose(session.robotVisual).x;
   session.match.place({
     'blue-1': { x: wallX, z: 0, yaw: 0 },
     'yellow-1': { x: wallX - radius * 2, z: 0, yaw: 0 },
@@ -264,13 +284,13 @@ test('opponent pressure at the wall becomes pushed out and keeps the robot in pl
   const yellow = session.match.state.actors['yellow-1'];
   assert.ok(blue, 'the pushed robot stays on the field');
   assert.equal(session.bench['blue-1'], undefined);
-  assert.ok(Math.abs(blue.x) <= FIELD.floorHalfWidth - radius);
+  assert.ok(robotWallClearance(blue, session.robotVisual).gap >= -1e-8);
   assert.ok(distance(blue, yellow) >= radius * 2);
 });
 
 test('pushed-out detection rejects gaps, tangential drive and same-team pressure', () => {
   const radius = RCJ_SIMULATOR_GUIDES.robotCollisionRadius;
-  const wallX = FIELD.floorHalfWidth - radius;
+  const wallX = wallPose('xlc-innovation-2021').x;
   const stopped = { ...NO_DRIVE, dribble: false };
   for (const item of [
     {
@@ -315,11 +335,7 @@ test('pushed-out detection rejects gaps, tangential drive and same-team pressure
 test('an ordinary wall contact without opponent pressure still removes the robot', () => {
   const session = continuous({ topics: ['out'] });
   session.match.place({
-    'blue-1': {
-      x: FIELD.floorHalfWidth - RCJ_SIMULATOR_GUIDES.robotCollisionRadius,
-      z: 0,
-      yaw: 0,
-    },
+    'blue-1': wallPose(session.robotVisual),
     ball: { x: -0.4, z: -0.4, yaw: 0 },
   });
   session.detectLiveIncident();
@@ -327,6 +343,57 @@ test('an ordinary wall contact without opponent pressure still removes the robot
   correct(session, 'out', 'blue-1');
   assert.equal(session.match.state.actors['blue-1'], undefined);
   assert.ok(session.bench['blue-1']);
+});
+
+test('wall adjudication follows the visible body at model-specific yaw, not a 100 mm circle', () => {
+  for (const [visual, yaw] of [
+    ['lab', Math.PI / 4],
+    ['xlc-innovation-2021', 0],
+  ]) {
+    const session = continuous({ robotVisual: visual, topics: ['out'] });
+    const contact = wallPose(visual, 0, yaw);
+    session.match.place({
+      'blue-1': { ...contact, x: contact.x - 0.002 },
+      ball: { x: -0.4, z: -0.4, yaw: 0 },
+    });
+    session.detectLiveIncident();
+    assert.equal(session.active, null, `${visual} visible gap`);
+    session.match.place({
+      'blue-1': contact,
+      ball: { x: -0.4, z: -0.4, yaw: 0 },
+    });
+    session.detectLiveIncident();
+    assert.equal(session.active.definition.id, 'live-wall', visual);
+    assert.equal(robotTouchesFieldWall(contact, visual), true, visual);
+  }
+});
+
+test('opponent pressure fully into a penalty area remains eligible for pushed-out waiver policy', () => {
+  const session = continuous({ topics: ['out'] });
+  const victim = { x: 0, z: 0.98, yaw: 0 };
+  session.match.place({
+    'blue-1': victim,
+    'yellow-1': { x: 0, z: 0.78, yaw: 0 },
+    ball: { x: -0.5, z: -0.4, yaw: 0 },
+  });
+  assert.equal(robotPenaltyOverlap(victim, 1, session.robotVisual, true), true);
+  session.match.step({
+    controls: { blue: 'off', yellow: 'off' },
+    selectedRobot: 'blue-1',
+    duration: 120,
+    referee: true,
+    observeReferee: true,
+    robotCommands: {
+      'blue-1': { ...NO_DRIVE, dribble: false },
+      'yellow-1': { ...NO_DRIVE, forward: 1, dribble: false },
+    },
+  });
+  assert.equal(session.match.opponentPusher('blue-1'), 'yellow-1');
+  session.detectLiveIncident();
+  assert.equal(session.active.definition.id, 'live-pushed-out');
+  assert.deepEqual(session.acceptedCalls(), [
+    { action: 'waive-out', target: 'blue-1' },
+  ]);
 });
 
 test('a released ball passage from an out carrier cannot score after removal', () => {
@@ -413,8 +480,8 @@ test('another robot touch clears an out-carrier goal passage', () => {
 
 test('simultaneous outs can be called in either order and stale continuous commands are still enacted', () => {
   const session = continuous({ topics: ['out'] });
-  session.match.state.actors['blue-1'] = { x: 0.81, z: -0.2, yaw: 0 };
-  session.match.state.actors['yellow-1'] = { x: 0.81, z: 0.2, yaw: 0 };
+  session.match.state.actors['blue-1'] = wallPose(session.robotVisual, -0.2);
+  session.match.state.actors['yellow-1'] = wallPose(session.robotVisual, 0.2);
   session.detectLiveIncident();
   correct(session, 'out', 'yellow-1');
   assert.ok(session.bench['yellow-1']);
@@ -471,7 +538,7 @@ test('an early lack-of-progress decision is scored wrong but still relocates the
 
 test('continuous mode enacts a wrong removal and an immediate early return, then reveals both at full time', () => {
   const session = continuous({ topics: ['out', 'other'] });
-  session.match.state.actors['blue-1'] = { x: 0.81, z: -0.2, yaw: 0 };
+  session.match.state.actors['blue-1'] = wallPose(session.robotVisual, -0.2);
   session.detectLiveIncident();
 
   assert.equal(submit(session, 'out', 'yellow-1').verdict, 'wrong-target');
@@ -533,7 +600,7 @@ test('continuous mode awards a goal to the selected wrong team and reviews the r
 
 test('continuous review records one missed call at the incident onset and keeps the full replay detached', () => {
   const session = continuous({ topics: ['out'] });
-  session.match.state.actors['blue-1'] = { x: 0.81, z: -0.2, yaw: 0 };
+  session.match.state.actors['blue-1'] = wallPose(session.robotVisual, -0.2);
   session.detectLiveIncident();
   session.clock += 9;
   session.ageObservations();
@@ -556,6 +623,50 @@ test('continuous review records one missed call at the incident onset and keeps 
   assert.deepEqual(session.snapshot().actors, original);
 });
 
+test('transient geometry that clears inside the reaction window is not scored as a missed call', () => {
+  const session = continuous({ topics: ['multiple'] });
+  session.match.place(caseScene(definition('multiple'), 999, variant).poses);
+  session.detectLiveIncident();
+  assert.equal(session.active.definition.id, 'live-multiple');
+  session.match.place({
+    'blue-1': { x: -0.5, z: -0.4, yaw: 0 },
+    'blue-2': { x: 0.5, z: -0.4, yaw: 0 },
+    'yellow-1': { x: -0.5, z: 0.4, yaw: Math.PI },
+    'yellow-2': { x: 0.5, z: 0.4, yaw: Math.PI },
+    ball: { x: 0, z: 0, yaw: 0 },
+  });
+  advance(session, 3.2);
+  session.endSession();
+  assert.equal(session.snapshot().report.assessed, 0);
+  assert.deepEqual(session.snapshot().review, []);
+});
+
+test('missed-call review freezes the expected call from its reaction deadline', () => {
+  const session = continuous({ topics: ['multiple'] });
+  session.match.place(caseScene(definition('multiple'), 999, variant).poses);
+  session.detectLiveIncident();
+  const observed = session.acceptedCalls();
+  session.clock = 3.1;
+  session.detectLiveIncident();
+  session.ageObservations();
+  assert.equal(session.snapshot().report.missed, 1);
+  session.match.place({
+    'blue-1': { x: -0.5, z: -0.4, yaw: 0 },
+    'blue-2': { x: 0.5, z: -0.4, yaw: 0 },
+    'yellow-1': { x: -0.5, z: 0.4, yaw: Math.PI },
+    'yellow-2': { x: 0.5, z: 0.4, yaw: Math.PI },
+    ball: { x: 0, z: 0, yaw: 0 },
+  });
+  session.clock = 4;
+  session.ageObservations();
+  session.endSession();
+  const missed = session
+    .snapshot()
+    .review.find((event) => event.assessment === 'missed');
+  assert.deepEqual(missed.expected, observed);
+  assert.ok(missed.expected.every((call) => call.action === 'multiple'));
+});
+
 test('a ten-minute continuous replay stays at the bounded review sampling rate', () => {
   const session = continuous({ duration: 600, topics: ['out'] });
   advance(session, 600);
@@ -573,7 +684,7 @@ test('a ten-minute continuous replay stays at the bounded review sampling rate',
 
 test('continuous feedback continuation clears a pause from reading a rule or changing tabs', () => {
   const session = continuous();
-  session.match.state.actors['blue-1'] = { x: 0.81, z: -0.2, yaw: 0 };
+  session.match.state.actors['blue-1'] = wallPose(session.robotVisual, -0.2);
   session.detectLiveIncident();
   correct(session, 'out', 'blue-1');
   session.pauseForDecision();
@@ -587,7 +698,7 @@ test('continuous feedback continuation clears a pause from reading a rule or cha
 
 test('transport resume dismisses continuous feedback without losing an unresolved decision', () => {
   const session = continuous();
-  session.match.state.actors['blue-1'] = { x: 0.81, z: -0.2, yaw: 0 };
+  session.match.state.actors['blue-1'] = wallPose(session.robotVisual, -0.2);
   session.detectLiveIncident();
   submit(session, 'out', 'yellow-1');
   assert.equal(session.snapshot().userPaused, false);
@@ -630,7 +741,7 @@ test('eligible bench returns interrupt unrelated decisions and feedback in eithe
     const session = new RefereeMatch(73, { mode });
     session.remove('blue-1', 'Out of bounds');
     session.clock = 61;
-    session.match.state.actors['yellow-1'] = { x: 0.81, z: 0.2, yaw: 0 };
+    session.match.state.actors['yellow-1'] = wallPose(session.robotVisual, 0.2);
     session.detectLiveIncident();
     assert.equal(session.canReturn('blue-1'), true);
     const unrelated = session.active.number;
@@ -677,7 +788,7 @@ test('a new bench visit can return at kickoff immediately after a previous succe
 test('returning clears the old out observation so an immediate new infringement is actionable', () => {
   const session = continuous();
   for (let i = 0; i < 2; i++) {
-    session.match.state.actors['blue-1'] = { x: 0.81, z: -0.2, yaw: 0 };
+    session.match.state.actors['blue-1'] = wallPose(session.robotVisual, -0.2);
     session.detectLiveIncident();
     correct(session, 'out', 'blue-1');
     session.continue();
@@ -696,7 +807,7 @@ test('returning clears the old out observation so an immediate new infringement 
   );
 });
 
-test('kickoff requires every ready eligible robot to return, including during goal feedback', () => {
+test('kickoff may proceed while eligible optional robots remain on the bench', () => {
   for (const mode of ['step', 'continuous']) {
     const session = new RefereeMatch(73, { mode });
     session.remove('blue-1', 'Out of bounds');
@@ -705,23 +816,18 @@ test('kickoff requires every ready eligible robot to return, including during go
     session.detectLiveIncident();
     correct(session, 'goal', 'blue');
     assert.equal(session.canReturn('blue-1'), true);
-    correct(session, 'return', 'blue-1');
-    session.continue();
-    assert.equal(session.canArrangeKickoff, false);
-    assert.equal(session.arrangeKickoff(), false);
-    assertFrozen(session, 3);
-    correct(session, 'return', 'yellow-1');
     session.continue();
     assert.equal(session.canArrangeKickoff, true);
     assert.equal(session.arrangeKickoff(), true);
     correct(session, 'start');
-    assert.ok(
-      MATCH_ROBOTS.every((robot) => session.match.state.actors[robot.id]),
-    );
+    assert.equal(session.match.state.actors['blue-1'], undefined);
+    assert.equal(session.match.state.actors['yellow-1'], undefined);
+    assert.ok(session.bench['blue-1']);
+    assert.ok(session.bench['yellow-1']);
   }
 });
 
-test('a premature kickoff signal and immediate return are enacted and scored', () => {
+test('an eligible repair does not block kickoff and a later manual return is still enacted', () => {
   const session = continuous();
   session.remove('blue-1', 'Damaged');
   session.match.state.pendingEvent = { kind: 'goal', team: 'blue' };
@@ -731,7 +837,7 @@ test('a premature kickoff signal and immediate return are enacted and scored', (
   assert.equal(session.arrangeKickoff(), true); // Repairing robot cannot yet return.
   session.bench['blue-1'].ready = true;
   assert.equal(session.canReturn('blue-1'), true);
-  assert.equal(submit(session, 'start').verdict, 'premature');
+  assert.equal(submit(session, 'start').verdict, 'correct');
   assert.equal(session.snapshot().kickoffDue, false);
   assert.ok(session.bench['blue-1']);
   assert.equal(
@@ -796,7 +902,7 @@ test('goal adjudication closes old geometry and removing an out robot satisfies 
   assert.deepEqual(session.snapshot(), frozen);
 
   const out = continuous();
-  out.match.state.actors['blue-1'] = { x: 0.81, z: -0.2, yaw: 0 };
+  out.match.state.actors['blue-1'] = wallPose(out.robotVisual, -0.2);
   out.detectLiveIncident();
   out.match.state.pendingEvent = { kind: 'goal', team: 'blue' };
   out.detectLiveIncident();
@@ -821,7 +927,7 @@ test('both modes report first-attempt accuracy and assisted outcomes without ret
     assert.equal(session.snapshot().report.accuracy, 0);
   }
   const assisted = continuous({ topics: ['out'] });
-  assisted.match.state.actors['blue-1'] = { x: 0.81, z: -0.2, yaw: 0 };
+  assisted.match.state.actors['blue-1'] = wallPose(assisted.robotVisual, -0.2);
   assisted.detectLiveIncident();
   assisted.requestHint();
   correct(assisted, 'out', 'blue-1');
@@ -868,7 +974,7 @@ test('selected step topics constrain the shuffle; excluded natural incidents do 
     ),
   );
   const live = continuous({ topics: ['damage'] });
-  live.match.state.actors['blue-1'] = { x: 0.81, z: -0.2, yaw: 0 };
+  live.match.state.actors['blue-1'] = wallPose(live.robotVisual, -0.2);
   live.detectLiveIncident();
   correct(live, 'out', 'blue-1');
   assert.equal(live.snapshot().report.assessed, 0);
@@ -877,7 +983,7 @@ test('selected step topics constrain the shuffle; excluded natural incidents do 
 test('full time is finite and its report is immutable; last-second incidents are not penalized', () => {
   const session = continuous({ duration: 1, topics: ['out'] });
   advance(session, 0.9);
-  session.match.state.actors['blue-1'] = { x: 0.81, z: -0.2, yaw: 0 };
+  session.match.state.actors['blue-1'] = wallPose(session.robotVisual, -0.2);
   session.detectLiveIncident();
   advance(session, 0.2);
   assert.equal(session.snapshot().sessionFinished, true);
@@ -1175,6 +1281,88 @@ test('waiting goals and opponent-caused damage exception are distinct', () => {
   const exception = prepare('damage-exception');
   correct(exception, 'wait');
   assert.deepEqual(exception.snapshot().score, { blue: 0, yellow: 0 });
+});
+
+test('ignored both-damaged awards keep the continuous clock and later intervals running', () => {
+  const session = continuous({ topics: ['damage'] });
+  session.remove('blue-1', 'Damaged');
+  session.remove('blue-2', 'Damaged');
+  for (const id of ['blue-1', 'blue-2']) {
+    session.bench[id].ready = false;
+    session.bench[id].readyAt = Infinity;
+  }
+  session.kickoffDue = true;
+  session.kickoffSerial = 1;
+  advance(session, 69);
+  assert.ok(session.clock >= 68.9);
+  assert.equal(session.snapshot().report.missed, 2);
+  assert.equal(session.acceptedCalls()[0].action, 'goal');
+  correct(session, 'goal', 'yellow');
+  session.continue();
+  assert.equal(session.acceptedCalls()[0].action, 'goal');
+  correct(session, 'goal', 'yellow');
+  assert.deepEqual(session.snapshot().score, { blue: 0, yellow: 2 });
+});
+
+test('a kickoff requires one working robot per team but not every eligible return', () => {
+  const session = continuous();
+  session.remove('blue-1', 'Out of bounds');
+  session.remove('blue-2', 'Out of bounds');
+  session.match.state.pendingEvent = { kind: 'goal', team: 'yellow' };
+  session.detectLiveIncident();
+  correct(session, 'goal', 'yellow');
+  session.continue();
+  assert.equal(session.canArrangeKickoff, false);
+  assert.equal(session.canReturn('blue-1'), true);
+  correct(session, 'return', 'blue-1');
+  session.continue();
+  assert.equal(session.canArrangeKickoff, true);
+  assert.ok(session.bench['blue-2']);
+});
+
+test('damage readiness follows an explicit varied team-repair cue, not a fixed 12-second rule', () => {
+  const session = continuous();
+  session.remove('blue-1', 'Damaged');
+  session.remove('yellow-1', 'Damaged');
+  const blue = session.bench['blue-1'];
+  const yellow = session.bench['yellow-1'];
+  assert.ok(blue.readyAt - blue.removedAt >= 15);
+  assert.ok(blue.readyAt - blue.removedAt <= 45);
+  assert.notEqual(blue.readyAt - blue.removedAt, 12);
+  assert.notEqual(blue.readyAt, yellow.readyAt);
+  session.clock = blue.readyAt - MATCH_STEP * 2;
+  session.step();
+  assert.equal(blue.ready, false);
+  session.step();
+  assert.equal(blue.ready, true);
+  assert.ok(Number.isFinite(blue.repairReportedAt));
+  assert.match(session.match.state.message, /team reports repair complete/);
+});
+
+test('a later natural multiple-defense incident exposes the repeated-offender discretion', () => {
+  const session = continuous({ topics: ['multiple', 'damage'] });
+  const scene = caseScene(definition('multiple'), 999, variant).poses;
+  session.match.place(scene);
+  session.detectLiveIncident();
+  assert.equal(session.active.definition.id, 'live-multiple');
+  const first = session.acceptedCalls()[0];
+  correct(session, first.action, first.target);
+  session.continue();
+  session.clock += 1.1;
+  session.ageObservations();
+  session.match.place(scene);
+  session.detectLiveIncident();
+  assert.equal(session.active.definition.id, 'live-repeat-defense');
+  const repeated = session.acceptedCalls();
+  assert.deepEqual(
+    new Set(repeated.map((call) => call.action)),
+    new Set(['multiple', 'damaged']),
+  );
+  const damage = repeated.find((call) => call.action === 'damaged');
+  assert.equal(
+    submit(session, damage.action, damage.target).verdict,
+    'supported',
+  );
 });
 
 test('rounded penalty geometry agrees with the shared field at both ends', () => {
@@ -1648,8 +1836,8 @@ test('live goal feedback identifies the current end and guards every scoring-tea
   const result = correct(session, 'goal', 'yellow');
   assert.ok(!result.detail.includes('awards Blue'));
   const blocked = new RefereeMatch(1);
-  blocked.match.state.actors['blue-1'] = { x: 0.81, z: -0.2, yaw: 0 };
-  blocked.match.state.actors['yellow-1'] = { x: 0.81, z: 0.2, yaw: 0 };
+  blocked.match.state.actors['blue-1'] = wallPose(blocked.robotVisual, -0.2);
+  blocked.match.state.actors['yellow-1'] = wallPose(blocked.robotVisual, 0.2);
   blocked.match.state.phase = 'referee';
   blocked.match.state.pendingEvent = { kind: 'goal', team: 'yellow' };
   blocked.step();
@@ -1853,8 +2041,10 @@ test('waiving an opponent-caused wall contact corrects only the selected robot',
   }
   assert.ok(distance(before['blue-1'], after['blue-1']) < 0.08);
   const radius = RCJ_SIMULATOR_GUIDES.robotCollisionRadius;
-  assert.ok(Math.abs(after['blue-1'].x) <= FIELD.floorHalfWidth - radius);
-  assert.ok(Math.abs(after['blue-1'].z) <= FIELD.floorHalfLength - radius);
+  assert.ok(
+    robotWallClearance(after['blue-1'], session.robotVisual).gap >=
+      0.005 - 1e-9,
+  );
   for (const robot of MATCH_ROBOTS) {
     if (robot.id === 'blue-1' || !after[robot.id]) continue;
     assert.ok(distance(after['blue-1'], after[robot.id]) >= radius * 2);
@@ -1925,7 +2115,11 @@ test('damage freezes every robot and keeps its cue anchored through removal', ()
 test('natural out, multiple defense and pushing freeze before another physics tick', () => {
   for (const id of ['wall', 'full-area', 'multiple', 'pushing']) {
     const session = new RefereeMatch(1);
-    session.match.place(caseScene(definition(id), 999, variant).poses);
+    const scene =
+      id === 'wall'
+        ? alignWallScene(session, caseScene(definition(id), 999, variant).poses)
+        : caseScene(definition(id), 999, variant).poses;
+    session.match.place(scene);
     const initial = session.snapshot().actors;
     session.step();
     assert.equal(session.phase, 'decision', id);
@@ -2180,6 +2374,60 @@ test('a resolved pushing call cannot disallow a later goal', () => {
   correct(session, 'goal', 'blue');
   session.continue();
   assert.equal(session.snapshot().canArrangeKickoff, true);
+});
+
+test('an unrelated ball passage is not tainted by a stale pushing observation', () => {
+  const session = continuous({ topics: ['pushing', 'scoring'] });
+  session.match.place(caseScene(definition('pushing'), 999, variant).poses);
+  session.detectLiveIncident();
+  assert.equal(session.active.definition.id, 'live-pushing');
+  const observedPassage = session.active.ballPassageRevision;
+  session.match.place({
+    'blue-1': { x: -0.5, z: -0.4, yaw: 0 },
+    'blue-2': { x: 0.5, z: -0.4, yaw: 0 },
+    'yellow-1': { x: -0.5, z: 0.4, yaw: Math.PI },
+    'yellow-2': { x: 0.5, z: 0.4, yaw: Math.PI },
+    ball: { x: 0, z: 1, yaw: 0 },
+  });
+  assert.notEqual(session.match.ballPassageRevision, observedPassage);
+  session.match.state.pendingEvent = { kind: 'goal', team: 'blue' };
+  session.detectLiveIncident();
+  assert.equal(session.active.definition.id, 'live-goal');
+  assert.deepEqual(session.acceptedCalls(), [
+    { action: 'goal', target: 'blue' },
+  ]);
+});
+
+test('equidistant defenders are both valid relocation targets within tolerance', () => {
+  const session = continuous({ topics: ['multiple'] });
+  session.match.place({
+    'blue-1': { x: -0.12, z: 0.79, yaw: 0 },
+    'blue-2': { x: 0.12, z: 0.79, yaw: 0 },
+    'yellow-1': { x: -0.5, z: -0.4, yaw: 0 },
+    'yellow-2': { x: 0.5, z: -0.4, yaw: 0 },
+    ball: { x: 0, z: 0.6, yaw: 0 },
+  });
+  session.detectLiveIncident();
+  assert.deepEqual(
+    new Set(session.acceptedCalls().map((call) => call.target)),
+    new Set(['blue-1', 'blue-2']),
+  );
+  assert.equal(submit(session, 'multiple', 'blue-2').verdict, 'correct');
+});
+
+test('certification model lock preserves geometry and acceptedCalls is detached', () => {
+  const session = new RefereeMatch(2026, {
+    robotVisual: 'lab',
+    lockRobotVisual: true,
+  });
+  assert.equal(session.setRobotVisual('xlc-innovation-2021'), false);
+  assert.equal(session.robotVisual, 'lab');
+  assert.equal(session.match.robotVisual, 'lab');
+  assert.equal(session.beginCase(definition('multiple'), variant), true);
+  advance(session, 20);
+  const calls = session.acceptedCalls();
+  calls[0].action = 'play-on';
+  assert.notEqual(session.acceptedCalls()[0].action, 'play-on');
 });
 
 test('a goal supersedes an ordinary whistle assessment with a resume alternative', () => {
@@ -2454,7 +2702,10 @@ test('new out or multiple defense interrupts a running count at the exact incide
     const session = prepare('deadlock');
     correct(session, 'count');
     session.continue();
-    const scene = caseScene(definition(id), 999, variant).poses;
+    const scene =
+      id === 'wall'
+        ? alignWallScene(session, caseScene(definition(id), 999, variant).poses)
+        : caseScene(definition(id), 999, variant).poses;
     session.match.place(scene);
     session.step();
     assert.equal(session.active.definition.id, `live-${id}`);

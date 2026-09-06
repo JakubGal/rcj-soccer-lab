@@ -39,10 +39,11 @@ registerHooks({
 
 const { LEARNING_SITUATIONS, lessonChoices, validLearningProgress } =
   await import('../lib/rulebook/learning.ts');
-const { RULE_DOCUMENTS, RULE_SECTIONS, sectionUrl } =
+const { RULE_DOCUMENTS, RULE_SECTIONS, sectionUrl, sectionReference } =
   await import('../lib/rulebook/catalog.ts');
 const { RULE_CLIPS, sampleClip } =
   await import('../lib/rulebook/animations.ts');
+const { RULE_QUESTIONS } = await import('../lib/rulebook/questions.ts');
 const { SCENARIOS } = await import('../lib/simulator/scenarios.ts');
 const { REFEREE_CASES, ruleUrl } =
   await import('../lib/simulator/referee-cases.ts');
@@ -68,11 +69,11 @@ const settings = (duration = 120) => ({
   duration,
 });
 
-test('all 73 situations retain their source and correct official section', () => {
+test('all 105 situations retain their source and correct official section', () => {
   assert.equal(RULE_DOCUMENTS.length, 6);
   assert.equal(RULE_SECTIONS.length, 259);
-  assert.equal(LEARNING_SITUATIONS.length, 73);
-  assert.equal(new Set(LEARNING_SITUATIONS.map((item) => item.id)).size, 73);
+  assert.equal(LEARNING_SITUATIONS.length, 105);
+  assert.equal(new Set(LEARNING_SITUATIONS.map((item) => item.id)).size, 105);
   const groups = [
     { kind: 'case', sources: REFEREE_CASES, sourceUrl: ruleUrl, count: 35 },
     {
@@ -87,6 +88,13 @@ test('all 73 situations retain their source and correct official section', () =>
       sources: SCENARIOS,
       sourceUrl: (scenario) => scenario.ruleRef.url,
       count: 6,
+    },
+    {
+      kind: 'question',
+      sources: RULE_QUESTIONS,
+      sourceUrl: (question) =>
+        ruleUrl(REFEREE_CASES[0]).split('#')[0] + '#' + question.anchor,
+      count: 32,
     },
   ];
   for (const { kind, sources, sourceUrl, count } of groups) {
@@ -106,6 +114,67 @@ test('all 73 situations retain their source and correct official section', () =>
       assert.equal(sectionUrl(section), sourceUrl(source), entry.id);
     }
   }
+});
+
+test('technical, safety and administration checks have distinct valid answer keys', () => {
+  const ids = new Set();
+  for (const item of RULE_QUESTIONS) {
+    assert.ok(item.question.trim() && item.feedback.trim(), item.id);
+    assert.equal(item.options.length, 3, item.id);
+    assert.equal(new Set(item.options).size, 3, item.id);
+    assert.ok(
+      Number.isInteger(item.answer) && item.answer >= 0 && item.answer < 3,
+      item.id,
+    );
+    assert.ok(!ids.has(item.id), item.id);
+    ids.add(item.id);
+  }
+  for (const id of [
+    'vision-dimensions',
+    'infrared-dimensions',
+    'electrical-safety',
+    'infrared-emitters',
+    'kicker-test-result',
+    'repeated-out-damage',
+    'neutral-capability',
+    'neutral-obstruction',
+    'result-disputes',
+    'event-scope',
+  ])
+    assert.ok(ids.has(id), id);
+  assert.equal(
+    LEARNING_SITUATIONS.filter((item) => !item.sectionId.startsWith('soccer:'))
+      .length,
+    0,
+  );
+});
+
+test('knowledge-check section labels include an actual appendix reference, never a bare section sign', () => {
+  for (const item of LEARNING_SITUATIONS.filter(
+    (entry) => entry.kind === 'question',
+  )) {
+    const section = RULE_SECTIONS.find((entry) => entry.id === item.sectionId);
+    const reference = sectionReference(section);
+    assert.ok(reference.trim() && reference !== '§', item.id);
+    if (['kicker-test-setup', 'kicker-test-result'].includes(item.sourceId))
+      assert.equal(reference, 'Appendix A');
+  }
+});
+
+test('published pushing criteria and selected committee policy are distinguished', () => {
+  const pushing = SCENARIOS.find((item) => item.id === 'pushing-discretion');
+  assert.match(pushing.refereeCue, /not additional rule conditions/);
+  const combined = SCENARIOS.find(
+    (item) => item.id === 'pushing-and-multiple-defense',
+  );
+  assert.match(combined.choices[0].feedback, /does not require proving/);
+  const waiver = REFEREE_CASES.find((item) => item.id === 'pushed-out');
+  assert.match(waiver.facts, /committee training policy v1/i);
+  assert.match(waiver.explanation, /referee discretion/);
+  assert.match(
+    REFEREE_CASES.find((item) => item.id === 'out-goal').explanation,
+    /after-removal extension is a training interpretation/,
+  );
 });
 
 test('case-specific source overrides are retained despite shared clips', () => {

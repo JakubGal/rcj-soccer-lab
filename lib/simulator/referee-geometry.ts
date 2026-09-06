@@ -112,6 +112,95 @@ export function projectRobotFootprint(
     holes: polygon.holes.map((ring) => ring.map(transform)),
   }));
 }
+
+export type RobotWallClearance = {
+  /** Signed body-to-wall gap. Zero is contact; negative means penetration. */
+  gap: number;
+  /** Outward unit normal of the nearest field wall. */
+  x: -1 | 0 | 1;
+  z: -1 | 0 | 1;
+};
+
+function projectedBodyBounds(yaw: number, visual: RobotVisualId) {
+  const c = Math.cos(yaw),
+    s = Math.sin(yaw);
+  let minX = Infinity,
+    maxX = -Infinity,
+    minZ = Infinity,
+    maxZ = -Infinity;
+  for (const polygon of robotFootprint(visual))
+    for (const [x, z] of polygon.outer) {
+      const projectedX = x * c + z * s;
+      const projectedZ = -x * s + z * c;
+      minX = Math.min(minX, projectedX);
+      maxX = Math.max(maxX, projectedX);
+      minZ = Math.min(minZ, projectedZ);
+      maxZ = Math.max(maxZ, projectedZ);
+    }
+  return { minX, maxX, minZ, maxZ };
+}
+
+/**
+ * Clamp a robot centre so its actual rendered body, at its current yaw, stays
+ * inside the four field walls. Marker rings and shadows are deliberately not
+ * part of this physical boundary.
+ */
+export function clampRobotToField(
+  pose: Pose,
+  visual: RobotVisualId = DEFAULT_ROBOT_VISUAL_ID,
+  clearance = 0,
+): Pose {
+  const body = projectedBodyBounds(pose.yaw, visual);
+  return {
+    ...pose,
+    x: Math.min(
+      FIELD.floorHalfWidth - body.maxX - clearance,
+      Math.max(-FIELD.floorHalfWidth - body.minX + clearance, pose.x),
+    ),
+    z: Math.min(
+      FIELD.floorHalfLength - body.maxZ - clearance,
+      Math.max(-FIELD.floorHalfLength - body.minZ + clearance, pose.z),
+    ),
+  };
+}
+
+/** Nearest physical wall measured from the actual projected robot body. */
+export function robotWallClearance(
+  pose: Pose,
+  visual: RobotVisualId = DEFAULT_ROBOT_VISUAL_ID,
+): RobotWallClearance {
+  const body = projectedBodyBounds(pose.yaw, visual);
+  return [
+    {
+      gap: FIELD.floorHalfWidth - (pose.x + body.maxX),
+      x: 1 as const,
+      z: 0 as const,
+    },
+    {
+      gap: pose.x + body.minX + FIELD.floorHalfWidth,
+      x: -1 as const,
+      z: 0 as const,
+    },
+    {
+      gap: FIELD.floorHalfLength - (pose.z + body.maxZ),
+      x: 0 as const,
+      z: 1 as const,
+    },
+    {
+      gap: pose.z + body.minZ + FIELD.floorHalfLength,
+      x: 0 as const,
+      z: -1 as const,
+    },
+  ].sort((first, second) => first.gap - second.gap)[0];
+}
+
+export function robotTouchesFieldWall(
+  pose: Pose,
+  visual: RobotVisualId = DEFAULT_ROBOT_VISUAL_ID,
+  tolerance = 0.0002,
+) {
+  return robotWallClearance(pose, visual).gap <= tolerance;
+}
 const interpolate = (a: PointXZ, b: PointXZ, t: number): PointXZ => [
   a[0] + (b[0] - a[0]) * t,
   a[1] + (b[1] - a[1]) * t,

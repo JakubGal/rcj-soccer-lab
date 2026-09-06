@@ -52,10 +52,13 @@ const { TRAINING_TOPICS } =
 const { CERTIFICATION_POLICY } = await import('../lib/certification/policy.ts');
 const { CERTIFICATION_QUESTION_IDS, gradeRuleAnswer, scoreGame } =
   await import('../lib/certification/scoring.ts');
+const { makeCaseAnswer } = await import('./replay-fixtures.mjs');
+const { REFEREE_CASES } = await import('../lib/simulator/referee-cases.ts');
+const { ROBOT_VISUALS } = await import('../lib/simulator/robot-models.ts');
 
-test('the 2026 policy encodes all 73 questions and the exact certification boundaries', () => {
-  assert.equal(LEARNING_SITUATIONS.length, 73);
-  assert.equal(CERTIFICATION_QUESTION_IDS.size, 73);
+test('the versioned 2026 policy covers every current question and exact certification boundaries', () => {
+  assert.ok(LEARNING_SITUATIONS.length >= 73);
+  assert.equal(CERTIFICATION_QUESTION_IDS.size, LEARNING_SITUATIONS.length);
   assert.deepEqual(
     [...CERTIFICATION_QUESTION_IDS].sort((a, b) => a.localeCompare(b)),
     LEARNING_SITUATIONS.map((item) => item.id).sort((a, b) =>
@@ -63,9 +66,12 @@ test('the 2026 policy encodes all 73 questions and the exact certification bound
     ),
   );
 
-  assert.equal(CERTIFICATION_POLICY.ruleQuestionCount, 73);
+  assert.equal(
+    CERTIFICATION_POLICY.ruleQuestionCount,
+    LEARNING_SITUATIONS.length,
+  );
   assert.equal(CERTIFICATION_POLICY.ruleFirstTryPercent, 95);
-  assert.equal(CERTIFICATION_POLICY.ruleFirstTryRequired, 70);
+  assert.equal(CERTIFICATION_POLICY.policyVersion, 'rcj-soccer-2026-v2');
   assert.equal(
     CERTIFICATION_POLICY.ruleFirstTryRequired,
     Math.ceil(
@@ -174,25 +180,16 @@ test('canonical scenario answers accept both correct and officially acceptable c
 });
 
 test('canonical case answers require every first call in decision order', () => {
+  assert.deepEqual(verdict('case:goal', makeCaseAnswer('goal')), {
+    valid: true,
+    correct: true,
+  });
+  assert.deepEqual(verdict('case:combined', makeCaseAnswer('combined')), {
+    valid: true,
+    correct: true,
+  });
   assert.deepEqual(
-    verdict('case:goal', {
-      kind: 'case',
-      calls: [{ action: 'goal', target: 'blue' }],
-    }),
-    { valid: true, correct: true },
-  );
-  assert.deepEqual(
-    verdict('case:combined', {
-      kind: 'case',
-      calls: [{ action: 'pushing' }, { action: 'multiple', target: 'farther' }],
-    }),
-    { valid: true, correct: true },
-  );
-  assert.deepEqual(
-    verdict('case:combined', {
-      kind: 'case',
-      calls: [{ action: 'multiple', target: 'farther' }, { action: 'pushing' }],
-    }),
+    verdict('case:combined', makeCaseAnswer('combined', { wrongFirst: true })),
     { valid: true, correct: false },
   );
   assert.deepEqual(
@@ -202,6 +199,63 @@ test('canonical case answers require every first call in decision order', () => 
     }),
     { valid: false, correct: false },
   );
+});
+
+test('every concrete UI case answer is engine-graded correctly across locked robot models', () => {
+  for (const { id: robotVisual } of ROBOT_VISUALS)
+    for (const item of REFEREE_CASES)
+      assert.deepEqual(
+        verdict(`case:${item.id}`, makeCaseAnswer(item.id, { robotVisual })),
+        { valid: true, correct: true },
+        `${robotVisual}/${item.id}`,
+      );
+});
+
+test('case evidence rejects symbolic-only legacy answers and tampered operations/versions', () => {
+  assert.equal(
+    verdict('case:multiple', {
+      kind: 'case',
+      calls: [{ action: 'multiple', target: 'farther' }],
+    }).valid,
+    false,
+  );
+  for (const mutate of [
+    (answer) => {
+      answer.evidence.engineVersion = 'referee-match-2026-v1';
+    },
+    (answer) => {
+      answer.evidence.seed = 7;
+    },
+    (answer) => {
+      answer.evidence.operations[0].decisionKey = '999:999';
+    },
+    (answer) => {
+      answer.evidence.operations[0].tick = 0;
+    },
+    (answer) => {
+      answer.evidence.operations.push({
+        tick: 0,
+        op: 'set-robot-visual',
+        robotVisual: 'lab',
+      });
+    },
+    (answer) => {
+      answer.evidence.operations = Array(257).fill(
+        answer.evidence.operations[0],
+      );
+    },
+  ]) {
+    const answer = makeCaseAnswer('multiple');
+    mutate(answer);
+    assert.equal(verdict('case:multiple', answer).valid, false);
+  }
+});
+
+test('display rounding cannot pass a game below the exact required ratio', () => {
+  assert.equal(scoreGame('step', counter(26, 3), 600).accuracy, 90);
+  assert.equal(scoreGame('step', counter(26, 3), 600).qualifying, false);
+  assert.equal(scoreGame('continuous', counter(35, 9), 600).accuracy, 80);
+  assert.equal(scoreGame('continuous', counter(35, 9), 600).qualifying, false);
 });
 
 test('unknown questions and malformed canonical answers cannot earn credit', () => {

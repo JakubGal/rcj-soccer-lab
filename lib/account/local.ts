@@ -14,7 +14,15 @@ import {
   CERTIFICATION_QUESTION_IDS,
   scoreGame,
 } from '@/lib/certification/scoring';
-import { validateMatchReplay } from '@/lib/certification/replay';
+import {
+  validateMatchReplay,
+  validateMatchReplayCheckpoint,
+  makeMatchReplayCheckpoint,
+  MATCH_REPLAY_ENGINE_VERSION,
+  type MatchReplay,
+  type MatchReplayCheckpoint,
+} from '@/lib/certification/replay';
+import { DEFAULT_ROBOT_VISUAL_ID } from '@/lib/simulator/robot-models';
 import { summarizeRuleEvidence } from '@/lib/github/validate';
 import { verifyEnvelope } from '@/lib/github/registry';
 import { certificationSeed } from '@/lib/github/seeds';
@@ -40,6 +48,8 @@ export type LocalProgress = {
   certificationReceipt: SignedEnvelope | null;
   request: PreparedSubmission | null;
   receipt: SignedEnvelope | null;
+  checkpoints?: Record<string, MatchReplayCheckpoint>;
+  archivedReplays?: Record<string, MatchReplay>;
 };
 
 export function emptyProgress(): LocalProgress {
@@ -57,6 +67,8 @@ export function emptyProgress(): LocalProgress {
     certificationReceipt: null,
     request: null,
     receipt: null,
+    checkpoints: {},
+    archivedReplays: {},
   };
 }
 
@@ -156,20 +168,32 @@ export async function accountSnapshot(
       : null;
   };
   const round = data.round;
-  const rules = round
+  const currentPolicy = round?.policyVersion === CERTIFICATION_POLICY.policyVersion;
+  const legacyQuestions = [...new Set((round?.ruleEvents ?? [])
+    .filter((event) => event.type === 'answer' || event.type === 'complete')
+    .map((event) => event.questionId))];
+  const rules = round && currentPolicy
     ? summarizeRuleEvidence(round.ruleEvents, round.id)
-    : null;
+    : round ? {
+      answered: legacyQuestions.length,
+      total: 73,
+      correctFirstTry: 0,
+      accuracy: null,
+      requiredAccuracy: 95,
+      passed: false,
+      answeredQuestionIds: legacyQuestions,
+    } : null;
   const track = (mode: 'step' | 'continuous') => {
     const policy = CERTIFICATION_POLICY.games[mode];
     const attempts = (round?.games ?? [])
       .filter((game) => game.mode === mode)
       .map(
-        (game, index) =>
-          data.attempts[game.id] ?? {
+        (game, index) => ({
+          ...(data.attempts[game.id] ?? {
             id: game.id,
             mode,
             attemptNumber: index + 1,
-            durationSeconds: 600,
+            durationSeconds: (data.checkpoints?.[game.id]?.terminal.tick ?? 0) / 120,
             accuracy: null,
             correct: 0,
             wrong: 0,
@@ -179,7 +203,10 @@ export async function accountSnapshot(
             qualifying: false,
             startedAt: game.startedAt,
             completedAt: null,
-          },
+          }),
+          inProgress: currentPolicy && !game.endedAt,
+          canReview: game.replay?.engineVersion === MATCH_REPLAY_ENGINE_VERSION,
+        }),
       );
     const qualifyingGames = attempts.filter(
       (attempt) => attempt.qualifying,
@@ -201,10 +228,12 @@ export async function accountSnapshot(
   const passed = rules?.passed && step.passed && continuous.passed;
   const failed =
     rules &&
-    (rules.answered - rules.correctFirstTry > 3 ||
+    (rules.answered - rules.correctFirstTry >
+      CERTIFICATION_POLICY.ruleQuestionCount - CERTIFICATION_POLICY.ruleFirstTryRequired ||
       [step, continuous].some(
         (item) =>
-          item.qualifyingGames + item.attemptsAllowed - item.attemptsUsed <
+          item.qualifyingGames + item.attemptsAllowed - item.attemptsUsed +
+          item.attempts.filter((attempt) => attempt.inProgress).length <
           item.requiredGames,
       ));
   const verified =
@@ -240,7 +269,7 @@ export async function accountSnapshot(
     links: { signIn: null, signOut: null },
     practice: {
       ruleChecksCompleted: data.completedQuestions.length,
-      ruleChecksTotal: 73,
+      ruleChecksTotal: CERTIFICATION_QUESTION_IDS.size,
       refereeGamesPlayed: data.practiceGames.length,
       stepGamesPlayed: data.practiceGames.filter((game) => game.mode === 'step')
         .length,
@@ -259,6 +288,7 @@ export async function accountSnapshot(
             season: '2026',
             status: verified
               ? 'qualified'
+              : !currentPolicy ? 'upgrade-required'
               : passed
                 ? 'ready'
                 : failed
@@ -271,9 +301,14 @@ export async function accountSnapshot(
             rules,
             step,
             continuous,
+            policyVersion: round.policyVersion,
           }
         : null,
-    recentGames: data.practiceGames.slice(-100).reverse(),
+    recentGames: data.practiceGames.slice(-100).reverse().map((game) => ({
+      ...game,
+      canReview: (round?.games.find((entry) => entry.id === game.id)?.replay ??
+        data.archivedReplays?.[game.id])?.engineVersion === MATCH_REPLAY_ENGINE_VERSION,
+    })),
     certificationHistory,
   };
 }
@@ -355,6 +390,9 @@ export async function newRound(data: LocalProgress) {
   if (!data.enabled || !data.profile)
     throw new Error('Create a local profile first.');
   if (data.round) {
+    data.archivedReplays ??= {};
+    for (const game of data.round.games)
+      if (game.replay) data.archivedReplays[game.id] = game.replay;
     const snapshot = await accountSnapshot(data);
     if (
       snapshot.certification?.status === 'qualified' &&
@@ -381,8 +419,10 @@ export async function newRound(data: LocalProgress) {
     startedAt: new Date().toISOString(),
     ruleEvents: [],
     games: [],
+    policyVersion: CERTIFICATION_POLICY.policyVersion,
   };
   data.attempts = {};
+  data.checkpoints = {};
   data.certificationReceipt = null;
   data.request = null;
   data.receipt = null;
@@ -400,6 +440,9 @@ export async function startLocalGame(
       'Start a new certification round before playing another attempt.',
     );
   const policy = CERTIFICATION_POLICY.games[payload.mode];
+  const pending = round.games.find((game) => !game.endedAt);
+  if (pending)
+    throw new Error('Resume or end the unfinished certification game before starting another attempt.');
   const attempts = round.games.filter((game) => game.mode === payload.mode);
   if (attempts.length >= policy.maxAttempts)
     throw new Error(
@@ -409,6 +452,11 @@ export async function startLocalGame(
     seed = await certificationSeed(round.id, payload.mode, attempts.length + 1);
   const startedAt = new Date().toISOString();
   round.games.push({ id, mode: payload.mode, seed, startedAt });
+  saveLocalCheckpoint(data, id, makeMatchReplayCheckpoint({
+    mode: payload.mode, seed, robotVisual: payload.robotVisual ?? DEFAULT_ROBOT_VISUAL_ID,
+    topics: [...CERTIFICATION_POLICY.topics], events: [],
+    terminal: { tick: 0, reason: 'checkpoint' },
+  }));
   return {
     attemptId: id,
     roundId: round.id,
@@ -418,7 +466,79 @@ export async function startLocalGame(
     topics: [...CERTIFICATION_POLICY.topics],
     startedAt,
     clientSessionId: null,
+    attemptNumber: attempts.length + 1,
+    robotVisual: payload.robotVisual ?? DEFAULT_ROBOT_VISUAL_ID,
   };
+}
+
+export function resumeLocalGame(data: LocalProgress, id: string): CertificationGameLaunch {
+  const round = data.round;
+  const game = round?.games.find((entry) => entry.id === id);
+  if (!data.enabled || !round || round.policyVersion !== CERTIFICATION_POLICY.policyVersion ||
+    !game || game.endedAt)
+    throw new Error('This certification game cannot be resumed.');
+  const checkpoint = data.checkpoints?.[id];
+  return {
+    attemptId: id, roundId: round.id, mode: game.mode, seed: game.seed,
+    durationSeconds: 600, topics: [...CERTIFICATION_POLICY.topics],
+    startedAt: game.startedAt, clientSessionId: null,
+    attemptNumber: round.games.filter((entry) => entry.mode === game.mode)
+      .findIndex((entry) => entry.id === id) + 1,
+    robotVisual: checkpoint?.robotVisual ?? DEFAULT_ROBOT_VISUAL_ID,
+    ...(checkpoint ? { checkpoint: validateMatchReplayCheckpoint(checkpoint) } : {}),
+  };
+}
+
+type RecordedProgress = MatchReplay | MatchReplayCheckpoint;
+
+/** A later save may append actions, never revise actions or already elapsed time. */
+function extendsRecordedProgress(previous: RecordedProgress, next: RecordedProgress) {
+  return previous.mode === next.mode && previous.seed === next.seed &&
+    previous.robotVisual === next.robotVisual &&
+    previous.engineVersion === next.engineVersion &&
+    previous.durationSeconds === next.durationSeconds &&
+    JSON.stringify(previous.topics) === JSON.stringify(next.topics) &&
+    previous.terminal.tick <= next.terminal.tick &&
+    previous.events.length <= next.events.length &&
+    previous.events.every((event, index) =>
+      JSON.stringify(event) === JSON.stringify(next.events[index])) &&
+    // A tab cannot append a decision that happened before the saved checkpoint.
+    // Equal ticks are allowed: several UI actions may occur between physics ticks.
+    (next.events[previous.events.length]?.tick ?? Infinity) >= previous.terminal.tick;
+}
+
+function changedAttempt(): never {
+  throw new Error('Another tab changed this attempt. Resume its saved checkpoint from Academy.');
+}
+
+export function saveLocalCheckpoint(data: LocalProgress, id: string, value: MatchReplayCheckpoint) {
+  const game = data.round?.games.find((entry) => entry.id === id);
+  if (data.round?.policyVersion !== CERTIFICATION_POLICY.policyVersion || !game)
+    throw new Error('This game belongs to a different certification round.');
+  const checkpoint = validateMatchReplayCheckpoint(value);
+  if (checkpoint.mode !== game.mode || checkpoint.seed !== game.seed)
+    throw new Error('The checkpoint belongs to a different game.');
+  if (game.endedAt) {
+    if (!game.replay || !extendsRecordedProgress(checkpoint, validateMatchReplay(game.replay)))
+      changedAttempt();
+    return;
+  }
+  const previous = data.checkpoints?.[id];
+  if (previous) {
+    const saved = validateMatchReplayCheckpoint(previous);
+    // Out-of-order writes are harmless only when they describe the same history.
+    if (extendsRecordedProgress(checkpoint, saved)) return;
+    if (!extendsRecordedProgress(saved, checkpoint)) changedAttempt();
+  }
+  data.checkpoints ??= {};
+  data.checkpoints[id] = checkpoint;
+}
+
+export function savedLocalReplay(data: LocalProgress, id: string): MatchReplay {
+  const replay = data.round?.games.find((entry) => entry.id === id)?.replay ??
+    data.archivedReplays?.[id];
+  if (!replay) throw new Error('No recording is available for this game.');
+  return validateMatchReplay(replay);
 }
 export function finishLocalGame(
   data: LocalProgress,
@@ -426,16 +546,30 @@ export function finishLocalGame(
   payload: FinishGamePayload,
 ) {
   const game = data.round?.games.find((entry) => entry.id === id);
-  if (!game)
+  if (data.round?.policyVersion !== CERTIFICATION_POLICY.policyVersion || !game)
     throw new Error('This game belongs to a different certification round.');
-  if (game.endedAt) return;
   if (!payload.replay)
     throw new Error(
       'The game recording is missing. This attempt cannot be submitted for certification.',
     );
-  game.replay = payload.replay;
-  game.endedAt = new Date().toISOString();
+  const replay = validateMatchReplay(payload.replay);
+  if (replay.mode !== game.mode || replay.seed !== game.seed)
+    throw new Error('The recording belongs to a different game.');
+  if (game.endedAt) {
+    if (!game.replay) changedAttempt();
+    const saved = validateMatchReplay(game.replay);
+    if (!extendsRecordedProgress(saved, replay) ||
+      !extendsRecordedProgress(replay, saved) ||
+      saved.terminal.reason !== replay.terminal.reason) changedAttempt();
+    return;
+  }
+  const checkpoint = data.checkpoints?.[id];
+  if (checkpoint && !extendsRecordedProgress(validateMatchReplayCheckpoint(checkpoint), replay))
+    changedAttempt();
   const grade = scoreGame(game.mode, payload, payload.elapsedSeconds);
+  game.replay = replay;
+  game.endedAt = new Date().toISOString();
+  if (data.checkpoints) delete data.checkpoints[id];
   data.attempts[id] = {
     id,
     mode: game.mode,
@@ -474,6 +608,8 @@ export function recordLocalRule(data: LocalProgress, event: RuleLearningEvent) {
   }
   if (!data.round || event.certificationRunId !== data.round.id)
     throw new Error('This certification round is no longer active.');
+  if (data.round.policyVersion !== CERTIFICATION_POLICY.policyVersion)
+    throw new Error('This round uses an older grading version. Restart certification to use the corrected examination.');
   const events = [...data.round.ruleEvents, event];
   summarizeRuleEvidence(events, data.round.id);
   data.round.ruleEvents = events;
@@ -488,6 +624,21 @@ function backupRecord(value: unknown): Record<string, unknown> {
   if (!value || typeof value !== 'object' || Array.isArray(value))
     return invalidBackup();
   return value as Record<string, unknown>;
+}
+
+function storedReplay(value: unknown): MatchReplay {
+  const record = backupRecord(value);
+  if (record.engineVersion === MATCH_REPLAY_ENGINE_VERSION)
+    return validateMatchReplay(record);
+  // Old evidence is retained only as opaque backup/history data. It is never
+  // replayed or used to qualify against a different engine version.
+  if (record.engineVersion !== 'referee-match-2026-v1' ||
+    record.schema !== 'rcj-match-replay/v1' ||
+    JSON.stringify(record).length > 512 * 1024 || !Array.isArray(record.events) ||
+    record.events.length > 4096) return invalidBackup();
+  backupMode(record.mode);
+  backupNumber(record.seed, 0xffffffff, 1, true);
+  return structuredClone(record) as MatchReplay;
 }
 function backupText(value: unknown, maximum: number, minimum = 0) {
   if (
@@ -653,6 +804,8 @@ export async function validateBackup(value: unknown): Promise<LocalProgress> {
     const round = backupRecord(source.round);
     const id = backupRoundId(round.id);
     const startedAt = backupDate(round.startedAt, false)!;
+    const policyVersion = round.policyVersion === undefined ? undefined :
+      backupText(round.policyVersion, 80, 1);
     const used = { step: 0, continuous: 0 };
     const ids = new Set<string>();
     const games = backupArray(round.games, 13).map((value) => {
@@ -677,7 +830,7 @@ export async function validateBackup(value: unknown): Promise<LocalProgress> {
       const replay =
         game.replay === undefined
           ? undefined
-          : validateMatchReplay(game.replay);
+          : storedReplay(game.replay);
       if (replay && (replay.mode !== mode || replay.seed !== seed))
         return invalidBackup();
       return {
@@ -693,14 +846,33 @@ export async function validateBackup(value: unknown): Promise<LocalProgress> {
       round.ruleEvents,
       12000,
     ) as RuleLearningEvent[];
-    summarizeRuleEvidence(ruleEvents, id);
+    if (policyVersion === CERTIFICATION_POLICY.policyVersion)
+      summarizeRuleEvidence(ruleEvents, id);
+    else for (const event of ruleEvents) {
+      const item = backupRecord(event);
+      if (item.certificationRunId !== id || item.mode !== 'certification' ||
+        !['answer', 'complete', 'assistance'].includes(String(item.type))) invalidBackup();
+      backupText(item.questionId, 160, 1);
+    }
     data.round = {
       id,
       number: backupNumber(round.number, Number.MAX_SAFE_INTEGER, 1, true),
       startedAt,
       games,
       ruleEvents,
+      ...(policyVersion ? { policyVersion } : {}),
     };
+  }
+  const checkpoints = source.checkpoints === undefined ? {} : backupRecord(source.checkpoints);
+  if (Object.keys(checkpoints).length > 13) invalidBackup();
+  for (const [id, value] of Object.entries(checkpoints))
+    if (data.round?.policyVersion === CERTIFICATION_POLICY.policyVersion)
+      saveLocalCheckpoint(data, id, validateMatchReplayCheckpoint(value));
+  const archived = source.archivedReplays === undefined ? {} : backupRecord(source.archivedReplays);
+  if (Object.keys(archived).length > 10000) invalidBackup();
+  for (const [id, value] of Object.entries(archived)) {
+    backupRoundId(id);
+    data.archivedReplays![id] = storedReplay(value);
   }
   const attempts = backupRecord(source.attempts);
   if (Object.keys(attempts).length > 13) invalidBackup();

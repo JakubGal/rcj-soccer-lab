@@ -245,13 +245,25 @@ export function moveManualActor(
   poses: Record<string, Pose>,
   actorId: string,
   requested: { x: number; z: number },
+  options: {
+    /** Optional body-aware field clamp; the default remains the guide circle. */
+    fieldClamp?: (position: { x: number; z: number }) => {
+      x: number;
+      z: number;
+    };
+  } = {},
 ): Pose | null {
   const movingActor = actors.find((actor) => actor.id === actorId);
   const current = poses[actorId];
   if (!movingActor || !current) return null;
 
+  const fieldClamp =
+    movingActor.kind === 'robot' && options.fieldClamp
+      ? options.fieldClamp
+      : (position: { x: number; z: number }) =>
+          clampToField(movingActor, position);
   let start = { x: current.x, z: current.z };
-  let end = clampToField(movingActor, requested);
+  let end = fieldClamp(requested);
   let result = start;
   const initialDistances = new Map(
     actors
@@ -286,11 +298,11 @@ export function moveManualActor(
     const slideZ = remainingZ - normalZ * inward;
     if (slideX ** 2 + slideZ ** 2 < EPSILON) break;
 
-    start = clampToField(movingActor, {
+    start = fieldClamp({
       x: contactX + normalX * SWEEP_MARGIN,
       z: contactZ + normalZ * SWEEP_MARGIN,
     });
-    end = clampToField(movingActor, {
+    end = fieldClamp({
       x: start.x + slideX,
       z: start.z + slideZ,
     });
@@ -319,7 +331,7 @@ export function moveManualActor(
       }
       const normalX = distance > EPSILON ? deltaX / distance : 1;
       const normalZ = distance > EPSILON ? deltaZ / distance : 0;
-      result = clampToField(movingActor, {
+      result = fieldClamp({
         x: obstacle.x + normalX * separation,
         z: obstacle.z + normalZ * separation,
       });

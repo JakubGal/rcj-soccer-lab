@@ -9,13 +9,20 @@ registerHooks({
   resolve(specifier, context, nextResolve) {
     if (
       specifier.startsWith('./') &&
-      context.parentURL?.includes('/lib/simulator/')
+      context.parentURL?.includes('/lib/simulator/') &&
+      !/\.(ts|json)$/.test(specifier)
     ) {
       return nextResolve(`${specifier}.ts`, context);
     }
     return nextResolve(specifier, context);
   },
   load(url, context, nextLoad) {
+    if (url.endsWith('.json') && url.includes('/lib/simulator/'))
+      return {
+        format: 'module',
+        shortCircuit: true,
+        source: `export default ${readFileSync(new URL(url), 'utf8')}`,
+      };
     if (url.endsWith('.ts') && url.includes('/lib/simulator/')) {
       return {
         format: 'module',
@@ -34,6 +41,8 @@ registerHooks({
 
 const { SoccerMatch, MATCH_ROBOTS, MATCH_STEP, NO_DRIVE } =
   await import('../lib/simulator/match.ts');
+const { clampRobotToField, robotTouchesFieldWall, robotWallClearance } =
+  await import('../lib/simulator/referee-geometry.ts');
 const settings = (controls = { blue: 'manual', yellow: 'off' }) => ({
   controls,
   selectedRobot: 'blue-1',
@@ -88,6 +97,32 @@ test('robot collisions prevent driving through a stationary opponent', () => {
   match.state.actors['yellow-1'] = { x: 0, z: 0.1, yaw: Math.PI };
   advance(match, 1, settings(), { ...NO_DRIVE, forward: 1 });
   assert.ok(match.state.actors['blue-1'].z <= -0.0999);
+});
+
+test('body-aware wall physics reaches the rendered model and clamps its yawed footprint', () => {
+  for (const [visual, yaw] of [
+    ['lab', Math.PI / 4],
+    ['xlc-innovation-2021', 0],
+  ]) {
+    const match = new SoccerMatch();
+    match.setRobotVisual(visual);
+    match.place({
+      'blue-1': { x: 0.55, z: 0, yaw },
+      ball: { x: -0.4, z: 0, yaw: 0 },
+    });
+    const towardWall = {
+      ...NO_DRIVE,
+      forward: Math.sin(yaw),
+      strafe: Math.cos(yaw),
+      dribble: false,
+    };
+    advance(match, 1, settings(), towardWall);
+    const pose = match.state.actors['blue-1'];
+    const expected = clampRobotToField({ x: 2, z: 0, yaw }, visual);
+    assert.ok(Math.abs(pose.x - expected.x) < 1e-7, visual);
+    assert.equal(robotTouchesFieldWall(pose, visual), true, visual);
+    assert.ok(robotWallClearance(pose, visual).gap >= -1e-8, visual);
+  }
 });
 
 test('a kick works only in front and releases the dribbler', () => {
@@ -177,7 +212,7 @@ test('AI plays a complete repeatable match with goals and valid robot positions'
     for (let i = 0; i < MATCH_ROBOTS.length; i += 1) {
       const pose = match.state.actors[MATCH_ROBOTS[i].id];
       assert.ok(Number.isFinite(pose.x + pose.z + pose.yaw));
-      assert.ok(Math.abs(pose.x) <= 0.81001 && Math.abs(pose.z) <= 1.11501);
+      assert.ok(robotWallClearance(pose, match.robotVisual).gap >= -1e-7);
       for (let j = i + 1; j < MATCH_ROBOTS.length; j += 1) {
         const other = match.state.actors[MATCH_ROBOTS[j].id];
         assert.ok(Math.hypot(pose.x - other.x, pose.z - other.z) >= 0.1999);

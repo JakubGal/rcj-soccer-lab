@@ -1,12 +1,9 @@
 import { LEARNING_SITUATIONS } from '@/lib/rulebook/learning';
 import { RULE_CLIPS } from '@/lib/rulebook/animations';
-import {
-  REFEREE_ACTIONS,
-  REFEREE_CASES,
-  type RefereeCall,
-} from '@/lib/simulator/referee-cases';
+import { RULE_QUESTIONS } from '@/lib/rulebook/questions';
 import { SCENARIOS } from '@/lib/simulator/scenarios';
 import { CERTIFICATION_POLICY, type CertificationMode } from './policy';
+import { gradeCaseEvidence } from './case-evidence';
 
 export const CERTIFICATION_QUESTION_IDS = new Set(
   LEARNING_SITUATIONS.map((item) => item.id),
@@ -20,19 +17,7 @@ export type RuleAnswerGrade = {
 
 function boundedAnswerKey(answer: unknown) {
   const serialized = JSON.stringify(answer);
-  return serialized && serialized.length <= 4_096 ? serialized : null;
-}
-
-function isCall(value: unknown): value is RefereeCall {
-  if (!value || typeof value !== 'object') return false;
-  const call = value as Record<string, unknown>;
-  return (
-    typeof call.action === 'string' &&
-    REFEREE_ACTIONS.some((action) => action.id === call.action) &&
-    call.action.length <= 48 &&
-    (call.target === undefined ||
-      (typeof call.target === 'string' && call.target.length <= 48))
-  );
+  return serialized && serialized.length <= 64 * 1024 ? serialized : null;
 }
 
 export type CaseAnswerPrefixGrade = {
@@ -52,57 +37,7 @@ export function gradeCaseAnswerPrefix(
   questionId: string,
   answer: unknown,
 ): CaseAnswerPrefixGrade | null {
-  const [kind, sourceId] = questionId.split(':', 2);
-  if (kind !== 'case') return null;
-  const definition = REFEREE_CASES.find((item) => item.id === sourceId);
-  const possibleCalls =
-    answer && typeof answer === 'object' && !Array.isArray(answer)
-      ? (answer as Record<string, unknown>).calls
-      : answer;
-  const submitted = Array.isArray(possibleCalls)
-    ? possibleCalls
-    : [possibleCalls];
-  const calls = submitted.filter(isCall).map((call) => ({
-    action: call.action,
-    ...(call.target === undefined ? {} : { target: call.target }),
-  }));
-  const valid =
-    Boolean(definition) &&
-    calls.length > 0 &&
-    calls.length === submitted.length &&
-    calls.length <= definition!.steps.length;
-  if (!valid)
-    return {
-      valid: false,
-      complete: false,
-      correct: false,
-      answerKey: '',
-      totalSteps: definition?.steps.length ?? 0,
-      steps: [],
-    };
-  const steps = calls.map((call, index) => ({
-    index,
-    answerKey: JSON.stringify(call),
-    correct: definition!.steps[index].some((expected) =>
-      callMatches(call, expected),
-    ),
-  }));
-  const complete = calls.length === definition!.steps.length;
-  return {
-    valid: true,
-    complete,
-    correct: complete && steps.every((step) => step.correct),
-    answerKey: JSON.stringify(calls),
-    totalSteps: definition!.steps.length,
-    steps,
-  };
-}
-
-function callMatches(actual: RefereeCall, expected: RefereeCall) {
-  return (
-    actual.action === expected.action &&
-    (actual.target ?? null) === (expected.target ?? null)
-  );
+  return gradeCaseEvidence(questionId, answer);
 }
 
 /** Grades all rule answers from the canonical rule content, never a client boolean. */
@@ -115,8 +50,10 @@ export function gradeRuleAnswer(
     return { valid: false, correct: false, answerKey: '' };
 
   const [kind, sourceId] = questionId.split(':', 2);
-  if (kind === 'clip') {
-    const clip = RULE_CLIPS.find((item) => item.id === sourceId);
+  if (kind === 'clip' || kind === 'question') {
+    const clip = (kind === 'clip' ? RULE_CLIPS : RULE_QUESTIONS).find(
+      (item) => item.id === sourceId,
+    );
     let selected = -1;
     if (typeof answer === 'number') selected = answer;
     else if (typeof answer === 'string')
@@ -126,7 +63,11 @@ export function gradeRuleAnswer(
       if (typeof selectedIndex === 'number') selected = selectedIndex;
     }
     return {
-      valid: Boolean(clip) && Number.isInteger(selected) && selected >= 0,
+      valid:
+        Boolean(clip) &&
+        Number.isInteger(selected) &&
+        selected >= 0 &&
+        selected < clip!.options.length,
       correct: Boolean(clip) && selected === clip!.answer,
       answerKey,
     };
@@ -184,7 +125,7 @@ export function scoreGame(
       elapsedSeconds >= rules.durationSeconds &&
       assessed > 0 &&
       counters.assisted === 0 &&
-      accuracy >= rules.minimumAccuracy,
+      counters.correct * 100 >= rules.minimumAccuracy * assessed,
   };
 }
 

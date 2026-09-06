@@ -44,6 +44,15 @@ jobs:
       - name: Test certification verification
         run: pnpm test:github
 
+      - name: Test rule interpretation, simulation and translations
+        run: |
+          pnpm test:match
+          pnpm test:referee
+          pnpm test:rules
+          pnpm test:learning
+          pnpm test:certification
+          pnpm test:i18n
+
       - name: Upload GitHub Pages artifact
         uses: actions/upload-pages-artifact@v4
         with:

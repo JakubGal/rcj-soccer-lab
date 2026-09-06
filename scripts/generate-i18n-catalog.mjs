@@ -61,6 +61,7 @@ const PROTECTED_TERMS = [
   'RoboCup',
   'SuperTeam',
   'Entry League',
+  'Entry',
   'RCJ',
   'EIRP',
   'RMS',
@@ -117,6 +118,39 @@ const PRESERVED_SENTENCES = new Set([
 
 const MANUAL = {
   sk: {
+    'Fail; a passing rebound must not hit the starting goal’s back wall':
+      'Test nevyhovel; pri úspešnom teste sa odrazená loptička nesmie dotknúť zadnej steny bránky, z ktorej sa kopalo',
+    'Yes; continual entry or out of bounds is listed as a damaged-robot example, with the referee deciding':
+      'Áno; opakované úplné vchádzanie do pokutového územia alebo out of bounds je uvedené medzi príkladmi damaged robota; rozhoduje rozhodca',
+    'Main Soccer Infrared switches to 42 mm; Entry continues with the larger IR ball':
+      'Hlavná liga Soccer Infrared prechádza na 42 mm; Entry naďalej používa väčšiu IR loptičku',
+    'No; verify the event’s adaptations, and study the separate Entry or SuperTeam rules when applicable':
+      'Nie; overte si úpravy pravidiel podujatia a podľa potreby si preštudujte samostatné pravidlá Entry alebo SuperTeam',
+    'A horizontal white plastic circle at least 40 mm across, visible and accessible for the referee to write its number':
+      'Vodorovný biely plastový kruh s priemerom aspoň 40 mm, viditeľný a prístupný rozhodcovi na napísanie čísla robota',
+    'No; this capability rule has an opponent-obstruction exception':
+      'Nie; toto pravidlo o schopnosti hrať s loptičkou má výnimku, ak v tom robotovi bráni súper',
+    'Committee training policy v1 selects the waiver permitted by Rule 2.8; an actual event must confirm its application':
+      'Tréningová politika komisie v1 volí odpustenie trestu povolené pravidlom 2.8; na skutočnom podujatí si treba potvrdiť jeho uplatňovanie',
+    'The rules examination did not meet {0} of {1} correct first answers.':
+      'V skúške z pravidiel nebol dosiahnutý požadovaný počet {0} správnych prvých odpovedí z {1}.',
+    'Goal not granted': 'Gól nebol uznaný',
+    'Relocate farther defender':
+      'Premiestnite obrancu, ktorý je ďalej od loptičky',
+    'The farther defender': 'Obranca vzdialenejší od loptičky',
+    'Look for two teammates overlapping the same penalty area. Compare their CURRENT distances to the ball; the farther robot is the one to move.':
+      'Skontrolujte, či sa dva roboty rovnakého tímu prekrývajú s tým istým pokutovým územím. Porovnajte ich AKTUÁLNE vzdialenosti od loptičky; premiestňuje sa robot, ktorý je od nej ďalej.',
+    'Review this aftermath: pushing was called during the contact, and the resulting ball movement reached the back wall of the goal defended by Blue.':
+      'Posúďte následok situácie: počas kontaktu rozhodca odpískal pushing a následný pohyb loptičky dosiahol zadnú stenu bránky, ktorú bráni modrý tím.',
+    'Review this aftermath: pushing was called during the contact, and the resulting ball movement reached the back wall of the goal defended by Yellow.':
+      'Posúďte následok situácie: počas kontaktu rozhodca odpískal pushing a následný pohyb loptičky dosiahol zadnú stenu bránky, ktorú bráni žltý tím.',
+    'Committee training policy · v1': 'Tréningová politika komisie · v1',
+    'Committee training policy v1: after an accidental opponent-caused out of bounds, call pushed out and keep the robot in play with only the necessary small correction. Published Rule 2.8 permits this waiver at referee discretion; this exercise selects that permitted option.':
+      'Tréningová politika komisie v1: pri náhodnom vytlačení súperom do out of bounds ohláste pushed out a ponechajte robota v hre iba s nevyhnutnou malou úpravou polohy. Publikované pravidlo 2.8 ponecháva odpustenie trestu na uvážení rozhodcu; toto cvičenie volí túto povolenú možnosť.',
+    'Committee training policy v1: the same ball passage from an out-of-bounds carrier remains invalid after that robot is removed. Published Rule 2.8 expressly disallows the penalized team’s goals while its penalized robot remains on the field; the after-removal extension is a training interpretation, not additional published wording.':
+      'Tréningová politika komisie v1: gól z toho istého pokračujúceho pohybu loptičky od robota v out-of-bounds sa neuzná ani po odstránení robota. Publikované pravidlo 2.8 výslovne neuznáva góly potrestaného tímu, kým jeho potrestaný robot zostáva na ihrisku; rozšírenie aj na čas po odstránení je tréningový výklad, nie dodatočné znenie oficiálneho pravidla.',
+    'This training assessment covers main 2v2 Soccer rules, referee decisions, inspection and safety checks. It is not an official referee appointment, a complete tournament-organizer qualification, or an Entry / SuperTeam qualification. Check your event rules.':
+      'Toto tréningové hodnotenie zahŕňa hlavné pravidlá Soccer 2v2, rozhodnutia rozhodcu, technickú kontrolu a bezpečnostné kontroly. Nejde o oficiálne vymenovanie rozhodcu, úplnú kvalifikáciu organizátora turnaja ani kvalifikáciu pre Entry / SuperTeam. Overte si pravidlá svojho podujatia.',
     Rules: 'Pravidlá',
     Play: 'Hra',
     Referee: 'Rozhodca',
@@ -223,6 +257,39 @@ const MANUAL = {
       'Úplný vstup robota znamená out of bounds. Odstráňte robota na jednu minútu alebo do skoršieho kick-off.',
   },
   de: {
+    'Fail; a passing rebound must not hit the starting goal’s back wall':
+      'Test nicht bestanden; bei einem bestandenen Test darf der zurückprallende Ball die Rückwand des Ausgangstores nicht treffen',
+    'Yes; continual entry or out of bounds is listed as a damaged-robot example, with the referee deciding':
+      'Ja; wiederholtes vollständiges Einfahren in den Strafraum oder out of bounds ist als Beispiel für einen damaged-Roboter genannt; der Schiedsrichter entscheidet',
+    'Main Soccer Infrared switches to 42 mm; Entry continues with the larger IR ball':
+      'Die Hauptliga Soccer Infrared wechselt auf 42 mm; Entry verwendet weiterhin den größeren IR-Ball',
+    'No; verify the event’s adaptations, and study the separate Entry or SuperTeam rules when applicable':
+      'Nein; prüfen Sie die Anpassungen Ihrer Veranstaltung und gegebenenfalls die gesonderten Regeln für Entry oder SuperTeam',
+    'A horizontal white plastic circle at least 40 mm across, visible and accessible for the referee to write its number':
+      'Ein waagerechter weißer Kunststoffkreis mit mindestens 40 mm Durchmesser, sichtbar und zugänglich, damit der Schiedsrichter die Roboternummer darauf schreiben kann',
+    'No; this capability rule has an opponent-obstruction exception':
+      'Nein; für diese Fähigkeit zum Spielen des Balls gilt eine Ausnahme, wenn der Gegner den Roboter daran hindert',
+    'Committee training policy v1 selects the waiver permitted by Rule 2.8; an actual event must confirm its application':
+      'Die Trainingsregelung des Komitees v1 wählt den nach Regel 2.8 erlaubten Verzicht auf die Strafe; die Anwendung muss bei der jeweiligen Veranstaltung bestätigt werden',
+    'The rules examination did not meet {0} of {1} correct first answers.':
+      'Die Regelprüfung erreichte nicht die erforderlichen {0} richtigen Erstantworten von {1}.',
+    'Goal not granted': 'Tor nicht anerkannt',
+    'Relocate farther defender':
+      'Den weiter vom Ball entfernten Verteidiger versetzen',
+    'The farther defender': 'Der weiter vom Ball entfernte Verteidiger',
+    'Look for two teammates overlapping the same penalty area. Compare their CURRENT distances to the ball; the farther robot is the one to move.':
+      'Prüfen Sie, ob zwei Roboter desselben Teams denselben Strafraum überlappen. Vergleichen Sie ihre AKTUELLEN Abstände zum Ball; versetzen Sie den weiter vom Ball entfernten Roboter.',
+    'Review this aftermath: pushing was called during the contact, and the resulting ball movement reached the back wall of the goal defended by Blue.':
+      'Beurteilen Sie die Folge: Während des Kontakts wurde pushing gepfiffen. Die daraus entstandene Ballbewegung erreichte die Rückwand des von Blau verteidigten Tores.',
+    'Review this aftermath: pushing was called during the contact, and the resulting ball movement reached the back wall of the goal defended by Yellow.':
+      'Beurteilen Sie die Folge: Während des Kontakts wurde pushing gepfiffen. Die daraus entstandene Ballbewegung erreichte die Rückwand des von Gelb verteidigten Tores.',
+    'Committee training policy · v1': 'Trainingsvorgabe des Komitees · v1',
+    'Committee training policy v1: after an accidental opponent-caused out of bounds, call pushed out and keep the robot in play with only the necessary small correction. Published Rule 2.8 permits this waiver at referee discretion; this exercise selects that permitted option.':
+      'Trainingsvorgabe des Komitees v1: Wird ein Roboter versehentlich vom Gegner in out of bounds gedrängt, rufen Sie pushed out und lassen ihn mit nur der nötigen kleinen Positionskorrektur im Spiel. Die veröffentlichte Regel 2.8 erlaubt diesen Strafverzicht nach Schiedsrichterermessen; diese Übung wählt diese zulässige Möglichkeit.',
+    'Committee training policy v1: the same ball passage from an out-of-bounds carrier remains invalid after that robot is removed. Published Rule 2.8 expressly disallows the penalized team’s goals while its penalized robot remains on the field; the after-removal extension is a training interpretation, not additional published wording.':
+      'Trainingsvorgabe des Komitees v1: Ein Tor aus derselben fortgesetzten Ballbewegung eines ballführenden Roboters in out-of-bounds bleibt auch nach dessen Entfernung ungültig. Die veröffentlichte Regel 2.8 verbietet ausdrücklich Tore des bestraften Teams, solange sein bestrafter Roboter auf dem Feld bleibt; die Erweiterung auf die Zeit nach der Entfernung ist eine Trainingsauslegung und kein zusätzlicher offizieller Regeltext.',
+    'This training assessment covers main 2v2 Soccer rules, referee decisions, inspection and safety checks. It is not an official referee appointment, a complete tournament-organizer qualification, or an Entry / SuperTeam qualification. Check your event rules.':
+      'Diese Trainingsprüfung umfasst die Hauptregeln für Soccer 2v2, Schiedsrichterentscheidungen sowie technische und Sicherheitsprüfungen. Sie ist keine offizielle Schiedsrichterbestellung, vollständige Qualifikation für Turnierorganisatoren oder Qualifikation für Entry / SuperTeam. Prüfen Sie die Regeln Ihrer Veranstaltung.',
     Rules: 'Regeln',
     Play: 'Spielen',
     Referee: 'Schiedsrichter',
@@ -339,6 +406,46 @@ const MANUAL = {
       'Das vollständige Einfahren gilt als out of bounds. Entfernen Sie den Roboter für eine Minute oder bis zu einem früheren kick-off.',
   },
   ja: {
+    '2.4 GHz at no more than 100 mW EIRP; spectrum availability is not guaranteed':
+      '2.4 GHz 帯で 100 mW EIRP 以下。周波数帯の利用可能性は保証されません',
+    'Fail; a passing rebound must not hit the starting goal’s back wall':
+      '不合格です。合格するには、跳ね返ったボールがキックを開始したゴールの奥壁に当たらないことが必要です',
+    'Yes; continual entry or out of bounds is listed as a damaged-robot example, with the referee deciding':
+      'はい。繰り返しペナルティーエリアに完全に入ることや out of bounds は damaged ロボットの例に挙げられており、審判が判断します',
+    'Main Soccer Infrared switches to 42 mm; Entry continues with the larger IR ball':
+      '主な Soccer Infrared は 42 mm に切り替わり、Entry は引き続き大型の IR ボールを使用します',
+    'No; verify the event’s adaptations, and study the separate Entry or SuperTeam rules when applicable':
+      'いいえ。大会独自の変更を確認し、必要に応じて Entry または SuperTeam の個別規則を学んでください',
+    'Yes; compliance can be checked at any time, with on-field checks available before a half, on a damaged robot’s return, or before a restart after a goal':
+      'はい。適合性はいつでも確認できます。各ハーフの開始前、damaged robot の復帰時、ゴール後の再開前にはフィールド上で検査できます',
+    'No; interfering lights must be covered, as must prohibited visible orange, yellow and blue robot parts':
+      'いいえ。干渉する光源も、禁止されている目に見えるオレンジ色・黄色・青色の機体部品も覆う必要があります',
+    'A horizontal white plastic circle at least 40 mm across, visible and accessible for the referee to write its number':
+      '直径が少なくとも 40 mm の水平な白いプラスチック製の円で、審判がロボット番号を書けるように見やすく手が届くこと',
+    'It is required; protect it from impact and keep it at least 10 mm inside the outer edge. The module itself may exceed the height limit':
+      '必須です。衝撃から保護し、外縁から少なくとも 10 mm 内側に配置します。モジュール自体が高さ制限を超えることは認められています',
+    'No; this capability rule has an opponent-obstruction exception':
+      'いいえ。このボールを扱う能力の規則には、相手に妨げられている場合の例外があります',
+    'Committee training policy v1 selects the waiver permitted by Rule 2.8; an actual event must confirm its application':
+      '委員会のトレーニング方針 v1 は、規則 2.8 で許されるペナルティーの免除を選択しています。実際の大会では、その適用を確認する必要があります',
+    'The rules examination did not meet {0} of {1} correct first answers.':
+      '規則試験で必要な初回正答数（全{1}問中{0}問）に達しませんでした。',
+    'Goal not granted': 'ゴールは認められません',
+    'Relocate farther defender': 'ボールからより遠い方の守備ロボットを移動する',
+    'The farther defender': 'ボールからより遠い方の守備ロボット',
+    'Look for two teammates overlapping the same penalty area. Compare their CURRENT distances to the ball; the farther robot is the one to move.':
+      '同じチームのロボット2台が同じペナルティーエリアに重なっているか確認します。ボールまでの現在の距離を比較し、より遠い方のロボットを移動します。',
+    'Review this aftermath: pushing was called during the contact, and the resulting ball movement reached the back wall of the goal defended by Blue.':
+      '状況の結果を確認してください。接触中に審判が pushing を宣告し、その結果ボールが青チームの守るゴールの奥壁に接触しました。',
+    'Review this aftermath: pushing was called during the contact, and the resulting ball movement reached the back wall of the goal defended by Yellow.':
+      '状況の結果を確認してください。接触中に審判が pushing を宣告し、その結果ボールが黄チームの守るゴールの奥壁に接触しました。',
+    'Committee training policy · v1': '委員会のトレーニング方針 · v1',
+    'Committee training policy v1: after an accidental opponent-caused out of bounds, call pushed out and keep the robot in play with only the necessary small correction. Published Rule 2.8 permits this waiver at referee discretion; this exercise selects that permitted option.':
+      '委員会のトレーニング方針 v1：相手に偶然押されて out of bounds になった場合は pushed out を宣告し、必要最小限の位置修正のみを行い、ロボットを試合に残します。公開規則2.8ではこの罰則免除は審判の裁量で認められており、本演習はその許容される選択肢を採用しています。',
+    'Committee training policy v1: the same ball passage from an out-of-bounds carrier remains invalid after that robot is removed. Published Rule 2.8 expressly disallows the penalized team’s goals while its penalized robot remains on the field; the after-removal extension is a training interpretation, not additional published wording.':
+      '委員会のトレーニング方針 v1：ボールを保持していたロボットが out-of-bounds になった際、そのまま続くボールの動きによるゴールは、ロボットを取り除いた後も無効とします。公開規則2.8は、罰則対象のロボットがフィールド上に残っている間の、そのチームのゴールを明示的に認めていません。取り除いた後まで適用する部分はトレーニング上の解釈であり、公開規則に追加された文言ではありません。',
+    'This training assessment covers main 2v2 Soccer rules, referee decisions, inspection and safety checks. It is not an official referee appointment, a complete tournament-organizer qualification, or an Entry / SuperTeam qualification. Check your event rules.':
+      'このトレーニング評価は、主な Soccer 2v2 規則、審判の判断、機体検査、安全確認を対象とします。公式な審判任命、大会運営者としての完全な資格、Entry / SuperTeam の資格ではありません。参加する大会の規則を確認してください。',
     Rules: 'ルール',
     Play: 'プレイ',
     Referee: '審判',
@@ -635,7 +742,7 @@ function protect(source) {
   for (const term of PROTECTED_TERMS) {
     const expression = new RegExp(
       `(?<![\\p{L}\\p{N}])${escapeRegExp(term)}(?![\\p{L}\\p{N}])`,
-      'giu',
+      term === 'Entry' ? 'gu' : 'giu',
     );
     text = text.replace(expression, (match) => {
       const token = `ZXQTERM${preserved.length}QXZ`;
@@ -769,6 +876,14 @@ async function main() {
       }
     }
     cache._revision = CACHE_REVISION;
+  }
+  // Entry is the name of a separate format, not immigration or a data entry.
+  // Refresh only these phrases; ordinary lowercase "entry" remains translatable.
+  if (cache._entryFormatTerm !== 1) {
+    for (const locale of TARGETS)
+      for (const phrase of Object.keys(cache[locale] ?? {}))
+        if (/\bEntry\b/.test(phrase)) delete cache[locale][phrase];
+    cache._entryFormatTerm = 1;
   }
   const jobs = [];
   for (const locale of TARGETS) {
