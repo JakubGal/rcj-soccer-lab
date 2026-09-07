@@ -309,7 +309,7 @@ export function CertificationPanel({
             </CardTitle>
             <CardDescription className="max-w-3xl text-sm leading-6">
               {t(
-                'Start a certification round when you are ready. The rules examination records the first answer, and referee games use fixed ten-minute certification settings.',
+                'Start a certification round when you are ready. The rules examination records the first answer, and referee games use fixed certification settings with 10:00 of training time (drill evidence playback included).',
               )}
             </CardDescription>
           </CardHeader>
@@ -600,14 +600,14 @@ function CertificationRequirementsOverview() {
       title: 'Step mode',
       value: '5 / 8',
       detail:
-        'Five qualifying 10-minute games at 90% or higher, from eight attempts',
+        'Five qualifying games of 10:00 training time at 90% or higher, from eight attempts',
     },
     {
       icon: Clock3,
       title: 'Continuous mode',
       value: '2 / 5',
       detail:
-        'Two qualifying 10-minute games at 80% or higher, from five attempts',
+        'Two qualifying games of 10:00 training time at 80% or higher, from five attempts',
     },
   ];
   return (

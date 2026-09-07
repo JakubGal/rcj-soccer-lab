@@ -953,12 +953,8 @@ export class RefereeMatch {
         else if (previous === 'pause')
           facts =
             'The replacement ball / official check is now complete. The stopped robots have remained untouched. Decide how to continue.';
-        else if (previous === 'pushing')
-          facts =
-            'The ball has been relocated. Reassess the remaining penalty-area arrangement using its new position.';
-        else if (previous === 'no-goal')
-          facts =
-            'The goal was disallowed. Resolve the remaining infringement before continuing.';
+        else if (previous === 'pushing' || previous === 'no-goal')
+          facts = this.followUpFacts(item, previous);
         else if (previous === 'correct-setup')
           facts =
             'The placement has been corrected. Everyone is stopped and awaiting your signal.';
@@ -2015,6 +2011,31 @@ export class RefereeMatch {
         ),
       )
     );
+  }
+
+  /**
+   * Evidence shown between the steps of a compound decision. It restates which
+   * infringement is still open, using only what the referee has already seen,
+   * without naming the call that resolves it.
+   */
+  private followUpFacts(item: ActiveIncident, previous: 'pushing' | 'no-goal') {
+    const current = item.definition.steps[item.step] ?? [];
+    if (previous === 'no-goal') {
+      const removal = current.find((call) => call.action === 'out')?.target;
+      if (removal)
+        return `The goal was disallowed. ${robotName(transformId(removal, item.variant))} was already out of bounds when its team scored and is still on the field.`;
+      if (current.some((call) => call.action === 'pushing'))
+        return 'The goal was disallowed. The pushing contact behind it still needs its ball placement.';
+      return 'The goal was disallowed. Resolve the remaining infringement before continuing.';
+    }
+    const defense = current.find((call) => call.action === 'multiple');
+    if (defense) {
+      const team = defense.target?.startsWith('farther')
+        ? (defense.target.split(':')[1] ?? transformId('blue', item.variant))
+        : teamOf(transformId(defense.target ?? 'blue-1', item.variant));
+      return `The ball has been relocated for pushing. Both ${robotName(team)} robots still overlap the same penalty area; compare their distances to the ball's new position.`;
+    }
+    return 'The ball has been relocated. Reassess the remaining penalty-area arrangement using its new position.';
   }
 
   private explanation(item: ActiveIncident) {

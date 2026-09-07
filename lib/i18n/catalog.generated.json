@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-09-06T17:38:40.052Z",
+  "generatedAt": "2026-09-07T11:56:16.503Z",
   "locales": {
     "sk": {
       "exact": {
@@ -521,7 +521,7 @@
         "Certification replay must include every topic.": "Prehratie certifikácie musí zahŕňať každú tému.",
         "CERTIFICATION RULES / FIRST ANSWER COUNTS": "CERTIFIKAČNÉ PRAVIDLÁ / PRVÁ ODPOVEĎ SA POČÍTA",
         "Certification scope and training policies": "Rozsah certifikácie a zásady školenia",
-        "Certification uses all topics, a reproducible shuffle, 10:00 of simulated play and 1× speed. The robot model is locked. Starting consumes one attempt; saved games can be resumed from Academy. Hints and answer assistance are unavailable.": "Certifikácia využíva všetky témy, reprodukovateľné náhodné prehrávanie, 10:00 simulovanej hry a 1× rýchlosť. Model robota je uzamknutý. Spustenie spotrebuje jeden pokus; uložené hry je možné obnoviť z Akadémie. Rady a pomoc pri odpovediach nie sú k dispozícii.",
+        "Certification uses all topics, a reproducible shuffle, 10:00 of training time and 1× speed. Training time also runs while drill evidence plays, so the match clock ends short of 10:00. The robot model is locked. Starting consumes one attempt; saved games can be resumed from Academy. Hints and answer assistance are unavailable.": "Certifikácia používa všetky témy, reprodukovateľné premiešanie, 10:00 tréningového času a rýchlosť 1×. Tréningový čas beží aj počas prehrávania dôkazov k situáciám, takže hodiny zápasu skončia skôr než na 10:00. Model robota je uzamknutý. Spustenie spotrebuje jeden pokus; uložené hry možno obnoviť z Akadémie. Rady a pomoc s odpoveďami nie sú k dispozícii.",
         "certificationReceipt": "certifikácia Potvrdenie",
         "certified": "certifikovaný",
         "Certified": "Certifikovaný",
@@ -912,7 +912,7 @@
         "First handle the official interruption safely. After the check, decide how to restart without silently resetting the robots.": "Najprv bezpečne zvládnite oficiálne prerušenie. Po kontrole sa rozhodnite, ako reštartovať bez tichého resetovania robotov.",
         "First neutral placement": "Prvé neutrálne umiestnenie",
         "Five contrasting animated examples": "Päť kontrastných animovaných príkladov",
-        "Five qualifying 10-minute games at 90% or higher, from eight attempts": "Päť kvalifikačných 10-minútových hier na 90 % alebo viac, z ôsmich pokusov",
+        "Five qualifying games of 10:00 training time at 90% or higher, from eight attempts": "Päť kvalifikačných zápasov s tréningovým časom 10:00 na 90 % alebo viac, z ôsmich pokusov",
         "Five robots versus five robots": "Päť robotov verzus päť robotov",
         "Fixed orientation": "Pevná orientácia",
         "Fixed, inaccessible ball": "Pevná, neprístupná lopta",
@@ -1258,16 +1258,17 @@
         "mass": "omša",
         "Mass": "omša",
         "match": "zápas",
+        "MATCH": "ZÁPAS",
         "Match camera": "Zápasová kamera",
         "Match checks": "Kontroly zápasov",
         "Match complete": "Zápas dokončený",
         "Match complete ·": "Zápas dokončený ·",
         "Match kickoff": "Zápas kickoff",
         "Match length": "Dĺžka zápasu",
-        "Match length · simulated play time": "Dĺžka zápasu · simulovaný čas hry",
         "Match robot design": "Zladiť dizajn robota",
         "Match setup": "Nastavenie zápasu",
         "Match setup and robot controls": "Nastavenie zápasu a ovládanie robota",
+        "Match time only advances while play is live.": "Čas zápasu beží len počas živej hry.",
         "matches across all documents": "zhoduje sa vo všetkých dokumentoch",
         "MatchReplayError": "MatchReplayError",
         "Material specifications": "Materiálové špecifikácie",
@@ -1763,7 +1764,6 @@
         "Relocate farther defender": "Premiestnite obrancu, ktorý je ďalej od loptičky",
         "Relocate the robot farther from the ball to the furthest free neutral spot. A first partial overlap is not a one-minute removal.": "Premiestnite robota ďalej od lopty na najvzdialenejšie voľné neutrálne miesto. Prvé čiastočné prekrytie nie je jednominútové odstránenie.",
         "relocated": "premiestnený",
-        "remaining": "zostávajúce",
         "Remaining robots await kickoff": "Zostávajúce roboty čakajú na kickoff",
         "Remote control": "Diaľkové ovládanie",
         "Removal and waiting period": "Odstránenie a čakacia doba",
@@ -1978,6 +1978,7 @@
         "Separate observed facts from assumptions": "Oddeľte pozorované skutočnosti od predpokladov",
         "seq": "nasl",
         "session had already finished": "relácia už skončila",
+        "Session length · training time": "Dĺžka sedenia · čas tréningu",
         "Set-up": "Nastavenie",
         "Settle the dispute before signing": "Urovnajte spor pred podpisom",
         "setup": "nastavenie",
@@ -2066,7 +2067,7 @@
         "Stalemate, count and neutral placement": "Patová situácia, počet a neutrálne umiestnenie",
         "Stalled play · Ball moved to nearest neutral spot": "Zastavená hra · Lopta sa presunula na najbližšie neutrálne miesto",
         "start": "začať",
-        "Start a certification round when you are ready. The rules examination records the first answer, and referee games use fixed ten-minute certification settings.": "Keď budete pripravení, začnite certifikačné kolo. Skúška pravidiel zaznamenáva prvú odpoveď a rozhodcovské hry používajú pevné desaťminútové nastavenia certifikácie.",
+        "Start a certification round when you are ready. The rules examination records the first answer, and referee games use fixed certification settings with 10:00 of training time (drill evidence playback included).": "Keď budete pripravení, začnite certifikačné kolo. Skúška pravidiel zaznamenáva prvú odpoveď a rozhodcovské hry používajú pevné nastavenia certifikácie s 10:00 tréningového času (vrátane prehrávania cvičných dôkazov).",
         "Start a new certification round before playing another attempt.": "Pred ďalším pokusom začnite nové certifikačné kolo.",
         "Start anyway": "Aj tak začnite",
         "Start beside the goal and measure the first bounce height": "Začnite vedľa cieľa a zmerajte výšku prvého odrazu",
@@ -2244,6 +2245,7 @@
         "The GitHub submission could not be prepared.": "Odoslanie na GitHub nebolo možné pripraviť.",
         "The goal end decides the scoring team, regardless of who last touched the ball.": "Gólový koniec rozhoduje skórujúci tím bez ohľadu na to, kto sa ako posledný dotkol lopty.",
         "The goal was disallowed. Resolve the remaining infringement before continuing.": "Gól nebol uznaný. Pred pokračovaním vyriešte zostávajúce porušenie.",
+        "The goal was disallowed. The pushing contact behind it still needs its ball placement.": "Gól nebol uznaný. Pri kontakte, za ktorý bol odpískaný pushing, treba ešte umiestniť loptičku.",
         "The highlighted object in this restart is the ball.": "Zvýraznený objekt v tomto reštarte je lopta.",
         "The highlighted robot is still in live play.": "Zvýraznený robot je stále v živej hre.",
         "The interference requirement covers lights as well as construction colours. The 2026 text specifically warns about bright red lights being mistaken for the ball.": "Požiadavka na rušenie sa vzťahuje na svetlá, ako aj na farby konštrukcie. Text z roku 2026 špecificky varuje, že jasné červené svetlá sa mýlia s loptou.",
@@ -2438,7 +2440,7 @@
         "Two overlapping events": "Dve prekrývajúce sa udalosti",
         "Two partial defenders": "Dvaja čiastoční obrancovia",
         "Two partial overlaps": "Dva čiastočné prekrytia",
-        "Two qualifying 10-minute games at 80% or higher, from five attempts": "Dve kvalifikačné 10-minútové hry na 80 % alebo viac, z piatich pokusov",
+        "Two qualifying games of 10:00 training time at 80% or higher, from five attempts": "Dve kvalifikačné hry s tréningovým časom 10:00 na 80 % alebo viac, z piatich pokusov",
         "type": "typu",
         "ul": "ul",
         "Unable to create robot label canvas.": "Nepodarilo sa vytvoriť plátno štítku robota.",
@@ -3066,6 +3068,14 @@
           "translation": "Vyberte si {0}: vezmite si najskôr kickoff alebo si vyberte cieľ, na ktorý zaútočíte, a nechajte druhý tím odštartovať."
         },
         {
+          "source": "Match clock {0} · training time also runs while drill evidence plays; the match clock waits for live play.",
+          "translation": "Hodiny zápasu {0} · tréningový čas beží aj počas prehrávania dôkazov k situáciám; hodiny zápasu bežia len počas živej hry."
+        },
+        {
+          "source": "Match time {0}",
+          "translation": "Čas zápasu {0}"
+        },
+        {
           "source": "No robot asset returned for {0}.",
           "translation": "Pre {0} sa nevrátil žiadny prvok robota."
         },
@@ -3138,8 +3148,16 @@
           "translation": "Spustite hru {0}"
         },
         {
+          "source": "The ball has been relocated for pushing. Both {0} robots still overlap the same penalty area; compare their distances to the ball's new position.",
+          "translation": "Loptička bola po pushing premiestnená. Oba roboty tímu {0} stále zasahujú do toho istého pokutového územia; porovnajte ich vzdialenosti od novej polohy loptičky."
+        },
+        {
           "source": "The ball touched the inside back wall. {0} defended this end.",
           "translation": "Lopta sa dotkla vnútornej zadnej steny. {0} tento koniec obhájil."
+        },
+        {
+          "source": "The goal was disallowed. {0} was already out of bounds when its team scored and is still on the field.",
+          "translation": "Gól nebol uznaný. {0} bol už v out of bounds, keď jeho tím skóroval, a stále je na ihrisku."
         },
         {
           "source": "The rules examination did not meet {0} of {1} correct first answers.",
@@ -3148,6 +3166,10 @@
         {
           "source": "Tournament place · {0} points",
           "translation": "Miesto turnaja · {0} bodov"
+        },
+        {
+          "source": "Training time {0} remaining",
+          "translation": "Zostávajúci čas tréningu {0}"
         },
         {
           "source": "Yellow {0}, Blue {1}",
@@ -3679,7 +3701,7 @@
         "Certification replay must include every topic.": "Die Wiederholung der Zertifizierung muss jedes Thema umfassen.",
         "CERTIFICATION RULES / FIRST ANSWER COUNTS": "ZERTIFIZIERUNGSREGELN / DIE ERSTE ANTWORT ZÄHLT",
         "Certification scope and training policies": "Zertifizierungsumfang und Schulungsrichtlinien",
-        "Certification uses all topics, a reproducible shuffle, 10:00 of simulated play and 1× speed. The robot model is locked. Starting consumes one attempt; saved games can be resumed from Academy. Hints and answer assistance are unavailable.": "Bei der Zertifizierung werden alle Themen, ein reproduzierbares Mischen, 10:00 simuliertes Spiel und 1-fache Geschwindigkeit verwendet. Das Robotermodell ist gesperrt. Der Start erfordert einen Versuch. Gespeicherte Spiele können von der Academy aus fortgesetzt werden. Hinweise und Antworthilfen sind nicht verfügbar.",
+        "Certification uses all topics, a reproducible shuffle, 10:00 of training time and 1× speed. Training time also runs while drill evidence plays, so the match clock ends short of 10:00. The robot model is locked. Starting consumes one attempt; saved games can be resumed from Academy. Hints and answer assistance are unavailable.": "Die Zertifizierung verwendet alle Themen, eine reproduzierbare Mischung, 10:00 Trainingszeit und 1×-Geschwindigkeit. Die Trainingszeit läuft auch, während Situationsbeweise abgespielt werden, sodass die Spieluhr vor 10:00 endet. Das Robotermodell ist gesperrt. Der Start verbraucht einen Versuch; gespeicherte Spiele können aus der Academy fortgesetzt werden. Hinweise und Antworthilfen sind nicht verfügbar.",
         "certificationReceipt": "ZertifizierungReceipt",
         "certified": "zertifiziert",
         "Certified": "Zertifiziert",
@@ -4070,7 +4092,7 @@
         "First handle the official interruption safely. After the check, decide how to restart without silently resetting the robots.": "Gehen Sie zunächst sicher mit der offiziellen Unterbrechung um. Entscheiden Sie nach der Prüfung, wie Sie einen Neustart durchführen, ohne die Roboter stillschweigend zurückzusetzen.",
         "First neutral placement": "Erste neutrale Platzierung",
         "Five contrasting animated examples": "Fünf kontrastierende animierte Beispiele",
-        "Five qualifying 10-minute games at 90% or higher, from eight attempts": "Fünf qualifizierende 10-Minuten-Spiele mit 90 % oder mehr aus acht Versuchen",
+        "Five qualifying games of 10:00 training time at 90% or higher, from eight attempts": "Fünf Qualifikationsspiele mit 10:00 Trainingszeit bei 90 % oder mehr, aus acht Versuchen",
         "Five robots versus five robots": "Fünf Roboter gegen fünf Roboter",
         "Fixed orientation": "Feste Ausrichtung",
         "Fixed, inaccessible ball": "Fester, unzugänglicher Ball",
@@ -4416,16 +4438,17 @@
         "mass": "Masse",
         "Mass": "Messe",
         "match": "Spiel",
+        "MATCH": "SPIEL",
         "Match camera": "Passende Kamera",
         "Match checks": "Übereinstimmungskontrollen",
         "Match complete": "Match abgeschlossen",
         "Match complete ·": "Match abgeschlossen ·",
         "Match kickoff": "Übereinstimmung mit kickoff",
         "Match length": "Spieldauer",
-        "Match length · simulated play time": "Spiellänge · simulierte Spielzeit",
         "Match robot design": "Passen Sie das Roboterdesign an",
         "Match setup": "Match-Setup",
         "Match setup and robot controls": "Match-Setup und Robotersteuerung",
+        "Match time only advances while play is live.": "Die Spielzeit läuft nur weiter, während das Spiel live ist.",
         "matches across all documents": "Übereinstimmungen in allen Dokumenten",
         "MatchReplayError": "MatchReplayError",
         "Material specifications": "Materialspezifikationen",
@@ -4921,7 +4944,6 @@
         "Relocate farther defender": "Den weiter vom Ball entfernten Verteidiger versetzen",
         "Relocate the robot farther from the ball to the furthest free neutral spot. A first partial overlap is not a one-minute removal.": "Platzieren Sie den Roboter weiter vom Ball entfernt an den am weitesten entfernten freien neutralen Ort. Eine erste teilweise Überlappung ist keine einminütige Entfernung.",
         "relocated": "verlegt",
-        "remaining": "verbleibend",
         "Remaining robots await kickoff": "Die restlichen Roboter warten auf kickoff",
         "Remote control": "Fernbedienung",
         "Removal and waiting period": "Entfernung und Wartezeit",
@@ -5136,6 +5158,7 @@
         "Separate observed facts from assumptions": "Trennen Sie beobachtete Fakten von Annahmen",
         "seq": "seq",
         "session had already finished": "Die Sitzung war bereits beendet",
+        "Session length · training time": "Sitzungslänge · Trainingszeit",
         "Set-up": "Aufbau",
         "Settle the dispute before signing": "Schlichten Sie den Streit vor der Unterzeichnung",
         "setup": "einrichten",
@@ -5224,7 +5247,7 @@
         "Stalemate, count and neutral placement": "Patt, Zählung und neutrale Platzierung",
         "Stalled play · Ball moved to nearest neutral spot": "Abgebrochenes Spiel · Der Ball wird zum nächstgelegenen neutralen Punkt bewegt",
         "start": "beginnen",
-        "Start a certification round when you are ready. The rules examination records the first answer, and referee games use fixed ten-minute certification settings.": "Starten Sie eine Zertifizierungsrunde, wenn Sie dazu bereit sind. Bei der Regelprüfung wird die erste Antwort erfasst und bei Schiedsrichterspielen werden feste Zehn-Minuten-Zertifizierungseinstellungen verwendet.",
+        "Start a certification round when you are ready. The rules examination records the first answer, and referee games use fixed certification settings with 10:00 of training time (drill evidence playback included).": "Starten Sie eine Zertifizierungsrunde, wenn Sie dazu bereit sind. Bei der Regelprüfung wird die erste Antwort aufgezeichnet, und bei Schiedsrichterspielen werden feste Zertifizierungseinstellungen mit einer Trainingszeit von 10:00 Uhr verwendet (einschließlich Wiedergabe der Übungsbeweise).",
         "Start a new certification round before playing another attempt.": "Starten Sie eine neue Zertifizierungsrunde, bevor Sie einen weiteren Versuch spielen.",
         "Start anyway": "Fangen Sie trotzdem an",
         "Start beside the goal and measure the first bounce height": "Beginnen Sie neben dem Ziel und messen Sie die erste Sprunghöhe",
@@ -5402,6 +5425,7 @@
         "The GitHub submission could not be prepared.": "Die GitHub-Übermittlung konnte nicht vorbereitet werden.",
         "The goal end decides the scoring team, regardless of who last touched the ball.": "Das Torende entscheidet über die punktende Mannschaft, unabhängig davon, wer den Ball zuletzt berührt hat.",
         "The goal was disallowed. Resolve the remaining infringement before continuing.": "Das Tor wurde nicht anerkannt. Beheben Sie den verbleibenden Verstoß, bevor Sie fortfahren.",
+        "The goal was disallowed. The pushing contact behind it still needs its ball placement.": "Das Tor wurde nicht anerkannt. Der dahinter liegende pushing-Kontakt benötigt noch seine Kugelplatzierung.",
         "The highlighted object in this restart is the ball.": "Das hervorgehobene Objekt in diesem Neustart ist der Ball.",
         "The highlighted robot is still in live play.": "Der hervorgehobene Roboter ist immer noch im Live-Spiel.",
         "The interference requirement covers lights as well as construction colours. The 2026 text specifically warns about bright red lights being mistaken for the ball.": "Die Interferenzanforderung gilt sowohl für Lichter als auch für Baufarben. Der Text von 2026 warnt ausdrücklich davor, dass leuchtend rote Lichter mit dem Ball verwechselt werden.",
@@ -5596,7 +5620,7 @@
         "Two overlapping events": "Zwei sich überschneidende Ereignisse",
         "Two partial defenders": "Zwei Teilverteidiger",
         "Two partial overlaps": "Zwei teilweise Überlappungen",
-        "Two qualifying 10-minute games at 80% or higher, from five attempts": "Zwei qualifizierende 10-Minuten-Spiele mit 80 % oder mehr aus fünf Versuchen",
+        "Two qualifying games of 10:00 training time at 80% or higher, from five attempts": "Zwei Qualifikationsspiele mit 10:00 Trainingszeit bei 80 % oder mehr aus fünf Versuchen",
         "type": "Typ",
         "ul": "ul",
         "Unable to create robot label canvas.": "Roboter-Label-Canvas konnte nicht erstellt werden.",
@@ -6224,6 +6248,14 @@
           "translation": "Treffen Sie die Entscheidung von {0}: Nehmen Sie zuerst kickoff oder wählen Sie ein Tor zum Angriff aus und lassen Sie das andere Team anstoßen."
         },
         {
+          "source": "Match clock {0} · training time also runs while drill evidence plays; the match clock waits for live play.",
+          "translation": "Spieluhr {0} · die Trainingszeit läuft auch, während Situationsbeweise abgespielt werden; die Spieluhr läuft nur bei laufendem Spiel."
+        },
+        {
+          "source": "Match time {0}",
+          "translation": "Spielzeit {0}"
+        },
+        {
           "source": "No robot asset returned for {0}.",
           "translation": "Für {0} wurde kein Roboter-Asset zurückgegeben."
         },
@@ -6296,8 +6328,16 @@
           "translation": "Starten Sie das Spiel {0}"
         },
         {
+          "source": "The ball has been relocated for pushing. Both {0} robots still overlap the same penalty area; compare their distances to the ball's new position.",
+          "translation": "Der Ball wurde für pushing verlegt. Beide {0}-Roboter überlappen immer noch denselben Strafraum; Vergleichen Sie ihre Abstände mit der neuen Position des Balls."
+        },
+        {
           "source": "The ball touched the inside back wall. {0} defended this end.",
           "translation": "Der Ball berührte die Innenrückwand. {0} verteidigte dieses Ziel."
+        },
+        {
+          "source": "The goal was disallowed. {0} was already out of bounds when its team scored and is still on the field.",
+          "translation": "Das Tor wurde nicht anerkannt. {0} war bereits out of bounds, als sein Team punktete, und ist immer noch auf dem Feld."
         },
         {
           "source": "The rules examination did not meet {0} of {1} correct first answers.",
@@ -6306,6 +6346,10 @@
         {
           "source": "Tournament place · {0} points",
           "translation": "Turnierplatz · {0} Punkte"
+        },
+        {
+          "source": "Training time {0} remaining",
+          "translation": "Verbleibende Trainingszeit {0}"
         },
         {
           "source": "Yellow {0}, Blue {1}",
@@ -6837,7 +6881,7 @@
         "Certification replay must include every topic.": "認定のリプレイにはすべてのトピックが含まれている必要があります。",
         "CERTIFICATION RULES / FIRST ANSWER COUNTS": "認定ルール / 最初の回答が採点対象",
         "Certification scope and training policies": "認定範囲とトレーニングポリシー",
-        "Certification uses all topics, a reproducible shuffle, 10:00 of simulated play and 1× speed. The robot model is locked. Starting consumes one attempt; saved games can be resumed from Academy. Hints and answer assistance are unavailable.": "認定には、すべてのトピック、再現可能なシャッフル、10:00 のシミュレーション プレイ、および 1 倍速が使用されます。ロボットモデルはロックされています。開始には 1 回の試行が必要です。保存したゲームはアカデミーから再開できます。ヒントと回答のサポートは利用できません。",
+        "Certification uses all topics, a reproducible shuffle, 10:00 of training time and 1× speed. Training time also runs while drill evidence plays, so the match clock ends short of 10:00. The robot model is locked. Starting consumes one attempt; saved games can be resumed from Academy. Hints and answer assistance are unavailable.": "認定ではすべてのトピック、再現可能なシャッフル、10:00 のトレーニング時間、1× 速度を使用します。トレーニング時間はドリル証拠の再生中も進むため、試合時間は 10:00 に達する前に終了します。ロボットモデルは固定されています。開始すると 1 回の試行を消費します。保存したゲームはアカデミーから再開できます。ヒントと回答の補助は利用できません。",
         "certificationReceipt": "証明書領収書",
         "certified": "認定された",
         "Certified": "認定済み",
@@ -7228,7 +7272,7 @@
         "First handle the official interruption safely. After the check, decide how to restart without silently resetting the robots.": "まず公式の中断を安全に処理してください。チェック後、ロボットをサイレントリセットせずに再起動する方法を決定します。",
         "First neutral placement": "最初の中立的な配置",
         "Five contrasting animated examples": "5 つの対照的なアニメーションの例",
-        "Five qualifying 10-minute games at 90% or higher, from eight attempts": "予選 10 分間ゲーム 5 試合で 8 回のアテンプトで 90% 以上",
+        "Five qualifying games of 10:00 training time at 90% or higher, from eight attempts": "トレーニング時間 10:00 の予選 5 試合、8 回のアテンプトで 90% 以上",
         "Five robots versus five robots": "5 台のロボット対 5 台のロボット",
         "Fixed orientation": "固定方向",
         "Fixed, inaccessible ball": "固定されたアクセスできないボール",
@@ -7574,16 +7618,17 @@
         "mass": "質量",
         "Mass": "ミサ",
         "match": "一致",
+        "MATCH": "試合",
         "Match camera": "カメラを合わせる",
         "Match checks": "一致チェック",
         "Match complete": "試合完了",
         "Match complete ·": "試合完了 ·",
         "Match kickoff": "kickoff と一致",
         "Match length": "試合時間",
-        "Match length · simulated play time": "試合の長さ・模擬プレイ時間",
         "Match robot design": "ロボットのデザインに合わせて",
         "Match setup": "試合のセットアップ",
         "Match setup and robot controls": "セットアップとロボット制御のマッチング",
+        "Match time only advances while play is live.": "試合時間はプレイがライブ中にのみ進みます。",
         "matches across all documents": "すべてのドキュメントで一致する",
         "MatchReplayError": "マッチリプレイエラー",
         "Material specifications": "材質仕様",
@@ -8079,7 +8124,6 @@
         "Relocate farther defender": "ボールからより遠い方の守備ロボットを移動する",
         "Relocate the robot farther from the ball to the furthest free neutral spot. A first partial overlap is not a one-minute removal.": "ロボットをボールから最も遠い自由なニュートラルスポットに移動します。最初の部分的なオーバーラップは 1 分間の削除ではありません。",
         "relocated": "移転した",
-        "remaining": "残り",
         "Remaining robots await kickoff": "残りのロボットは kickoff を待っています",
         "Remote control": "リモコン",
         "Removal and waiting period": "削除と待機期間",
@@ -8294,6 +8338,7 @@
         "Separate observed facts from assumptions": "観察された事実を仮定から分離する",
         "seq": "連続",
         "session had already finished": "セッションはすでに終了していました",
+        "Session length · training time": "セッションの長さ・トレーニング時間",
         "Set-up": "セットアップ",
         "Settle the dispute before signing": "署名する前に紛争を解決する",
         "setup": "セットアップ",
@@ -8382,7 +8427,7 @@
         "Stalemate, count and neutral placement": "ステイルメイト、カウント、中立配置",
         "Stalled play · Ball moved to nearest neutral spot": "プレーが停滞した・ボールが最も近いニュートラルスポットに移動した",
         "start": "始める",
-        "Start a certification round when you are ready. The rules examination records the first answer, and referee games use fixed ten-minute certification settings.": "準備ができたら認定ラウンドを開始してください。ルール審査では最初の解答が記録され、審判ゲームでは 10 分間の固定認定設定が使用されます。",
+        "Start a certification round when you are ready. The rules examination records the first answer, and referee games use fixed certification settings with 10:00 of training time (drill evidence playback included).": "準備ができたら認定ラウンドを開始してください。ルール審査では最初の解答が記録され、審判ゲームではトレーニング時間が 10:00 の固定認定設定が使用されます (訓練証拠の再生を含む)。",
         "Start a new certification round before playing another attempt.": "別の試行をプレイする前に、新しい認定ラウンドを開始してください。",
         "Start anyway": "とにかく始める",
         "Start beside the goal and measure the first bounce height": "ゴール横からスタートし、最初のバウンドの高さを測定します",
@@ -8560,6 +8605,7 @@
         "The GitHub submission could not be prepared.": "GitHub の送信を準備できませんでした。",
         "The goal end decides the scoring team, regardless of who last touched the ball.": "誰が最後にボールに触れたかに関係なく、ゴールエンドで得点チームが決まります。",
         "The goal was disallowed. Resolve the remaining infringement before continuing.": "ゴールは認められなかった。続行する前に、残りの侵害を解決してください。",
+        "The goal was disallowed. The pushing contact behind it still needs its ball placement.": "ゴールは認められなかった。その後ろの pushing コンタクトは、まだボールを配置する必要があります。",
         "The highlighted object in this restart is the ball.": "この再開で強調表示されているオブジェクトはボールです。",
         "The highlighted robot is still in live play.": "ハイライトされたロボットはまだライブプレイ中です。",
         "The interference requirement covers lights as well as construction colours. The 2026 text specifically warns about bright red lights being mistaken for the ball.": "干渉要件には、照明だけでなく建築の色も含まれます。 2026年のテキストでは、真っ赤なライトがボールと間違われることについて特に警告している。",
@@ -8754,7 +8800,7 @@
         "Two overlapping events": "重複する 2 つのイベント",
         "Two partial defenders": "2人の部分的なディフェンダー",
         "Two partial overlaps": "2 つの部分的な重なり",
-        "Two qualifying 10-minute games at 80% or higher, from five attempts": "予選 10 分間ゲーム 2 回 (5 回のアテンプトで 80% 以上)",
+        "Two qualifying games of 10:00 training time at 80% or higher, from five attempts": "トレーニング時間 10:00 の予選 2 試合、5 回の試技で 80% 以上",
         "type": "タイプ",
         "ul": "ウル",
         "Unable to create robot label canvas.": "ロボットラベルキャンバスを作成できません。",
@@ -9382,6 +9428,14 @@
           "translation": "{0} が選択します。最初に kickoff を取るか、攻撃するゴールを選択して他のチームにキックオフを許可します。"
         },
         {
+          "source": "Match clock {0} · training time also runs while drill evidence plays; the match clock waits for live play.",
+          "translation": "試合時計 {0} · トレーニング時間はドリル証拠の再生中も進みます。試合時計はライブプレイ中のみ進みます。"
+        },
+        {
+          "source": "Match time {0}",
+          "translation": "試合時間 {0}"
+        },
+        {
           "source": "No robot asset returned for {0}.",
           "translation": "{0} のロボット アセットは返されませんでした。"
         },
@@ -9454,8 +9508,16 @@
           "translation": "{0} ゲームを開始する"
         },
         {
+          "source": "The ball has been relocated for pushing. Both {0} robots still overlap the same penalty area; compare their distances to the ball's new position.",
+          "translation": "ボールは pushing に再配置されました。両方の {0} ロボットは依然として同じペナルティ エリアに重なっています。ボールの新しい位置までの距離を比較します。"
+        },
+        {
           "source": "The ball touched the inside back wall. {0} defended this end.",
           "translation": "ボールは内側の後壁に触れた。 {0} はこの目的を守りました。"
+        },
+        {
+          "source": "The goal was disallowed. {0} was already out of bounds when its team scored and is still on the field.",
+          "translation": "ゴールは認められなかった。 {0} は、チームが得点した時点ですでに out of bounds であり、まだフィールドにいます。"
         },
         {
           "source": "The rules examination did not meet {0} of {1} correct first answers.",
@@ -9464,6 +9526,10 @@
         {
           "source": "Tournament place · {0} points",
           "translation": "大会場所・{0}ポイント"
+        },
+        {
+          "source": "Training time {0} remaining",
+          "translation": "残りトレーニング時間 {0}"
         },
         {
           "source": "Yellow {0}, Blue {1}",

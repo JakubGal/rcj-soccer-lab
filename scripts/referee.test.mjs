@@ -3372,3 +3372,36 @@ test('fresh contact pauses even when earlier Play on feedback is still open', ()
   assert.deepEqual(session.snapshot().actors, contact);
   assertFrozen(session);
 });
+
+test('follow-up evidence after a disallowed goal names the infringement that remains', () => {
+  const removal = prepare('out-goal');
+  correct(removal, 'no-goal');
+  removal.continue();
+  const removalFacts = removal.snapshot().facts;
+  assert.match(removalFacts, /Blue 2 was already out of bounds/);
+  assert.match(removalFacts, /still on the field/);
+  assert.doesNotMatch(removalFacts, /Resolve the remaining infringement/);
+  assert.equal(removal.expected()[0].action, 'out');
+
+  const placement = prepare('pushing-goal');
+  correct(placement, 'no-goal');
+  placement.continue();
+  const placementFacts = placement.snapshot().facts;
+  assert.match(placementFacts, /pushing contact/);
+  assert.match(placementFacts, /ball placement/);
+  assert.doesNotMatch(placementFacts, /still on the field/);
+  assert.notEqual(placementFacts, removalFacts);
+  assert.equal(placement.expected()[0].action, 'pushing');
+
+  const swapped = prepare('out-goal', { swap: true, reflect: false });
+  correct(swapped, 'no-goal');
+  swapped.continue();
+  assert.match(swapped.snapshot().facts, /Yellow 2 was already out of bounds/);
+
+  const combined = prepare('combined');
+  correct(combined, 'pushing');
+  combined.continue();
+  assert.match(combined.snapshot().facts, /Both Blue robots still overlap/);
+  assert.match(combined.snapshot().facts, /new position/);
+  assert.equal(combined.expected()[0].action, 'multiple');
+});

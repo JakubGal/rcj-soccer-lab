@@ -137,6 +137,12 @@ const MANUAL = {
     'The rules examination did not meet {0} of {1} correct first answers.':
       'V skúške z pravidiel nebol dosiahnutý požadovaný počet {0} správnych prvých odpovedí z {1}.',
     'Goal not granted': 'Gól nebol uznaný',
+    'The goal was disallowed. {0} was already out of bounds when its team scored and is still on the field.':
+      'Gól nebol uznaný. {0} bol už v out of bounds, keď jeho tím skóroval, a stále je na ihrisku.',
+    'The goal was disallowed. The pushing contact behind it still needs its ball placement.':
+      'Gól nebol uznaný. Pri kontakte, za ktorý bol odpískaný pushing, treba ešte umiestniť loptičku.',
+    "The ball has been relocated for pushing. Both {0} robots still overlap the same penalty area; compare their distances to the ball's new position.":
+      'Loptička bola po pushing premiestnená. Oba roboty tímu {0} stále zasahujú do toho istého pokutového územia; porovnajte ich vzdialenosti od novej polohy loptičky.',
     '3. Goals': '3. Bránky',
     Goals: 'Góly',
     goals: 'góly',
@@ -273,10 +279,20 @@ const MANUAL = {
     'Multiple defense · relocate': 'Multiple defense · premiestniť',
     'Full entry is out of bounds. Remove the robot for one minute or until an earlier kickoff.':
       'Úplný vstup robota znamená out of bounds. Odstráňte robota na jednu minútu alebo do skoršieho kick-off.',
+    'Certification uses all topics, a reproducible shuffle, 10:00 of training time and 1× speed. Training time also runs while drill evidence plays, so the match clock ends short of 10:00. The robot model is locked. Starting consumes one attempt; saved games can be resumed from Academy. Hints and answer assistance are unavailable.':
+      'Certifikácia používa všetky témy, reprodukovateľné premiešanie, 10:00 tréningového času a rýchlosť 1×. Tréningový čas beží aj počas prehrávania dôkazov k situáciám, takže hodiny zápasu skončia skôr než na 10:00. Model robota je uzamknutý. Spustenie spotrebuje jeden pokus; uložené hry možno obnoviť z Akadémie. Rady a pomoc s odpoveďami nie sú k dispozícii.',
+    'Match clock {0} · training time also runs while drill evidence plays; the match clock waits for live play.':
+      'Hodiny zápasu {0} · tréningový čas beží aj počas prehrávania dôkazov k situáciám; hodiny zápasu bežia len počas živej hry.',
+    'Match time only advances while play is live.':
+      'Čas zápasu beží len počas živej hry.',
   },
   de: {
     'Inspect both ball control under rule 2.5 and the 1.5 cm ball-capturing-zone limit under rule 6.2.1. A compliant capture depth alone does not establish legal holding behavior: check freedom of movement, opponent access and the permitted dribbler exception.':
       'Prüfen Sie sowohl die Ballkontrolle nach Regel 2.5 als auch die Grenze von 1,5 cm für die Ballfangzone nach Regel 6.2.1. Eine zulässige Fangtiefe allein macht holding nicht erlaubt: Prüfen Sie die Bewegungsfreiheit des Balls, den Zugang für Gegner und die erlaubte Ausnahme für dribbler.',
+    'Certification uses all topics, a reproducible shuffle, 10:00 of training time and 1× speed. Training time also runs while drill evidence plays, so the match clock ends short of 10:00. The robot model is locked. Starting consumes one attempt; saved games can be resumed from Academy. Hints and answer assistance are unavailable.':
+      'Die Zertifizierung verwendet alle Themen, eine reproduzierbare Mischung, 10:00 Trainingszeit und 1×-Geschwindigkeit. Die Trainingszeit läuft auch, während Situationsbeweise abgespielt werden, sodass die Spieluhr vor 10:00 endet. Das Robotermodell ist gesperrt. Der Start verbraucht einen Versuch; gespeicherte Spiele können aus der Academy fortgesetzt werden. Hinweise und Antworthilfen sind nicht verfügbar.',
+    'Match clock {0} · training time also runs while drill evidence plays; the match clock waits for live play.':
+      'Spieluhr {0} · die Trainingszeit läuft auch, während Situationsbeweise abgespielt werden; die Spieluhr läuft nur bei laufendem Spiel.',
     'Fail; a passing rebound must not hit the starting goal’s back wall':
       'Test nicht bestanden; bei einem bestandenen Test darf der zurückprallende Ball die Rückwand des Ausgangstores nicht treffen',
     'Yes; continual entry or out of bounds is listed as a damaged-robot example, with the referee deciding':
@@ -428,6 +444,11 @@ const MANUAL = {
   ja: {
     'Inspect both ball control under rule 2.5 and the 1.5 cm ball-capturing-zone limit under rule 6.2.1. A compliant capture depth alone does not establish legal holding behavior: check freedom of movement, opponent access and the permitted dribbler exception.':
       'ルール2.5のボール制御と、ルール6.2.1のボール捕捉ゾーンの上限1.5 cmの両方を確認してください。捕捉の深さが適合しているだけではholdingが認められるわけではありません。ボールの運動の自由度、相手ロボットの接触可能性、dribblerに認められた例外を確認してください。',
+    MATCH: '試合',
+    'Certification uses all topics, a reproducible shuffle, 10:00 of training time and 1× speed. Training time also runs while drill evidence plays, so the match clock ends short of 10:00. The robot model is locked. Starting consumes one attempt; saved games can be resumed from Academy. Hints and answer assistance are unavailable.':
+      '認定ではすべてのトピック、再現可能なシャッフル、10:00 のトレーニング時間、1× 速度を使用します。トレーニング時間はドリル証拠の再生中も進むため、試合時間は 10:00 に達する前に終了します。ロボットモデルは固定されています。開始すると 1 回の試行を消費します。保存したゲームはアカデミーから再開できます。ヒントと回答の補助は利用できません。',
+    'Match clock {0} · training time also runs while drill evidence plays; the match clock waits for live play.':
+      '試合時計 {0} · トレーニング時間はドリル証拠の再生中も進みます。試合時計はライブプレイ中のみ進みます。',
     '2.4 GHz at no more than 100 mW EIRP; spectrum availability is not guaranteed':
       '2.4 GHz 帯で 100 mW EIRP 以下。周波数帯の利用可能性は保証されません',
     'Fail; a passing rebound must not hit the starting goal’s back wall':

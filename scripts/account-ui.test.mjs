@@ -72,6 +72,8 @@ const { GitHubSubmissionPanel } =
   await import('../components/account/GitHubSubmissionPanel.tsx');
 const { ProfilePanel } = await import('../components/account/ProfilePanel.tsx');
 const { AcademyHub } = await import('../components/account/AcademyHub.tsx');
+const { MatchClock, TrainingClock } =
+  await import('../components/simulator/SessionClocks.tsx');
 const { CERTIFICATION_POLICY } = await import('../lib/certification/policy.ts');
 
 const noop = () => {};
@@ -361,4 +363,20 @@ test('a verified older round retains its certificate notice but cannot submit fo
     html,
     /Prepare certification submission|Submit for verification/,
   );
+});
+
+test('referee clocks name match time and training time separately', () => {
+  const scoreboard = renderToStaticMarkup(
+    createElement(MatchClock, { elapsed: 421, status: 'YOUR CALL' }),
+  );
+  assert.match(scoreboard, /aria-label="Match time 7:01"/);
+  assert.match(scoreboard, />MATCH</);
+  assert.match(scoreboard, /7:01/);
+  assert.match(scoreboard, />YOUR CALL</);
+  const strip = renderToStaticMarkup(
+    createElement(TrainingClock, { remaining: 599.5, matchElapsed: 421 }),
+  );
+  assert.match(strip, /Training time 10:00 remaining/);
+  assert.match(strip, /Match clock 7:01/);
+  assert.match(strip, /drill evidence/);
 });

@@ -21,7 +21,6 @@ import {
   RotateCcw,
   Scale,
   Shuffle,
-  Timer,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import {
@@ -33,6 +32,7 @@ import { PlayCanvasViewport, type CameraPreset } from './PlayCanvasViewport';
 import { MATCH_ACTORS, MATCH_ROBOTS, MATCH_STEP } from '@/lib/simulator/match';
 import { RefereeMatch } from '@/lib/simulator/referee-match';
 import { PreMatchToss } from './PreMatchToss';
+import { MatchClock, TrainingClock, formatClock } from './SessionClocks';
 import {
   sampleSituation,
   type SituationReplay,
@@ -67,8 +67,7 @@ import {
   type MatchReplayOperation,
 } from '@/lib/certification/replay';
 
-const clock = (seconds: number) =>
-  `${Math.floor(seconds / 60)}:${String(Math.floor(seconds % 60)).padStart(2, '0')}`;
+const clock = formatClock;
 const callLabel = (call: RefereeCall) => {
   const action =
     REFEREE_ACTIONS.find((entry) => entry.id === call.action)?.label ??
@@ -900,7 +899,21 @@ export function RefereePlay({
   const supported =
     frame.feedback && ['correct', 'supported'].includes(frame.feedback.verdict);
   const revealReplay = frame.trainingMode === 'step' || frame.sessionFinished;
-  const remainingSeconds = Math.ceil(frame.trainingRemaining);
+  // Kept as plain literals so the localization catalog still picks them up.
+  const scoreboardStatus =
+    frame.sessionFinished && !replay
+      ? 'FULL TIME'
+      : replay
+        ? 'REPLAY'
+        : moving && frame.phase !== 'evidence'
+          ? 'AI vs AI'
+          : frame.phase === 'decision'
+            ? 'YOUR CALL'
+            : frame.phase === 'feedback'
+              ? 'REVIEW'
+              : !moving
+                ? 'STOPPED'
+                : 'PRACTICE';
   const actions = REFEREE_ACTIONS.filter(
     (action) => action.id !== 'goal' && actionInGroup(group, action.id),
   );
@@ -1035,25 +1048,7 @@ export function RefereePlay({
           <span className="text-sky-300">
             BLUE <strong>{view.score.blue}</strong>
           </span>
-          <div>
-            <Timer className="size-3.5" />
-            {clock(view.elapsed)}
-            <small>
-              {frame.sessionFinished && !replay
-                ? 'FULL TIME'
-                : replay
-                  ? 'REPLAY'
-                  : moving && frame.phase !== 'evidence'
-                    ? 'AI vs AI'
-                    : frame.phase === 'decision'
-                      ? 'YOUR CALL'
-                      : frame.phase === 'feedback'
-                        ? 'REVIEW'
-                        : !moving
-                          ? 'STOPPED'
-                          : 'PRACTICE'}
-            </small>
-          </div>
+          <MatchClock elapsed={view.elapsed} status={scoreboardStatus} />
           <span className="text-amber-300">
             <strong>{view.score.yellow}</strong> YELLOW
           </span>
@@ -1416,7 +1411,7 @@ export function RefereePlay({
               </NativeSelectOption>
             </NativeSelect>
             <label htmlFor="referee-duration">
-              Match length · simulated play time
+              Session length · training time
             </label>
             <NativeSelect
               id="referee-duration"
@@ -1453,7 +1448,7 @@ export function RefereePlay({
             </fieldset>
             <p>
               {certification
-                ? 'Certification uses all topics, a reproducible shuffle, 10:00 of simulated play and 1× speed. The robot model is locked. Starting consumes one attempt; saved games can be resumed from Academy. Hints and answer assistance are unavailable.'
+                ? 'Certification uses all topics, a reproducible shuffle, 10:00 of training time and 1× speed. Training time also runs while drill evidence plays, so the match clock ends short of 10:00. The robot model is locked. Starting consumes one attempt; saved games can be resumed from Academy. Hints and answer assistance are unavailable.'
                 : displayedMode === 'continuous'
                   ? 'Selected faults develop during AI play. Every call you make is applied—even a wrong removal, goal, placement or early return—and evaluated privately after the match. Other natural incidents can still happen, but only selected topics affect your score.'
                   : 'The next practice drill comes from your selected topics. Each decision pauses in place.'}
@@ -1524,10 +1519,10 @@ export function RefereePlay({
             </p>
           )}
           <div className="my-3 flex flex-wrap items-center justify-between gap-2">
-            <strong>
-              {Math.floor(remainingSeconds / 60)}:
-              {String(remainingSeconds % 60).padStart(2, '0')} remaining
-            </strong>
+            <TrainingClock
+              remaining={frame.trainingRemaining}
+              matchElapsed={view.elapsed}
+            />
             <Button
               size="sm"
               variant="outline"

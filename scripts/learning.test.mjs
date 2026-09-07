@@ -61,8 +61,12 @@ const {
   RCJ_FIELD_SPEC_2026: SPEC,
   RCJ_SIMULATOR_GUIDES: GUIDES,
 } = await import('../lib/simulator/field-spec.ts');
-const { INITIAL_NAVIGATION, readNavigation, navigationSearch } =
-  await import('../lib/simulator/navigation.ts');
+const {
+  INITIAL_NAVIGATION,
+  readNavigation,
+  navigationSearch,
+  watchNavigation,
+} = await import('../lib/simulator/navigation.ts');
 const { practiceLayout, preparePracticeMatch } =
   await import('../lib/simulator/practice-layout.ts');
 
@@ -612,4 +616,41 @@ test('preparing an unfinished match preserves its engine, clock and score', () =
   const before = match.snapshot();
   assert.equal(preparePracticeMatch(match, 120), match);
   assert.deepEqual(match.snapshot(), before);
+});
+
+test('deep links are applied synchronously even when animation frames never fire', () => {
+  const originalFrame = globalThis.requestAnimationFrame;
+  globalThis.requestAnimationFrame = () => {
+    throw new Error('frames are suspended while the display sleeps');
+  };
+  try {
+    const listeners = new Map();
+    const host = {
+      location: { search: '?mode=referee&cert=step&robot=xlc-open-2020' },
+      addEventListener: (type, listener) => listeners.set(type, listener),
+      removeEventListener: (type, listener) => {
+        if (listeners.get(type) === listener) listeners.delete(type);
+      },
+    };
+    const applied = [];
+    const stop = watchNavigation(host, (nav, robot) =>
+      applied.push({ nav, robot }),
+    );
+    assert.equal(applied.length, 1);
+    assert.equal(applied[0].nav.mode, 'referee');
+    assert.equal(applied[0].nav.certificationTrack, 'step');
+    assert.equal(applied[0].robot, 'xlc-open-2020');
+    assert.deepEqual([...listeners.keys()], ['popstate']);
+    host.location.search = '?mode=academy&academy=certification';
+    listeners.get('popstate')();
+    assert.equal(applied.length, 2);
+    assert.equal(applied[1].nav.mode, 'academy');
+    assert.equal(applied[1].nav.academyPage, 'certification');
+    assert.equal(applied[1].robot, null);
+    stop();
+    assert.equal(listeners.size, 0);
+  } finally {
+    if (originalFrame === undefined) delete globalThis.requestAnimationFrame;
+    else globalThis.requestAnimationFrame = originalFrame;
+  }
 });

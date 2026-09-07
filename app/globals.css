@@ -2448,6 +2448,16 @@ a {
   font-size: 0.75rem;
   color: #9cabbf;
 }
+/* Referee scoreboard: a MATCH label replaces the icon, so the cell is wider. */
+.match-scoreboard > .match-clock {
+  align-items: baseline;
+  width: 92px;
+}
+.match-scoreboard .match-clock-label {
+  width: auto;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+}
 .match-camera {
   position: absolute;
   z-index: 20;

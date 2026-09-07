@@ -27,8 +27,8 @@ import {
 } from '@/lib/simulator/robot-models';
 import {
   INITIAL_NAVIGATION,
-  readNavigation,
   navigationSearch,
+  watchNavigation,
   type AppMode,
   type AppNavigation,
 } from '@/lib/simulator/navigation';
@@ -70,21 +70,17 @@ export function SimulatorApp() {
     replay: MatchReplay;
   } | null>(null);
   const certificationRound = account?.certification ?? null;
-  useEffect(() => {
-    const restore = () => {
-      const next = readNavigation(window.location.search);
-      setNav(next);
-      setVisited((current) => [...new Set([...current, next.mode])]);
-      const robot = new URLSearchParams(window.location.search).get('robot');
-      if (isRobotVisualId(robot)) setRobotVisual(robot);
-    };
-    const frame = requestAnimationFrame(restore);
-    window.addEventListener('popstate', restore);
-    return () => {
-      cancelAnimationFrame(frame);
-      window.removeEventListener('popstate', restore);
-    };
-  }, []);
+  // Apply the deep link synchronously; the state updates are idempotent, so a
+  // StrictMode re-run of this effect only repeats the same navigation.
+  useEffect(
+    () =>
+      watchNavigation(window, (next, robot) => {
+        setNav(next);
+        setVisited((current) => [...new Set([...current, next.mode])]);
+        if (isRobotVisualId(robot)) setRobotVisual(robot);
+      }),
+    [],
+  );
   const navigate = useCallback(
     (patch: Partial<AppNavigation>, visual = robotVisual) => {
       const next = { ...nav, ...patch, embed: null };

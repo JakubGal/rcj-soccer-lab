@@ -80,3 +80,28 @@ export function navigationSearch(
   if (nav.embed) query.set('embed', nav.embed);
   return `?${query}`;
 }
+
+export type NavigationHost = {
+  location: { search: string };
+  addEventListener(type: 'popstate', listener: () => void): void;
+  removeEventListener(type: 'popstate', listener: () => void): void;
+};
+/**
+ * Applies the navigation encoded in the host URL right away and again after
+ * every history traversal. The first application is deliberately synchronous:
+ * a deep link such as `?mode=referee` must not wait for an animation frame,
+ * which never arrives while the document is hidden, the display is asleep or
+ * the screen is locked. Returns the unsubscribe function.
+ */
+export function watchNavigation(
+  host: NavigationHost,
+  onChange: (nav: AppNavigation, robot: string | null) => void,
+) {
+  const restore = () => {
+    const search = host.location.search;
+    onChange(readNavigation(search), new URLSearchParams(search).get('robot'));
+  };
+  restore();
+  host.addEventListener('popstate', restore);
+  return () => host.removeEventListener('popstate', restore);
+}
