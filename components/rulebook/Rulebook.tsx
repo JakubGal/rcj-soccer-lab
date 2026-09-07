@@ -8,6 +8,7 @@ import {
   Check,
   ExternalLink,
   Film,
+  Lock,
   Search,
   Wrench,
 } from 'lucide-react';
@@ -386,7 +387,7 @@ export function Rulebook({
             <span>
               {library === 'situations'
                 ? learningMode === 'certification'
-                  ? `${completedSituationIds.length} / ${LEARNING_SITUATIONS.length} questions completed`
+                  ? `${completedSituationIds.length} / ${LEARNING_SITUATIONS.length} answers recorded`
                   : `${completedSituationIds.length} / ${LEARNING_SITUATIONS.length} checks passed`
                 : `${readCount} / ${documentSections.length} reviewed`}
             </span>
@@ -400,7 +401,9 @@ export function Rulebook({
               }
               aria-label={
                 library === 'situations'
-                  ? 'Situation checks passed'
+                  ? learningMode === 'certification'
+                    ? 'Answers recorded'
+                    : 'Situation checks passed'
                   : 'Reading progress in this document'
               }
             />
@@ -439,10 +442,15 @@ export function Rulebook({
                     onClick={() => chooseSituation(item.id)}
                   >
                     <span className="rule-toc-number">
-                      {completedSituationIds.includes(item.id) ? (
-                        <Check aria-label="Check passed" />
-                      ) : (
+                      {!completedSituationIds.includes(item.id) ? (
                         section.number || 'A'
+                      ) : learningMode === 'certification' ? (
+                        <Lock
+                          aria-label="Answer recorded"
+                          className="rule-toc-recorded"
+                        />
+                      ) : (
+                        <Check aria-label="Check passed" />
                       )}
                     </span>
                     <span>
@@ -678,7 +686,11 @@ export function Rulebook({
                     >
                       {sectionSituations.map((item) => (
                         <NativeSelectOption key={item.id} value={item.id}>
-                          {completedSituationIds.includes(item.id) ? '✓ ' : ''}
+                          {completedSituationIds.includes(item.id)
+                            ? learningMode === 'certification'
+                              ? '● '
+                              : '✓ '
+                            : ''}
                           {item.title} ·{' '}
                           {item.kind === 'case'
                             ? 'decision practice'
@@ -696,12 +708,20 @@ export function Rulebook({
                           completedSituationIds.includes(item.id),
                         ).length
                       }{' '}
-                      / {sectionSituations.length} situation checks passed ·{' '}
+                      / {sectionSituations.length}{' '}
+                      {learningMode === 'certification'
+                        ? 'answers recorded'
+                        : 'situation checks passed'}{' '}
+                      ·{' '}
                       {sectionSituations.every((item) =>
                         completedSituationIds.includes(item.id),
                       )
-                        ? 'All checks complete'
-                        : 'Answer each situation to check your understanding'}
+                        ? learningMode === 'certification'
+                          ? 'All answers recorded'
+                          : 'All checks complete'
+                        : learningMode === 'certification'
+                          ? 'Your first answer for each situation is final'
+                          : 'Answer each situation to check your understanding'}
                     </p>
                   </section>
                 )}
@@ -755,6 +775,9 @@ export function Rulebook({
                     onPassed={passSituation}
                     learningMode={learningMode}
                     certificationRunId={certificationRunId}
+                    answerRecorded={completedSituationIds.includes(
+                      situation.id,
+                    )}
                     onLearningEvent={learning?.onEvent}
                   />
                 )}

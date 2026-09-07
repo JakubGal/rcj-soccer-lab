@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-09-06T17:38:40.052Z",
+  "generatedAt": "2026-09-07T11:44:55.458Z",
   "locales": {
     "sk": {
       "exact": {
@@ -218,6 +218,7 @@
         "alignItemWithTrigger": "alignItemWithTrigger",
         "alignOffset": "zarovnaťOffset",
         "all": "všetky",
+        "All answers recorded": "Všetky odpovede sú zaznamenané",
         "All checks complete": "Všetky kontroly sú dokončené",
         "All mechanisms extended for measurement": "Všetky mechanizmy rozšírené na meranie",
         "All neutral spots are occupied; hold the placement until a spot is available.": "Všetky neutrálne miesta sú obsadené; podržte umiestnenie, kým nebude voľné miesto.",
@@ -255,6 +256,9 @@
         "answer": "odpoveď",
         "Answer choices": "Voľby odpovedí",
         "Answer each situation to check your understanding": "Odpovedzte na každú situáciu, aby ste si overili, či rozumiete",
+        "Answer recorded": "Odpoveď zaznamenaná",
+        "answers recorded": "zaznamenané odpovede",
+        "Answers recorded": "Odpovede zaznamenané",
         "Any band if no other team complains": "Akákoľvek kapela, ak sa žiadny iný tím nesťažuje",
         "Any coloured team badge at least 20 mm wide": "Akýkoľvek farebný tímový odznak široký najmenej 20 mm",
         "Any partial overlap": "Akékoľvek čiastočné prekrytie",
@@ -1723,6 +1727,7 @@
         "referee call was rejected": "výzva rozhodcu bola odmietnutá",
         "Referee calls pushing": "Rozhodca volá pushing",
         "Referee camera": "Rozhodcovská kamera",
+        "Referee checks the 30 cm distance": "Rozhodca kontroluje vzdialenosť 30 cm",
         "Referee checks the circumstances": "Rozhodca kontroluje okolnosti",
         "Referee chooses a neutral restart": "Rozhodca zvolí neutrálny reštart",
         "Referee communication module": "Komunikačný modul rozhodcu",
@@ -2017,8 +2022,8 @@
         "Situation camera": "Situačná kamera",
         "Situation check complete": "Kontrola situácie dokončená",
         "Situation checking question": "Otázka na kontrolu situácie",
+        "situation checks passed": "situačné kontroly prebehli",
         "Situation checks passed": "Situačné kontroly prebehli",
-        "situation checks passed ·": "Situačné kontroly prebehli ·",
         "Situation first observed at": "Situácia prvýkrát pozorovaná o",
         "Situation speed": "Rýchlosť situácie",
         "Situation timeline": "Časová os situácie",
@@ -2289,6 +2294,7 @@
         "The referee can request a placement correction.": "Rozhodca môže požiadať o opravu umiestnenia.",
         "The referee may separate the robots just enough to move freely. This is limited assistance, not a general repositioning right.": "Rozhodca môže oddeliť roboty tak, aby sa mohli voľne pohybovať. Toto je obmedzená pomoc, nie všeobecné právo na zmenu polohy.",
         "The referee writes the assigned number on the accessible white plastic top circle. Top markers have a stated size-limit exception; a side label does not replace them.": "Rozhodca napíše pridelené číslo na prístupný biely plastový horný kruh. Top markery majú uvedenú výnimku z limitu veľkosti; bočný štítok ich nenahrádza.",
+        "The referee’s resolution and the moment captions play after your first answer is recorded.": "Rozhodnutie rozhodcu a popisy jednotlivých momentov sa prehrajú až po zaznamenaní vašej prvej odpovede.",
         "The registry is being updated. Please try again in a moment.": "Register sa aktualizuje. Skúste to znova o chvíľu.",
         "The remaining choice belongs to Blue.": "Zostávajúca voľba patrí modrej.",
         "The remaining choice belongs to Yellow.": "Zostávajúca voľba patrí žltej.",
@@ -2661,12 +2667,14 @@
         "You noticed the two defenders, but the rule resolves simultaneous pushing first. Moving the ball can change which defender is farther away.": "Všimli ste si dvoch obrancov, ale pravidlo najprv rieši simultánne pushing. Pohybom lopty sa môže zmeniť, ktorý obranca je ďalej.",
         "You vs AI": "Vy vs AI",
         "You:": "ty:",
+        "Your answer was not recorded; choose it again to retry.": "Vaša odpoveď nebola zaznamenaná; vyberte ju znova a skúste to ešte raz.",
         "YOUR CALL": "VÁŠ HOVOR",
         "Your decision · play continues": "Vaše rozhodnutie · hra pokračuje",
         "Your decision · training paused": "Vaše rozhodnutie · tréning pozastavený",
         "Your decisions will appear here.": "Tu sa zobrazia vaše rozhodnutia.",
         "Your event": "Vaša udalosť",
         "Your first answer could not be saved.": "Vašu prvú odpoveď sa nepodarilo uložiť.",
+        "Your first answer for each situation is final": "Vaša prvá odpoveď pre každú situáciu je konečná",
         "Your first answer is final for this certification round. Hints and answer-reveal tools are disabled.": "Vaša prvá odpoveď je konečná pre toto certifikačné kolo. Rady a nástroje na odhalenie odpovedí sú vypnuté.",
         "Your first choice is recorded for certification. Read all choices before selecting one.": "Vaša prvá voľba je zaznamenaná na certifikáciu. Pred výberom si prečítajte všetky možnosti.",
         "Your learning progress": "Váš pokrok v učení",
@@ -2690,12 +2698,12 @@
           "translation": "{0} {1} na najvzdialenejšom čistom neutrálnom mieste."
         },
         {
-          "source": "{0} / {1} checks passed",
-          "translation": "Úspešné kontroly {0} / {1}"
+          "source": "{0} / {1} answers recorded",
+          "translation": "Zaznamenané odpovede {0} / {1}"
         },
         {
-          "source": "{0} / {1} questions completed",
-          "translation": "Otázky {0} / {1} dokončené"
+          "source": "{0} / {1} checks passed",
+          "translation": "Úspešné kontroly {0} / {1}"
         },
         {
           "source": "{0} / {1} reviewed",
@@ -3066,6 +3074,10 @@
           "translation": "Vyberte si {0}: vezmite si najskôr kickoff alebo si vyberte cieľ, na ktorý zaútočíte, a nechajte druhý tím odštartovať."
         },
         {
+          "source": "Moment {0}",
+          "translation": "Moment {0}"
+        },
+        {
           "source": "No robot asset returned for {0}.",
           "translation": "Pre {0} sa nevrátil žiadny prvok robota."
         },
@@ -3376,6 +3388,7 @@
         "alignItemWithTrigger": "alignItemWithTrigger",
         "alignOffset": "alignOffset",
         "all": "alle",
+        "All answers recorded": "Alle Antworten aufgezeichnet",
         "All checks complete": "Alle Prüfungen abgeschlossen",
         "All mechanisms extended for measurement": "Alle Mechanismen zur Messung erweitert",
         "All neutral spots are occupied; hold the placement until a spot is available.": "Alle neutralen Plätze sind besetzt; Behalten Sie die Platzierung bei, bis ein Platz verfügbar ist.",
@@ -3413,6 +3426,9 @@
         "answer": "Antwort",
         "Answer choices": "Antwortmöglichkeiten",
         "Answer each situation to check your understanding": "Beantworten Sie jede Situation, um Ihr Verständnis zu überprüfen",
+        "Answer recorded": "Antwort aufgezeichnet",
+        "answers recorded": "Antworten aufgezeichnet",
+        "Answers recorded": "Antworten aufgezeichnet",
         "Any band if no other team complains": "Jede Band, wenn sich kein anderes Team beschwert",
         "Any coloured team badge at least 20 mm wide": "Jedes farbige Teamabzeichen mit einer Breite von mindestens 20 mm",
         "Any partial overlap": "Jede teilweise Überlappung",
@@ -4881,6 +4897,7 @@
         "referee call was rejected": "Der Anruf des Schiedsrichters wurde abgelehnt",
         "Referee calls pushing": "Der Schiedsrichter ruft pushing",
         "Referee camera": "Schiedsrichterkamera",
+        "Referee checks the 30 cm distance": "Der Schiedsrichter überprüft die Distanz von 30 cm",
         "Referee checks the circumstances": "Der Schiedsrichter prüft die Umstände",
         "Referee chooses a neutral restart": "Der Schiedsrichter wählt einen neutralen Neustart",
         "Referee communication module": "Kommunikationsmodul für Schiedsrichter",
@@ -5175,8 +5192,8 @@
         "Situation camera": "Situationskamera",
         "Situation check complete": "Situationsüberprüfung abgeschlossen",
         "Situation checking question": "Frage zur Situationsüberprüfung",
+        "situation checks passed": "Situationsüberprüfungen bestanden",
         "Situation checks passed": "Situationsüberprüfungen bestanden",
-        "situation checks passed ·": "Situationskontrollen bestanden ·",
         "Situation first observed at": "Situation erstmals beobachtet bei",
         "Situation speed": "Situationsgeschwindigkeit",
         "Situation timeline": "Zeitleiste der Situation",
@@ -5447,6 +5464,7 @@
         "The referee can request a placement correction.": "Der Schiedsrichter kann eine Platzierungskorrektur verlangen.",
         "The referee may separate the robots just enough to move freely. This is limited assistance, not a general repositioning right.": "Der Schiedsrichter darf die Roboter gerade so weit voneinander trennen, dass sie sich frei bewegen können. Hierbei handelt es sich um eine begrenzte Hilfeleistung, nicht um ein allgemeines Neupositionierungsrecht.",
         "The referee writes the assigned number on the accessible white plastic top circle. Top markers have a stated size-limit exception; a side label does not replace them.": "Der Schiedsrichter schreibt die zugewiesene Nummer auf den zugänglichen weißen Plastikkreis oben. Für Top-Marker gilt eine Ausnahme bezüglich der Größenbeschränkung. ein seitliches Etikett ersetzt sie nicht.",
+        "The referee’s resolution and the moment captions play after your first answer is recorded.": "Die Entscheidung des Schiedsrichters und die Momentuntertitel werden nach der Aufzeichnung Ihrer ersten Antwort abgespielt.",
         "The registry is being updated. Please try again in a moment.": "Die Registrierung wird aktualisiert. Bitte versuchen Sie es gleich noch einmal.",
         "The remaining choice belongs to Blue.": "Die verbleibende Wahl liegt bei Blau.",
         "The remaining choice belongs to Yellow.": "Die verbleibende Auswahl gehört Gelb.",
@@ -5819,12 +5837,14 @@
         "You noticed the two defenders, but the rule resolves simultaneous pushing first. Moving the ball can change which defender is farther away.": "Sie haben die beiden Verteidiger bemerkt, aber die Regel löst gleichzeitige pushing zuerst auf. Durch die Bewegung des Balls kann sich ändern, welcher Verteidiger weiter entfernt ist.",
         "You vs AI": "Du vs. KI",
         "You:": "Sie:",
+        "Your answer was not recorded; choose it again to retry.": "Ihre Antwort wurde nicht gespeichert; wählen Sie sie erneut aus, um es noch einmal zu versuchen.",
         "YOUR CALL": "IHR ANRUF",
         "Your decision · play continues": "Deine Entscheidung · Das Spiel geht weiter",
         "Your decision · training paused": "Ihre Entscheidung · Training pausiert",
         "Your decisions will appear here.": "Ihre Entscheidungen werden hier angezeigt.",
         "Your event": "Ihre Veranstaltung",
         "Your first answer could not be saved.": "Ihre erste Antwort konnte nicht gespeichert werden.",
+        "Your first answer for each situation is final": "Ihre erste Antwort für jede Situation ist endgültig",
         "Your first answer is final for this certification round. Hints and answer-reveal tools are disabled.": "Ihre erste Antwort ist für diese Zertifizierungsrunde endgültig. Hinweise und Tools zur Antwortanzeige sind deaktiviert.",
         "Your first choice is recorded for certification. Read all choices before selecting one.": "Ihre erste Wahl wird zur Zertifizierung erfasst. Lesen Sie alle Auswahlmöglichkeiten, bevor Sie eine auswählen.",
         "Your learning progress": "Ihr Lernfortschritt",
@@ -5848,12 +5868,12 @@
           "translation": "{0} {1} am entferntesten neutralen Punkt."
         },
         {
-          "source": "{0} / {1} checks passed",
-          "translation": "{0}/{1} Prüfungen bestanden"
+          "source": "{0} / {1} answers recorded",
+          "translation": "{0} / {1} Antworten aufgezeichnet"
         },
         {
-          "source": "{0} / {1} questions completed",
-          "translation": "{0} / {1} Fragen abgeschlossen"
+          "source": "{0} / {1} checks passed",
+          "translation": "{0}/{1} Prüfungen bestanden"
         },
         {
           "source": "{0} / {1} reviewed",
@@ -6224,6 +6244,10 @@
           "translation": "Treffen Sie die Entscheidung von {0}: Nehmen Sie zuerst kickoff oder wählen Sie ein Tor zum Angriff aus und lassen Sie das andere Team anstoßen."
         },
         {
+          "source": "Moment {0}",
+          "translation": "Moment {0}"
+        },
+        {
           "source": "No robot asset returned for {0}.",
           "translation": "Für {0} wurde kein Roboter-Asset zurückgegeben."
         },
@@ -6534,6 +6558,7 @@
         "alignItemWithTrigger": "アイテムをトリガーと揃える",
         "alignOffset": "整列オフセット",
         "all": "すべて",
+        "All answers recorded": "すべての回答は記録されています",
         "All checks complete": "すべてのチェックが完了しました",
         "All mechanisms extended for measurement": "すべてのメカニズムを測定用に拡張",
         "All neutral spots are occupied; hold the placement until a spot is available.": "すべてのニュートラルスポットが占有されています。スポットが空くまで配置を保持します。",
@@ -6571,6 +6596,9 @@
         "answer": "答える",
         "Answer choices": "回答の選択肢",
         "Answer each situation to check your understanding": "それぞれの状況に答えて理解を確認してください",
+        "Answer recorded": "回答を記録しました",
+        "answers recorded": "記録された回答",
+        "Answers recorded": "回答の記録",
         "Any band if no other team complains": "他のチームが文句を言わなければどのバンドでも",
         "Any coloured team badge at least 20 mm wide": "幅 20 mm 以上の任意の色のチーム バッジ",
         "Any partial overlap": "部分的な重複",
@@ -8039,6 +8067,7 @@
         "referee call was rejected": "レフリーコールが拒否されました",
         "Referee calls pushing": "主審が pushing をコール",
         "Referee camera": "審判用カメラ",
+        "Referee checks the 30 cm distance": "主審は 30 cm の距離を確認します",
         "Referee checks the circumstances": "主審が状況を確認",
         "Referee chooses a neutral restart": "主審はニュートラルリスタートを選択",
         "Referee communication module": "審判通信モジュール",
@@ -8333,8 +8362,8 @@
         "Situation camera": "状況カメラ",
         "Situation check complete": "状況確認完了",
         "Situation checking question": "状況確認の質問",
+        "situation checks passed": "状況チェックに合格しました",
         "Situation checks passed": "状況チェックに合格しました",
-        "situation checks passed ·": "状況チェックに合格しました ·",
         "Situation first observed at": "最初に観察された状況",
         "Situation speed": "状況のスピード",
         "Situation timeline": "状況のタイムライン",
@@ -8605,6 +8634,7 @@
         "The referee can request a placement correction.": "審判は順位の修正を要求することができます。",
         "The referee may separate the robots just enough to move freely. This is limited assistance, not a general repositioning right.": "審判はロボットを自由に動ける程度に離してもよい。これは限定的な支援であり、一般的な位置変更の権利ではありません。",
         "The referee writes the assigned number on the accessible white plastic top circle. Top markers have a stated size-limit exception; a side label does not replace them.": "審判は割り当てられた番号をアクセス可能な白いプラスチック製の上部サークルに書き込みます。上部マーカーには、明示されたサイズ制限の例外があります。サイドラベルはそれらの代わりにはなりません。",
+        "The referee’s resolution and the moment captions play after your first answer is recorded.": "審判の判定と各モーメントのキャプションは、最初の回答が記録された後に再生されます。",
         "The registry is being updated. Please try again in a moment.": "レジストリが更新中です。しばらくしてからもう一度お試しください。",
         "The remaining choice belongs to Blue.": "残りの選択肢はブルーにあります。",
         "The remaining choice belongs to Yellow.": "残りの選択肢はイエローに属します。",
@@ -8977,12 +9007,14 @@
         "You noticed the two defenders, but the rule resolves simultaneous pushing first. Moving the ball can change which defender is farther away.": "2 人のディフェンダーに気づきましたが、ルールは同時 pushing を最初に解決します。ボールを動かすと、どちらのディフェンダーがより遠くにいるかが変わる可能性があります。",
         "You vs AI": "あなた vs AI",
         "You:": "あなた:",
+        "Your answer was not recorded; choose it again to retry.": "あなたの答えは記録されませんでした。もう一度選択して再試行してください。",
         "YOUR CALL": "あなたの電話",
         "Your decision · play continues": "あなたの決断・プレーは続く",
         "Your decision · training paused": "あなたの決定 · トレーニングは一時停止されました",
         "Your decisions will appear here.": "あなたの決定がここに表示されます。",
         "Your event": "あなたのイベント",
         "Your first answer could not be saved.": "最初の回答を保存できませんでした。",
+        "Your first answer for each situation is final": "それぞれの状況に対する最初の答えが最終的なものになります",
         "Your first answer is final for this certification round. Hints and answer-reveal tools are disabled.": "最初の回答がこの認定ラウンドの最終的な回答となります。ヒントと答えを明らかにするツールは無効になっています。",
         "Your first choice is recorded for certification. Read all choices before selecting one.": "最初の選択は認定のために記録されます。 1 つを選択する前に、すべての選択肢を読んでください。",
         "Your learning progress": "あなたの学習の進捗状況",
@@ -9006,12 +9038,12 @@
           "translation": "{0} {1} 最も遠い透明な中立点にあります。"
         },
         {
-          "source": "{0} / {1} checks passed",
-          "translation": "{0} / {1} チェックに合格しました"
+          "source": "{0} / {1} answers recorded",
+          "translation": "{0} / {1} の回答が記録されました"
         },
         {
-          "source": "{0} / {1} questions completed",
-          "translation": "{0} / {1} の質問が完了しました"
+          "source": "{0} / {1} checks passed",
+          "translation": "{0} / {1} チェックに合格しました"
         },
         {
           "source": "{0} / {1} reviewed",
@@ -9380,6 +9412,10 @@
         {
           "source": "Make {0}’s choice: take first kickoff, or pick a goal to attack and let the other team kick off.",
           "translation": "{0} が選択します。最初に kickoff を取るか、攻撃するゴールを選択して他のチームにキックオフを許可します。"
+        },
+        {
+          "source": "Moment {0}",
+          "translation": "瞬間 {0}"
         },
         {
           "source": "No robot asset returned for {0}.",

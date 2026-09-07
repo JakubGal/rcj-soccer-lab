@@ -729,6 +729,9 @@ a {
   height: 14px;
   color: #68dfb0;
 }
+.rule-toc-number .rule-toc-recorded {
+  color: #f5d38a;
+}
 .rule-toc-item small {
   display: block;
   margin-top: 3px;

@@ -137,6 +137,11 @@ const MANUAL = {
     'The rules examination did not meet {0} of {1} correct first answers.':
       'V skúške z pravidiel nebol dosiahnutý požadovaný počet {0} správnych prvých odpovedí z {1}.',
     'Goal not granted': 'Gól nebol uznaný',
+    'situation checks passed': 'situačné kontroly prebehli',
+    'The referee’s resolution and the moment captions play after your first answer is recorded.':
+      'Rozhodnutie rozhodcu a popisy jednotlivých momentov sa prehrajú až po zaznamenaní vašej prvej odpovede.',
+    'Your answer was not recorded; choose it again to retry.':
+      'Vaša odpoveď nebola zaznamenaná; vyberte ju znova a skúste to ešte raz.',
     '3. Goals': '3. Bránky',
     Goals: 'Góly',
     goals: 'góly',
@@ -294,6 +299,8 @@ const MANUAL = {
     'The rules examination did not meet {0} of {1} correct first answers.':
       'Die Regelprüfung erreichte nicht die erforderlichen {0} richtigen Erstantworten von {1}.',
     'Goal not granted': 'Tor nicht anerkannt',
+    'Your answer was not recorded; choose it again to retry.':
+      'Ihre Antwort wurde nicht gespeichert; wählen Sie sie erneut aus, um es noch einmal zu versuchen.',
     'Relocate farther defender':
       'Den weiter vom Ball entfernten Verteidiger versetzen',
     'The farther defender': 'Der weiter vom Ball entfernte Verteidiger',
@@ -453,6 +460,8 @@ const MANUAL = {
     'The rules examination did not meet {0} of {1} correct first answers.':
       '規則試験で必要な初回正答数（全{1}問中{0}問）に達しませんでした。',
     'Goal not granted': 'ゴールは認められません',
+    'The referee’s resolution and the moment captions play after your first answer is recorded.':
+      '審判の判定と各モーメントのキャプションは、最初の回答が記録された後に再生されます。',
     'Relocate farther defender': 'ボールからより遠い方の守備ロボットを移動する',
     'The farther defender': 'ボールからより遠い方の守備ロボット',
     'Look for two teammates overlapping the same penalty area. Compare their CURRENT distances to the ball; the farther robot is the one to move.':

@@ -40,6 +40,12 @@ type Keyframe = {
   heights?: Record<string, number>;
   readout?: string;
   focus?: string;
+  /**
+   * The first keyframe whose scene shows the referee's resolution of the clip
+   * question. Certification withholds it and every later keyframe until the
+   * first answer is recorded (see `withheldClip`).
+   */
+  decision?: boolean;
 };
 export type RuleClip = {
   id: string;
@@ -137,6 +143,7 @@ export const RULE_CLIPS: RuleClip[] = [
       {
         at: 6,
         label: 'Second half · opposite kickoff team',
+        decision: true,
         poses: {
           [B]: pose(-0.28, 0.38, P),
           [B2]: pose(0.28, 0.38, P),
@@ -196,6 +203,7 @@ export const RULE_CLIPS: RuleClip[] = [
       {
         at: 5,
         label: 'Yellow chooses the kickoff',
+        decision: true,
         poses: { [Y]: pose(0, -0.18), [Y2]: pose(0.4, -0.5), ball: pose(0, 0) },
       },
     ],
@@ -276,6 +284,7 @@ export const RULE_CLIPS: RuleClip[] = [
       {
         at: 3.5,
         label: 'Referee removes Blue 1',
+        decision: true,
         poses: { [B]: null },
         readout: 'Damaged robot',
       },
@@ -321,9 +330,11 @@ export const RULE_CLIPS: RuleClip[] = [
         poses: { ...neutral, [B]: pose(0, -0.2) },
         focus: B,
       },
+      { at: 1.5, label: 'Referee checks the 30 cm distance', focus: B },
       {
         at: 3,
         label: 'Referee requests a correction',
+        decision: true,
         poses: { [B]: neutral[B] },
         readout: 'Reposition before starting',
       },
@@ -419,7 +430,12 @@ export const RULE_CLIPS: RuleClip[] = [
         poses: { ball: pose(0, -FIELD.goalBackContactBallCenterZ) },
         readout: 'YELLOW +1',
       },
-      { at: 6, label: 'Blue takes the kickoff', poses: kickoff },
+      {
+        at: 6,
+        label: 'Blue takes the kickoff',
+        decision: true,
+        poses: kickoff,
+      },
     ],
     'Which team receives the goal?',
     ['Blue', 'Yellow'],
@@ -514,6 +530,7 @@ export const RULE_CLIPS: RuleClip[] = [
       {
         at: 5.5,
         label: 'Blue 1 is removed',
+        decision: true,
         poses: { [B]: null },
         readout: 'Damaged robot',
       },
@@ -583,6 +600,7 @@ export const RULE_CLIPS: RuleClip[] = [
       {
         at: 6,
         label: 'Referee moves ball to the far spot',
+        decision: true,
         poses: { ball: pose(FIELD.neutralSpotX, FIELD.neutralSpotZ) },
         readout: 'Furthest unoccupied neutral spot',
       },
@@ -616,6 +634,7 @@ export const RULE_CLIPS: RuleClip[] = [
       {
         at: 6,
         label: 'The ball escapes',
+        decision: true,
         poses: { ball: pose(0.35, -0.18) },
         readout: 'Assess other rules separately',
       },
@@ -649,6 +668,7 @@ export const RULE_CLIPS: RuleClip[] = [
       {
         at: 4,
         label: 'Referee lifts Blue 2',
+        decision: true,
         heights: { [B2]: 0.25 },
         focus: B2,
       },
@@ -693,6 +713,7 @@ export const RULE_CLIPS: RuleClip[] = [
       {
         at: 4,
         label: 'Resolve pushing first',
+        decision: true,
         poses: { ball: pose(FIELD.neutralSpotX, FIELD.neutralSpotZ) },
         readout: '1 · BALL placement',
       },
@@ -732,6 +753,7 @@ export const RULE_CLIPS: RuleClip[] = [
       {
         at: 6,
         label: 'Resolve the pushing restart',
+        decision: true,
         poses: { ball: pose(FIELD.neutralSpotX, FIELD.neutralSpotZ) },
       },
     ],
@@ -791,7 +813,12 @@ export const RULE_CLIPS: RuleClip[] = [
         poses: { ball: pose(FIELD.neutralSpotX, FIELD.neutralSpotZ) },
       },
       { at: 4, label: 'Still no response', readout: 'Referee reassesses' },
-      { at: 6, label: 'A different neutral spot', poses: { ball: pose(0, 0) } },
+      {
+        at: 6,
+        label: 'A different neutral spot',
+        decision: true,
+        poses: { ball: pose(0, 0) },
+      },
     ],
     'Can another neutral placement follow?',
     ['Yes', 'Never'],
@@ -818,6 +845,7 @@ export const RULE_CLIPS: RuleClip[] = [
       {
         at: 3,
         label: 'Robot removed · penalty starts',
+        decision: true,
         poses: { [B]: null },
         readout: '60 s penalty · match continues',
       },
@@ -857,6 +885,7 @@ export const RULE_CLIPS: RuleClip[] = [
       {
         at: 5,
         label: 'Robot removed',
+        decision: true,
         poses: { [B]: null },
         readout: 'Out of bounds',
       },
@@ -889,6 +918,7 @@ export const RULE_CLIPS: RuleClip[] = [
       {
         at: 5,
         label: 'Example: penalty waived, small correction',
+        decision: true,
         poses: { [B]: pose(0.74, 0.07, -P / 2), [Y]: pose(0.48, 0, P / 2) },
       },
     ],
@@ -945,6 +975,7 @@ export const RULE_CLIPS: RuleClip[] = [
       {
         at: 5,
         label: 'Ready robot returns with permission',
+        decision: true,
         poses: { [B]: kickoff[B] },
         readout: 'Kickoff exception',
       },
@@ -1027,6 +1058,7 @@ export const RULE_CLIPS: RuleClip[] = [
       {
         at: 6,
         label: 'Minimal separation restores movement',
+        decision: true,
         poses: { [B]: pose(-0.45, -0.3), [Y]: pose(-0.15, -0.3, P) },
       },
     ],
@@ -1060,6 +1092,7 @@ export const RULE_CLIPS: RuleClip[] = [
       {
         at: 6,
         label: 'Resume from the same positions',
+        decision: true,
         poses: { [B]: pose(0.01, -0.04), ball: pose(0.12, 0.17) },
       },
     ],
@@ -1098,6 +1131,36 @@ export function clipsFor(anchor: string) {
   return RULE_CLIPS.filter(
     (clip) => clip.anchor === anchor || clip.alsoAnchors?.includes(anchor),
   );
+}
+
+/**
+ * Index of the first keyframe that shows the resolution, or the frame count
+ * when no keyframe gives the answer away by itself.
+ */
+export function decisionIndex(clip: RuleClip) {
+  const index = clip.frames.findIndex((frame) => frame.decision);
+  return index === -1 ? clip.frames.length : index;
+}
+
+/**
+ * The clip as a certification candidate sees it before the first answer is
+ * recorded. Resolution keyframes are withheld, and the remaining labels and
+ * readouts are replaced by neutral moment numbers, because evidence captions
+ * such as "Blue 2 is farther from the ball" can name the answer too.
+ */
+export function withheldClip(clip: RuleClip): RuleClip {
+  return {
+    ...clip,
+    frames: clip.frames
+      .slice(0, Math.max(1, decisionIndex(clip)))
+      .map((frame, index) => ({
+        at: frame.at,
+        label: `Moment ${index + 1}`,
+        poses: frame.poses,
+        heights: frame.heights,
+        focus: frame.focus,
+      })),
+  };
 }
 
 export function sampleClip(clip: RuleClip, time: number): RuleScene {

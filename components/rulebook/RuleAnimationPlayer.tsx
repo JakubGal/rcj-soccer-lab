@@ -15,6 +15,7 @@ import {
 import {
   RULE_ACTORS,
   sampleClip,
+  withheldClip,
   type RuleClip,
 } from '@/lib/rulebook/animations';
 import type { RobotVisualId } from '@/lib/simulator/robot-models';
@@ -30,6 +31,7 @@ export function RuleAnimationPlayer({
   onPassed,
   learningMode = 'practice',
   certificationRunId = null,
+  answerRecorded = false,
   onLearningEvent,
 }: {
   clips: RuleClip[];
@@ -37,6 +39,8 @@ export function RuleAnimationPlayer({
   onPassed?: () => void;
   learningMode?: RuleLearningMode;
   certificationRunId?: string | null;
+  /** The certification round already holds a first answer for this clip. */
+  answerRecorded?: boolean;
   onLearningEvent?: (event: RuleLearningEvent) => void | Promise<void>;
 }) {
   const [clipId, setClipId] = useState(clips[0].id);
@@ -48,19 +52,33 @@ export function RuleAnimationPlayer({
   const [speed, setSpeed] = useState(1);
   const [answer, setAnswer] = useState<number | null>(null);
   const answerAttempts = useRef(new Map<string, number>());
-  const firstAnswers = useRef(new Map<string, number>());
+  const [firstAnswers, setFirstAnswers] = useState<Record<string, number>>({});
+  const [saving, setSaving] = useState(false);
+  const savingRef = useRef(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
   const completedQuestions = useRef(new Set<string>());
-  const duration = clip.frames[clip.frames.length - 1].at;
-  const scene = useMemo(() => sampleClip(clip, time), [clip, time]);
+  const questionId = `clip:${clip.id}`;
+  // The first answer is final in certification, so the resolution and the
+  // authored captions stay withheld until that answer exists.
+  const withheld =
+    learningMode === 'certification' &&
+    !answerRecorded &&
+    !(questionId in firstAnswers);
+  const shown = useMemo(
+    () => (withheld ? withheldClip(clip) : clip),
+    [clip, withheld],
+  );
+  const duration = shown.frames[shown.frames.length - 1].at;
+  const scene = useMemo(() => sampleClip(shown, time), [shown, time]);
   const trail = useMemo(
     () =>
       Array.from(
         { length: 30 },
         (_, index) =>
-          sampleClip(clip, Math.max(0, time - 1.5 + (index / 29) * 1.5)).poses
+          sampleClip(shown, Math.max(0, time - 1.5 + (index / 29) * 1.5)).poses
             .ball,
       ).filter(Boolean),
-    [clip, time],
+    [shown, time],
   );
 
   useEffect(() => {
@@ -96,6 +114,69 @@ export function RuleAnimationPlayer({
     setTime(0);
     setPlaying(false);
     setAnswer(null);
+    setSaveError(null);
+  };
+  const record = async (index: number) => {
+    if (savingRef.current) return;
+    const attemptNumber = (answerAttempts.current.get(questionId) ?? 0) + 1;
+    const firstAnswer = firstAnswers[questionId] ?? index;
+    const accepted = index === clip.answer;
+    const event: RuleLearningEvent = {
+      type: 'answer',
+      mode: learningMode,
+      certificationRunId,
+      questionId,
+      sourceId: clip.id,
+      kind: 'clip',
+      decisionId: questionId,
+      answer: { kind: 'clip', selectedIndex: index },
+      attemptNumber,
+      firstAnswer: attemptNumber === 1,
+      accepted,
+      score: accepted ? 1 : 0,
+      completed: accepted,
+      assisted: false,
+    };
+    if (learningMode === 'certification') {
+      // The resolution may only appear once the first answer is stored;
+      // a failed save leaves the clip withheld and the attempt uncounted.
+      savingRef.current = true;
+      setSaving(true);
+      setSaveError(null);
+      try {
+        await onLearningEvent?.(event);
+      } catch (error) {
+        setSaveError(
+          error instanceof Error
+            ? error.message
+            : 'Your first answer could not be saved.',
+        );
+        return;
+      } finally {
+        savingRef.current = false;
+        setSaving(false);
+      }
+    } else void onLearningEvent?.(event);
+    answerAttempts.current.set(questionId, attemptNumber);
+    setFirstAnswers((current) =>
+      questionId in current ? current : { ...current, [questionId]: index },
+    );
+    setAnswer(index);
+    if (!accepted) return;
+    onPassed?.();
+    if (completedQuestions.current.has(questionId)) return;
+    completedQuestions.current.add(questionId);
+    void onLearningEvent?.({
+      type: 'complete',
+      mode: learningMode,
+      certificationRunId,
+      questionId,
+      sourceId: clip.id,
+      kind: 'clip',
+      answer: { kind: 'clip', selectedIndex: firstAnswer },
+      firstTryCorrect: attemptNumber === 1,
+      assisted: false,
+    });
   };
 
   return (
@@ -192,14 +273,14 @@ export function RuleAnimationPlayer({
         </NativeSelect>
       </div>
       <div className="rule-story-steps" aria-label="Animation key moments">
-        {clip.frames.map((frame, index) => (
+        {shown.frames.map((frame, index) => (
           <Button
             key={index}
             variant="ghost"
             className={cn(
               time >= frame.at &&
-                (index === clip.frames.length - 1 ||
-                  time < clip.frames[index + 1].at) &&
+                (index === shown.frames.length - 1 ||
+                  time < shown.frames[index + 1].at) &&
                 'rule-step-active',
             )}
             onClick={() => seek(frame.at)}
@@ -208,6 +289,12 @@ export function RuleAnimationPlayer({
             {frame.label}
           </Button>
         ))}
+        {withheld && (
+          <p className="rule-small">
+            The referee’s resolution and the moment captions play after your
+            first answer is recorded.
+          </p>
+        )}
       </div>
       <div className="rule-question">
         <h3>{clip.question}</h3>
@@ -217,52 +304,8 @@ export function RuleAnimationPlayer({
               key={option}
               variant="outline"
               aria-pressed={answer === index}
-              onClick={() => {
-                const questionId = `clip:${clip.id}`;
-                const attemptNumber =
-                  (answerAttempts.current.get(questionId) ?? 0) + 1;
-                answerAttempts.current.set(questionId, attemptNumber);
-                if (!firstAnswers.current.has(questionId))
-                  firstAnswers.current.set(questionId, index);
-                const accepted = index === clip.answer;
-                setAnswer(index);
-                void onLearningEvent?.({
-                  type: 'answer',
-                  mode: learningMode,
-                  certificationRunId,
-                  questionId,
-                  sourceId: clip.id,
-                  kind: 'clip',
-                  decisionId: questionId,
-                  answer: { kind: 'clip', selectedIndex: index },
-                  attemptNumber,
-                  firstAnswer: attemptNumber === 1,
-                  accepted,
-                  score: accepted ? 1 : 0,
-                  completed: accepted,
-                  assisted: false,
-                });
-                if (accepted) {
-                  onPassed?.();
-                  if (!completedQuestions.current.has(questionId)) {
-                    completedQuestions.current.add(questionId);
-                    void onLearningEvent?.({
-                      type: 'complete',
-                      mode: learningMode,
-                      certificationRunId,
-                      questionId,
-                      sourceId: clip.id,
-                      kind: 'clip',
-                      answer: {
-                        kind: 'clip',
-                        selectedIndex: firstAnswers.current.get(questionId)!,
-                      },
-                      firstTryCorrect: attemptNumber === 1,
-                      assisted: false,
-                    });
-                  }
-                }
-              }}
+              disabled={saving}
+              onClick={() => void record(index)}
               className={cn(
                 answer === index &&
                   (index === clip.answer
@@ -275,6 +318,12 @@ export function RuleAnimationPlayer({
             </Button>
           ))}
         </div>
+        {saving && <output>Saving your answer…</output>}
+        {saveError && (
+          <p role="alert">
+            {saveError} Your answer was not recorded; choose it again to retry.
+          </p>
+        )}
         {answer !== null && (
           <output
             className={

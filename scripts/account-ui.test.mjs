@@ -11,6 +11,8 @@ const accountProviderUrl = new URL(
   'components/account/AccountProvider.tsx',
   root,
 ).href;
+const viewportUrl = new URL('components/simulator/PlayCanvasViewport.tsx', root)
+  .href;
 
 // Render the actual presentation components with controlled account snapshots;
 // do not involve browser storage, cryptography or the GitHub network in UI tests.
@@ -39,6 +41,13 @@ registerHooks({
         shortCircuit: true,
         source:
           'export function useAccount() { return globalThis.__rcjAccountUiTest; }',
+      };
+    // The WebGL stage has no server rendering; the caption beside it does.
+    if (url === viewportUrl)
+      return {
+        format: 'module',
+        shortCircuit: true,
+        source: 'export function PlayCanvasViewport() { return null; }',
       };
     if (url.startsWith(root.href) && !url.includes('/node_modules/')) {
       if (url.endsWith('.json'))
@@ -72,6 +81,10 @@ const { GitHubSubmissionPanel } =
   await import('../components/account/GitHubSubmissionPanel.tsx');
 const { ProfilePanel } = await import('../components/account/ProfilePanel.tsx');
 const { AcademyHub } = await import('../components/account/AcademyHub.tsx');
+const { Rulebook } = await import('../components/rulebook/Rulebook.tsx');
+const { RuleAnimationPlayer } =
+  await import('../components/rulebook/RuleAnimationPlayer.tsx');
+const { RULE_CLIPS } = await import('../lib/rulebook/animations.ts');
 const { CERTIFICATION_POLICY } = await import('../lib/certification/policy.ts');
 
 const noop = () => {};
@@ -361,4 +374,79 @@ test('a verified older round retains its certificate notice but cannot submit fo
     html,
     /Prepare certification submission|Submit for verification/,
   );
+});
+
+const learningSituation = 'clip:two-defenders';
+const certificationLearning = (completedSituationIds) => ({
+  mode: 'certification',
+  certificationRunId: 'round-1',
+  completedSituationIds,
+  onEvent: noop,
+});
+
+test('certification marks recorded answers distinctly from passed practice checks', () => {
+  const recorded = render(Rulebook, {
+    robotVisual: 'lab',
+    situationId: learningSituation,
+    onSelect: noop,
+    learning: certificationLearning([learningSituation]),
+  });
+  assert.match(recorded, /aria-label="Answer recorded"/);
+  assert.match(recorded, /1 \/ \d+ answers recorded/);
+  assert.match(recorded, /aria-label="Answers recorded"/);
+  assert.doesNotMatch(
+    recorded,
+    /Check passed|checks passed|questions completed/,
+  );
+
+  const practice = render(Rulebook, {
+    robotVisual: 'lab',
+    situationId: learningSituation,
+    onSelect: noop,
+    learning: {
+      mode: 'practice',
+      completedSituationIds: [learningSituation],
+      onEvent: noop,
+    },
+  });
+  assert.match(practice, /aria-label="Check passed"/);
+  assert.match(practice, /1 \/ \d+ checks passed/);
+  assert.doesNotMatch(practice, /Answer recorded|answers recorded/);
+});
+
+test('certification clips withhold the resolution and its captions until the first answer', () => {
+  const clip = RULE_CLIPS.find((item) => item.id === 'two-defenders');
+  const unanswered = render(Rulebook, {
+    robotVisual: 'lab',
+    situationId: learningSituation,
+    onSelect: noop,
+    learning: certificationLearning([]),
+  });
+  assert.match(unanswered, /Which defender is relocated\?/);
+  assert.match(unanswered, /Moment 1/);
+  assert.match(unanswered, /after your first answer is recorded/);
+  assert.doesNotMatch(unanswered, /Referee lifts Blue 2/);
+  assert.doesNotMatch(unanswered, /Blue 2 is farther from the ball/);
+  assert.doesNotMatch(unanswered, /Far neutral placement|Blue 1 remains/);
+
+  // A recorded answer, including one restored from the account, releases
+  // the complete authored clip.
+  const recorded = render(RuleAnimationPlayer, {
+    clips: [clip],
+    robotVisual: 'lab',
+    learningMode: 'certification',
+    certificationRunId: 'round-1',
+    answerRecorded: true,
+  });
+  assert.match(recorded, /Referee lifts Blue 2/);
+  assert.match(recorded, /Far neutral placement/);
+  assert.doesNotMatch(recorded, /Moment 1|first answer is recorded/);
+
+  const practice = render(RuleAnimationPlayer, {
+    clips: [clip],
+    robotVisual: 'lab',
+  });
+  assert.match(practice, /One partial overlap/);
+  assert.match(practice, /Referee lifts Blue 2/);
+  assert.doesNotMatch(practice, /Moment 1/);
 });

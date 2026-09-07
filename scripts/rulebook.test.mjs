@@ -37,8 +37,15 @@ registerHooks({
 });
 const { RULE_DOCUMENTS, RULE_SECTIONS, guideFor, sectionUrl, findSections } =
   await import('../lib/rulebook/catalog.ts');
-const { RULE_CLIPS, sampleClip, clipsFor, neutralPlacement, NEUTRAL_SPOTS } =
-  await import('../lib/rulebook/animations.ts');
+const {
+  RULE_CLIPS,
+  sampleClip,
+  clipsFor,
+  decisionIndex,
+  withheldClip,
+  neutralPlacement,
+  NEUTRAL_SPOTS,
+} = await import('../lib/rulebook/animations.ts');
 const { inspectionResults, DEFAULT_MEASUREMENTS } =
   await import('../lib/rulebook/inspection.ts');
 const { tournamentPoints } = await import('../lib/rulebook/scoring.ts');
@@ -157,6 +164,68 @@ test('every animation has a valid source, answer, ordered timeline and finite po
       );
     }
   }
+});
+
+test('certification withholds resolution frames and every outcome-naming caption until the first answer', () => {
+  const robots = ['Blue 1', 'Blue 2', 'Yellow 1', 'Yellow 2'];
+  for (const item of RULE_CLIPS) {
+    const index = decisionIndex(item);
+    assert.ok(index >= 1 && index <= item.frames.length, item.id);
+    assert.ok(
+      item.frames.slice(0, index).every((frame) => !frame.decision),
+      `${item.id}: the decision flag marks the first resolution frame`,
+    );
+    const preview = withheldClip(item);
+    assert.equal(preview.frames.length, index, item.id);
+    assert.ok(
+      preview.frames.at(-1).at > 0,
+      `${item.id} keeps a playable moment before the resolution`,
+    );
+    const correct = item.options[item.answer].toLowerCase();
+    const named = robots.filter((robot) =>
+      correct.includes(robot.toLowerCase()),
+    );
+    for (let time = 0; time <= preview.frames.at(-1).at + 1; time += 0.1) {
+      const scene = sampleClip(preview, time);
+      assert.match(scene.label, /^Moment \d+$/, item.id);
+      assert.equal(scene.readout, '', item.id);
+      assert.ok(!scene.label.toLowerCase().includes(correct), item.id);
+      for (const robot of named) assert.ok(!scene.label.includes(robot));
+    }
+    // The withheld poses are exactly the authored pre-decision poses.
+    for (let time = 0; time <= preview.frames.at(-1).at; time += 0.1)
+      assert.deepEqual(
+        sampleClip(preview, time).poses,
+        sampleClip(item, time).poses,
+        item.id,
+      );
+    // Practice keeps the complete authored clip.
+    assert.equal(
+      sampleClip(item, item.frames.at(-1).at).label,
+      item.frames.at(-1).label,
+    );
+  }
+  // Truncating alone would not be enough: an evidence readout before the
+  // decision frame names the relocated robot, so captions are withheld too.
+  const twoDefenders = clip('two-defenders');
+  assert.equal(decisionIndex(twoDefenders), 2);
+  assert.match(twoDefenders.frames[1].readout, /Blue 2/);
+  assert.equal(twoDefenders.frames[2].label, 'Referee lifts Blue 2');
+  assert.deepEqual(
+    withheldClip(twoDefenders).frames.map((frame) => frame.label),
+    ['Moment 1', 'Moment 2'],
+  );
+  // Scenes whose poses never show the referee's resolution stay complete.
+  for (const id of ['late-team', 'neutral-start', 'team-touch'])
+    assert.equal(decisionIndex(clip(id)), clip(id).frames.length, id);
+  // Scenes that resolve visibly stop before the resolving movement starts.
+  for (const [id, label] of [
+    ['kickoff-early', 'Referee removes Blue 1'],
+    ['own-goal', 'Blue takes the kickoff'],
+    ['combined-order', 'Resolve pushing first'],
+    ['pushing-goal', 'Resolve the pushing restart'],
+  ])
+    assert.equal(clip(id).frames[decisionIndex(clip(id))].label, label, id);
 });
 
 test('robots hold their positions until kickoff and resume signals', () => {
