@@ -2125,7 +2125,14 @@ export function RefereePlay({
               <Button
                 key={action.id}
                 variant="outline"
-                disabled={blocked}
+                // Only the start signals wait for an arranged kickoff layout;
+                // returns, keep-outs and every other decision stay available.
+                disabled={
+                  blocked ||
+                  (['start', 'neutral'].includes(action.id) &&
+                    frame.kickoffDue &&
+                    !frame.kickoffArranged)
+                }
                 onClick={() =>
                   submit({
                     action: action.id,

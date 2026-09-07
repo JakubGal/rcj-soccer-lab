@@ -224,6 +224,14 @@ export class RefereeMatch {
   private userPaused = false;
   private score = new RefereeScore();
   private observations = new Map<string, ActiveIncident>();
+  /**
+   * Step mode: boundary incidents already decided whose geometry is still
+   * present, keyed like `observations`, with the clock they were last seen.
+   * The same key re-arms only after the condition has cleared for a step.
+   */
+  private settled = new Map<string, number>();
+  /** Where the last lack-of-progress call left the ball, and who could play it. */
+  private lastProgressPlacement: { ball: Pose; roster: string } | null = null;
   private director: ContinuousDirector;
   private reviewEvents: MatchReviewEvent[] = [];
   private reviewSerial = 0;
@@ -790,6 +798,46 @@ export class RefereeMatch {
         ),
     );
   }
+  /**
+   * A pending kickoff whose layout exists and awaits the signal: either the
+   * arranged live layout or a drill that still expects a start decision.
+   */
+  get kickoffArranged() {
+    return (
+      this.kickoffDue &&
+      [this.active, ...this.pending].some(
+        (item) =>
+          item &&
+          !item.finished &&
+          (item.definition.id === 'live-ready' ||
+            item.definition.steps
+              .slice(item.step)
+              .flat()
+              .some((call) => ['start', 'neutral'].includes(call.action))),
+      )
+    );
+  }
+  private roster() {
+    return MATCH_ROBOTS.filter((robot) => this.match.state.actors[robot.id])
+      .map((robot) => robot.id)
+      .join(',');
+  }
+  /**
+   * A ball nobody can play, still exactly where the referee placed it after
+   * the previous lack-of-progress call, is not a new decision to drill. Any
+   * robot on the field could still reach the ball, so only an empty field
+   * qualifies; a stuck single robot remains a genuine repeat placement.
+   */
+  private get unplayableStalemate() {
+    const placement = this.lastProgressPlacement;
+    if (!placement) return false;
+    const roster = this.roster();
+    return (
+      roster === '' &&
+      roster === placement.roster &&
+      distance(this.match.state.actors.ball, placement.ball) <= 0.01
+    );
+  }
   private get kickoffReturns() {
     return this.kickoffDue
       ? Object.values(this.bench)
@@ -1059,6 +1107,7 @@ export class RefereeMatch {
       ),
       kickoffDue: this.kickoffDue,
       kickoffTeam: this.kickoffTeam,
+      kickoffArranged: this.kickoffArranged,
       canArrangeKickoff: this.canArrangeKickoff,
       canAdvance: this.canAdvance,
       canResumeMotion: this.canResumeMotion,
@@ -1116,6 +1165,8 @@ export class RefereeMatch {
     this.drillReady = false;
     this.fixtureEnded = false;
     this.outRobots.clear();
+    this.settled.clear();
+    this.lastProgressPlacement = null;
     this.invalidGoalPassage = null;
     this.recorder.resetBuffer();
     this.permittedContact = null;
@@ -1274,6 +1325,11 @@ export class RefereeMatch {
         previous.lastSeen = this.clock;
         return;
       }
+    } else if (this.settled.has(key)) {
+      // The decided boundary geometry is still present; it is not a new
+      // incident until it has cleared for at least one step.
+      this.settled.set(key, this.clock);
+      return;
     }
     if (
       [this.active, ...this.pending].some(
@@ -1418,6 +1474,10 @@ export class RefereeMatch {
       return;
     }
     if (!this.canArrangeKickoff) this.clock += MATCH_STEP;
+    // A decided boundary condition that was not seen during the previous
+    // step has cleared; the same geometry may then be judged afresh.
+    for (const [key, seen] of this.settled)
+      if (seen + MATCH_STEP + 1e-8 < this.clock) this.settled.delete(key);
     for (const entry of Object.values(this.bench))
       if (!entry.ready && this.clock >= entry.readyAt) {
         entry.ready = true;
@@ -1746,7 +1806,7 @@ export class RefereeMatch {
             [[{ action: 'goal', target: pending.team }]],
           ),
         );
-      else
+      else if (!this.unplayableStalemate)
         this.beginLive(
           this.liveDefinition(
             'deadlock',
@@ -2255,7 +2315,8 @@ export class RefereeMatch {
       clampRobotToField(pose, this.robotVisual, 0.005);
     const candidates: Pose[] = [];
     const grid = 0.005;
-    const reach = 32;
+    // 20 cm each way: enough to step around the pusher and leave the area.
+    const reach = 40;
     for (let x = -reach; x <= reach; x++)
       for (let z = -reach; z <= reach; z++)
         candidates.push(
@@ -2266,13 +2327,13 @@ export class RefereeMatch {
           }),
         );
     const clearance = radius * 2 + 0.0005;
+    // The correction must also end the out-of-bounds condition itself: a robot
+    // left against the wall or a goal, or wholly inside the penalty area,
+    // would be judged out of bounds again on the very next observation.
     const local = candidates
       .filter(
         (candidate) =>
-          !robotTouchesGoal(candidate, this.robotVisual, 0.005) &&
-          ![-1, 1].some((end) =>
-            robotPenaltyOverlap(candidate, end, this.robotVisual, true),
-          ) &&
+          !this.outOfBounds(candidate, 0.005) &&
           MATCH_ROBOTS.every(
             (robot) =>
               robot.id === target ||
@@ -2288,6 +2349,20 @@ export class RefereeMatch {
           distance(first, original) - distance(second, original),
       )[0];
     return local ?? this.neutralSpot(true, target);
+  }
+
+  /**
+   * The live boundary predicates: wall or goal contact, or full penalty-area
+   * entry. `margin` widens the contact tests when placing a correction.
+   */
+  private outOfBounds(pose: Pose, margin = 0.0002) {
+    return (
+      robotTouchesFieldWall(pose, this.robotVisual, margin) ||
+      robotTouchesGoal(pose, this.robotVisual, margin) ||
+      [-1, 1].some((end) =>
+        robotPenaltyOverlap(pose, end, this.robotVisual, true),
+      )
+    );
   }
 
   private topicForAction(action: RefereeCall['action']): TrainingTopic {
@@ -2323,6 +2398,70 @@ export class RefereeMatch {
     this.phase = next ? 'decision' : 'live';
   }
 
+  /**
+   * A start signal while the kickoff is pending but no layout exists yet is a
+   * sequencing slip, not a referee decision: nothing is enacted and no
+   * incident is created or scored. The trainee is told to arrange first.
+   */
+  private prematureKickoffSignal(submitted: RefereeCall) {
+    if (
+      !this.kickoffDue ||
+      this.active ||
+      !['start', 'neutral'].includes(submitted.action)
+    )
+      return false;
+    const detail = this.awaitingWorkingTeam
+      ? 'Each team needs a working robot before arranging and signalling kickoff.'
+      : 'Arrange the kickoff first. The start signal is judged once every robot is placed and stopped.';
+    const effect =
+      'No match change applied. Robots remain halted for the kickoff.';
+    const rule = ruleUrl(REFEREE_CASES.find((item) => item.id === 'ready')!);
+    const label =
+      REFEREE_ACTIONS.find((action) => action.id === submitted.action)?.label ??
+      submitted.action;
+    const at =
+      this.mode === 'continuous'
+        ? this.currentMatchReplayTime
+        : this.recordingTime;
+    if (this.mode === 'continuous')
+      this.reviewEvents.push({
+        id: ++this.reviewSerial,
+        at,
+        eventAt: at,
+        replayAt: at,
+        incidentId: 0,
+        situation: 'Kickoff pending',
+        evidence:
+          'Kickoff is pending, but no kickoff layout has been arranged yet.',
+        topic: 'other',
+        actual: { ...submitted },
+        expected: [],
+        assessment: 'premature',
+        effect,
+        detail,
+        rule,
+        scored: false,
+      });
+    this.history.unshift({
+      call: label,
+      verdict: 'premature',
+      detail: effect,
+      at,
+    });
+    this.history = this.history.slice(0, 40);
+    this.feedback = {
+      verdict: 'premature',
+      title: 'Called too early',
+      detail,
+      effect,
+      rule,
+      appliedRules: [],
+      final: false,
+    };
+    if (this.mode !== 'continuous') this.phase = 'feedback';
+    return true;
+  }
+
   /** Continuous mode records the judgment first, then enacts it literally. */
   private submitContinuous(submitted: RefereeCall): boolean {
     const original = this.active;
@@ -2343,6 +2482,7 @@ export class RefereeMatch {
       );
     const exact = matchingIncidents[0]?.item;
     if (exact && exact !== original) this.focusIncident(exact);
+    if (this.prematureKickoffSignal(submitted)) return true;
     if (!this.active)
       this.beginLive(
         this.contactDefinition() ??
@@ -2569,6 +2709,7 @@ export class RefereeMatch {
       );
     }
     if (this.mode === 'continuous') return this.submitContinuous(submitted);
+    if (this.prematureKickoffSignal(submitted)) return true;
     if (!this.active)
       this.beginLive(
         this.contactDefinition() ??
@@ -2710,6 +2851,12 @@ export class RefereeMatch {
   private finishIncident(item: ActiveIncident) {
     if (item.finished) return;
     item.finished = true;
+    if (
+      this.mode !== 'continuous' &&
+      item.natural &&
+      item.key.startsWith('out:')
+    )
+      this.settled.set(item.key, this.clock);
     this.assess(item, item.mistakes ? 'wrong' : 'correct');
     this.completedCount++;
     if (item.assisted) this.assistedCount++;
@@ -2730,7 +2877,14 @@ export class RefereeMatch {
       this.syncMotion();
       return;
     }
-    if (this.phase !== 'feedback' || !this.active) return;
+    if (this.phase !== 'feedback') return;
+    if (!this.active) {
+      // Feedback without an incident (a start signal before the kickoff was
+      // arranged) simply returns to the live, held state.
+      this.feedback = null;
+      this.phase = 'live';
+      return;
+    }
     if (!this.feedback?.final) {
       this.feedback = null;
       this.phase = 'decision';
@@ -2852,7 +3006,12 @@ export class RefereeMatch {
       this.countFor = null;
       this.countCompleted = false;
       this.countAnchor = null;
-      return placeBall(false, true);
+      const result = placeBall(false, true);
+      this.lastProgressPlacement = {
+        ball: { ...this.match.state.actors.ball },
+        roster: this.roster(),
+      };
+      return result;
     }
     if (action === 'count') {
       this.countFor = 0;

@@ -51,6 +51,7 @@ const {
 } = await import('../lib/simulator/referee-geometry.ts');
 const { ROBOT_VISUALS } = await import('../lib/simulator/robot-models.ts');
 const {
+  REFEREE_ACTIONS,
   REFEREE_CASES,
   REFEREE_FAMILIES,
   IncidentBag,
@@ -3371,4 +3372,221 @@ test('fresh contact pauses even when earlier Play on feedback is still open', ()
   assert.equal(session.phase, 'decision');
   assert.deepEqual(session.snapshot().actors, contact);
   assertFrozen(session);
+});
+
+test('a start signal before the kickoff is arranged is premature, unscored and creates no incident', () => {
+  for (const mode of ['step', 'continuous']) {
+    const session =
+      mode === 'continuous' ? continuous() : new RefereeMatch(2026);
+    session.match.state.pendingEvent = { kind: 'goal', team: 'blue' };
+    session.detectLiveIncident();
+    correct(session, 'goal', 'blue');
+    session.continue();
+    assert.equal(session.snapshot().kickoffDue, true, mode);
+    assert.equal(session.snapshot().kickoffArranged, false, mode);
+    assert.equal(session.snapshot().canArrangeKickoff, true, mode);
+    const before = session.snapshot();
+    for (const action of ['start', 'neutral']) {
+      const feedback = submit(session, action);
+      assert.equal(feedback.verdict, 'premature', `${mode} ${action}`);
+      assert.match(feedback.detail, /Arrange the kickoff first/);
+      assert.equal(session.active, null, `${mode} ${action} adds no incident`);
+      assert.equal(session.snapshot().kickoffDue, true);
+      assert.deepEqual(session.snapshot().report, before.report);
+      assert.equal(session.snapshot().assessed, before.assessed);
+      assert.equal(session.snapshot().caseNumber, before.caseNumber);
+      assert.equal(session.snapshot().history[0].verdict, 'premature');
+      session.continue();
+      assert.equal(session.snapshot().feedback, null);
+      assert.equal(session.phase, 'live');
+    }
+    assert.equal(session.arrangeKickoff(), true, mode);
+    assert.equal(session.snapshot().kickoffArranged, true, mode);
+    correct(session, 'start');
+    session.continue();
+    assert.equal(session.snapshot().kickoffDue, false, mode);
+    assert.equal(session.canAdvance, true, mode);
+  }
+});
+
+test('kickoff drills that expect a start decision still count as arranged', () => {
+  const session = prepare('setup');
+  assert.equal(session.snapshot().kickoffDue, true);
+  assert.equal(session.snapshot().kickoffArranged, true);
+  correct(session, 'correct-setup', 'blue-1');
+  session.continue();
+  assert.equal(session.snapshot().kickoffArranged, true);
+  correct(session, 'start');
+  assert.equal(session.snapshot().kickoffDue, false);
+  assert.equal(session.snapshot().kickoffArranged, false);
+});
+
+test('the neutral restart action reads as a restart decision, not the start signal', () => {
+  const neutral = REFEREE_ACTIONS.find((action) => action.id === 'neutral');
+  const start = REFEREE_ACTIONS.find((action) => action.id === 'start');
+  assert.equal(neutral.label, 'Restart with neutral kickoff');
+  assert.equal(start.label, 'Signal kickoff');
+  assert.equal(neutral.group, 'Restart');
+  // An arranged neutral kickoff still expects the plain start signal.
+  const session = continuous();
+  session.match.state.pendingEvent = { kind: 'goal', team: 'blue' };
+  session.detectLiveIncident();
+  correct(session, 'goal', 'blue');
+  session.continue();
+  assert.equal(session.arrangeKickoff(), true);
+  assert.deepEqual(session.acceptedCalls(), [{ action: 'start' }]);
+});
+
+function pushFullyIntoArea(session) {
+  const victim = { x: 0, z: 0.98, yaw: 0 };
+  session.match.place({
+    'blue-1': victim,
+    'yellow-1': { x: 0, z: 0.78, yaw: 0 },
+    ball: { x: -0.5, z: -0.4, yaw: 0 },
+  });
+  assert.equal(robotPenaltyOverlap(victim, 1, session.robotVisual, true), true);
+  session.match.step({
+    controls: { blue: 'off', yellow: 'off' },
+    selectedRobot: 'blue-1',
+    duration: 120,
+    referee: true,
+    observeReferee: false,
+    robotCommands: {
+      'blue-1': { ...NO_DRIVE, dribble: false },
+      'yellow-1': { ...NO_DRIVE, forward: 1, dribble: false },
+    },
+  });
+  assert.equal(session.match.opponentPusher('blue-1'), 'yellow-1');
+  session.detectLiveIncident();
+  assert.equal(session.active.definition.id, 'live-pushed-out');
+}
+const outOfBounds = (session, id) => {
+  const pose = session.match.state.actors[id];
+  return (
+    robotTouchesFieldWall(pose, session.robotVisual) ||
+    robotTouchesGoal(pose, session.robotVisual) ||
+    [-1, 1].some((end) =>
+      robotPenaltyOverlap(pose, end, session.robotVisual, true),
+    )
+  );
+};
+
+test('a waived full-area push corrects the robot clear of the area and is not re-armed', () => {
+  const session = new RefereeMatch(73);
+  pushFullyIntoArea(session);
+  correct(session, 'waive-out', 'blue-1');
+  assert.equal(session.snapshot().assessed, 1);
+  const blue = session.match.state.actors['blue-1'];
+  assert.ok(blue, 'the pushed robot stays on the field');
+  assert.equal(outOfBounds(session, 'blue-1'), false);
+  assert.ok(
+    distance(blue, session.match.state.actors['yellow-1']) >=
+      RCJ_SIMULATOR_GUIDES.robotCollisionRadius * 2,
+  );
+  assert.ok(
+    robotPenaltyOverlap(blue, 1, session.robotVisual),
+    'partial entry is legal',
+  );
+  session.continue();
+  const number = session.snapshot().caseNumber;
+  for (let i = 0; i < 3; i++) {
+    session.step();
+    assert.equal(session.snapshot().caseNumber, number, `step ${i}`);
+    assert.equal(session.snapshot().assessed, 1, `step ${i}`);
+    assert.equal(session.active, null, `step ${i}`);
+  }
+});
+
+test('a decided boundary condition that persists is not assessed again until it clears', () => {
+  const session = new RefereeMatch(73);
+  pushFullyIntoArea(session);
+  // A crowded scene may leave no legal correction: the robot stays put.
+  session.pushedOutCorrection = () => null;
+  const feedback = submit(session, 'waive-out', 'blue-1');
+  assert.equal(feedback.verdict, 'correct');
+  assert.match(feedback.effect, /no collision-free correction/);
+  assert.equal(outOfBounds(session, 'blue-1'), true);
+  assert.equal(session.snapshot().assessed, 1);
+  session.continue();
+  session.match.removeRobot('yellow-1');
+  const number = session.snapshot().caseNumber;
+  for (let i = 0; i < 5; i++) {
+    session.step();
+    assert.equal(outOfBounds(session, 'blue-1'), true, `step ${i}`);
+    assert.equal(session.snapshot().caseNumber, number, `step ${i}`);
+    assert.equal(session.snapshot().assessed, 1, `step ${i}`);
+    assert.equal(session.active, null, `step ${i}`);
+  }
+  // Once the geometry has cleared for a step, a fresh entry is a new incident.
+  session.match.state.actors['blue-1'] = { x: 0, z: 0.3, yaw: 0 };
+  session.step();
+  assert.equal(session.active, null);
+  session.match.state.actors['blue-1'] = { x: 0, z: 0.98, yaw: 0 };
+  session.step();
+  assert.equal(session.active?.definition.id, 'live-full-area');
+  assert.deepEqual(session.expected(), [{ action: 'out', target: 'blue-1' }]);
+  assert.equal(session.snapshot().assessed, 1);
+});
+
+test('a stalled ball nobody can play is drilled once, not on every stationary interval', () => {
+  const session = prepare('deadlock');
+  for (const robot of MATCH_ROBOTS) session.match.removeRobot(robot.id);
+  correct(session, 'count');
+  for (let i = 0; i < 400 && session.snapshot().count !== null; i++)
+    session.step();
+  correct(session, 'lack-progress');
+  assert.equal(session.snapshot().assessed, 1);
+  session.continue();
+  const placed = { ...session.match.state.actors.ball };
+  const number = session.snapshot().caseNumber;
+  // Each stationary interval is raised, released and its timer restarted.
+  let stalls = 0;
+  let previous = 0;
+  for (let i = 0; i < 30 / MATCH_STEP; i++) {
+    session.step();
+    const now = session.match.stationarySeconds;
+    if (previous > 7.5 && now < previous) stalls++;
+    previous = now;
+  }
+  assert.ok(stalls >= 2, 'the stationary ball kept raising lack of progress');
+  assert.equal(session.active, null);
+  assert.equal(session.snapshot().caseNumber, number);
+  assert.equal(session.snapshot().assessed, 1);
+  assert.deepEqual(session.match.state.actors.ball, placed);
+  // A ball that has moved since the placement is a genuine new stalemate.
+  session.match.state.actors.ball.x += 0.03;
+  advance(session, 12);
+  assert.equal(session.active?.definition.id, 'live-deadlock');
+  assert.equal(session.snapshot().assessed, 1);
+});
+
+test('unchanged lack-of-progress detection continues while any robot can still play', () => {
+  const far = {
+    'blue-1': { x: -0.6, z: -0.6 },
+    'yellow-1': { x: 0.6, z: 0.6 },
+  };
+  for (const roster of [['blue-1'], ['blue-1', 'yellow-1']]) {
+    const session = prepare('deadlock');
+    correct(session, 'count');
+    for (let i = 0; i < 400 && session.snapshot().count !== null; i++)
+      session.step();
+    correct(session, 'lack-progress');
+    session.continue();
+    session.match.place({
+      ball: { ...session.match.state.actors.ball },
+      ...Object.fromEntries(roster.map((id) => [id, { ...far[id], yaw: 0 }])),
+    });
+    const number = session.snapshot().caseNumber;
+    for (let i = 0; i < 20 / MATCH_STEP && session.active === null; i++) {
+      session.step();
+      // Hold the robots so only the stationary-ball detection is exercised.
+      for (const id of roster)
+        session.match.state.actors[id] = {
+          ...session.match.state.actors[id],
+          ...far[id],
+        };
+    }
+    assert.equal(session.active?.definition.id, 'live-deadlock', roster);
+    assert.ok(session.snapshot().caseNumber > number, roster);
+  }
 });

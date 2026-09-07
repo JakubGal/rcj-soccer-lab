@@ -73,7 +73,12 @@ export const REFEREE_ACTIONS = [
     group: 'Robot',
   },
   { id: 'start', label: 'Signal kickoff', target: false, group: 'Restart' },
-  { id: 'neutral', label: 'Neutral kickoff', target: false, group: 'Restart' },
+  {
+    id: 'neutral',
+    label: 'Restart with neutral kickoff',
+    target: false,
+    group: 'Restart',
+  },
   { id: 'pause', label: 'Stop all robots', target: false, group: 'Restart' },
   {
     id: 'resume',
