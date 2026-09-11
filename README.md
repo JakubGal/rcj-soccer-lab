@@ -26,8 +26,8 @@ Application: <https://jakubgal.github.io/rcj-soccer-lab/>
   technical/safety/administration questions and
   detailed studies with their matching official sections, questions and saved
   completion checks.
-- A Play mode with live 2v2 matches, manual driving, autonomous teams, and a
-  scoreboard with timed games and automatic kickoffs.
+- A Play mode with live 2v2 matches, manual driving, local human-vs-human play,
+  autonomous teams, and a scoreboard with timed games and automatic kickoffs.
 - Referee AI match practice with 35 shuffled incidents, scored calls, real
   removals and return timers, goals, placements, restarts and replay.
 - Multiple camera presets plus free orbit/zoom.
@@ -78,6 +78,26 @@ pnpm test:i18n
 pnpm lint
 pnpm build
 ```
+
+## Local two-player matches
+
+In **Play**, choose **Human vs human**, then **Start match**. Both players use
+the same computer and keyboard; each drives one robot with an AI teammate
+defending. This is local multiplayer, not an online matchmaking service.
+
+| Action            | Player 1 — Blue | Player 2 — Yellow |
+| ----------------- | --------------- | ----------------- |
+| Drive / strafe    | W A S D         | Arrow keys        |
+| Turn left / right | Q / E           | Comma / period    |
+| Kick              | Space           | Enter             |
+| Switch teammate   | C               | Slash             |
+
+Movement is relative to the robot. **P** pauses both players and **R** resets
+the match. Each player also has an on-screen driving pad and an independent
+Dribbler switch. Clicking the field restores keyboard control after changing a
+setting; leaving the browser tab pauses play and clears held inputs. Existing
+solo WASD/arrow controls and Arrange mode remain available. Play matches do not
+count as referee-certification attempts.
 
 ## GitHub-only training certification
 

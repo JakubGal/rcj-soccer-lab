@@ -21,6 +21,8 @@ export type DriveInput = {
 export type MatchSettings = {
   controls: Record<MatchTeam, TeamControl>;
   selectedRobot: string;
+  /** Optional independent human selections for local two-player Play only. */
+  manualRobots?: Partial<Record<MatchTeam, string>>;
   duration: number;
   referee?: boolean;
   observeReferee?: boolean;
@@ -645,6 +647,10 @@ export class SoccerMatch {
     );
     const ball = this.state.actors.ball;
     const strikers = {} as Record<MatchTeam, string>;
+    const manualRobots = {
+      blue: settings.manualRobots?.blue ?? settings.selectedRobot,
+      yellow: settings.manualRobots?.yellow ?? settings.selectedRobot,
+    };
     for (const team of ['blue', 'yellow'] as const) {
       const robots = activeRobots.filter(
         (robot) =>
@@ -652,8 +658,8 @@ export class SoccerMatch {
       );
       strikers[team] =
         settings.controls[team] === 'manual' &&
-        robots.some((robot) => robot.id === settings.selectedRobot)
-          ? settings.selectedRobot
+        robots.some((robot) => robot.id === manualRobots[team])
+          ? manualRobots[team]
           : ([...robots].sort(
               (a, b) =>
                 distance(this.state.actors[a.id], ball) -
@@ -675,13 +681,15 @@ export class SoccerMatch {
       const command =
         control === 'off' || settings.disabledRobots?.includes(robot.id)
           ? { ...NO_DRIVE, dribble: false }
-          : control === 'manual' && robot.id === settings.selectedRobot
-            ? manualInput
+          : control === 'manual' && robot.id === manualRobots[team]
+            ? robot.id === settings.selectedRobot
+              ? manualInput
+              : NO_DRIVE
             : this.aiInput(robot, strikers[team]);
       // A manual team's unselected striker waits; its teammate defends.
       if (
         control === 'manual' &&
-        !settings.selectedRobot.startsWith(team) &&
+        !manualRobots[team].startsWith(team) &&
         robot.id === strikers[team]
       ) {
         commands[robot.id] = { ...NO_DRIVE, dribble: false };

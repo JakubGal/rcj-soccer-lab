@@ -447,3 +447,80 @@ test('nested referee feedback translates its generated explanation', () => {
     assert.doesNotMatch(result, /Full entry is|Remove the robot/);
   }
 });
+
+test('local multiplayer mode, player labels and driving controls are translated', () => {
+  const sources = [
+    'Human vs human',
+    'Player 1 · Blue',
+    'Player 2 · Yellow',
+    'Player 1 · WASD / Player 2 · arrows',
+    'Local two-player match on one keyboard. Each player drives one robot; an AI teammate defends. No account or network connection is needed.',
+    'Switch teammate',
+    'Turn left',
+    'Turn right',
+    'Drive forward',
+    'Drive backward',
+    'Strafe left',
+    'Strafe right',
+    'Kick ball',
+  ];
+  for (const locale of ['sk', 'de', 'ja'])
+    for (const source of sources) {
+      assert.ok(
+        Object.hasOwn(generated.locales[locale].exact, source),
+        `${locale}:${source}`,
+      );
+      assert.notEqual(
+        translateText(source, locale),
+        source,
+        `${locale}:${source}`,
+      );
+    }
+});
+
+test('multiplayer instructions preserve actual keyboard labels and official Dribbler term', () => {
+  /** @type {Array<[string, string[]]>} */
+  const instructions = [
+    [
+      'WASD moves · Q/E turns · Space kicks · C switches teammate',
+      ['WASD', 'Q/E', 'Space', 'C'],
+    ],
+    [
+      'Arrows move · ,/. turns · Enter kicks · / switches teammate',
+      [',/.', 'Enter', '· / '],
+    ],
+    [
+      'Movement is relative to each robot. P pauses both players; R resets the match.',
+      ['P', 'R'],
+    ],
+    [
+      'Hold WASD / arrows to drive relative to the robot. Q / E turns; Space kicks a ball in front. P pauses, R resets.',
+      ['WASD', 'Q / E', 'Space', 'P', 'R'],
+    ],
+  ];
+  for (const locale of ['sk', 'de', 'ja']) {
+    for (const [source, keys] of instructions) {
+      const result = translateText(source, locale);
+      assert.notEqual(result, source, `${locale}:${source}`);
+      for (const key of keys)
+        assert.ok(result.includes(key), `${locale}:${key}:${result}`);
+    }
+    for (const key of [
+      'A',
+      'S',
+      'D',
+      'W',
+      'Q',
+      'E',
+      'C',
+      'P',
+      'R',
+      'Enter',
+      ',',
+      '.',
+      '/',
+      'Dribbler',
+    ])
+      assert.equal(translateText(key, locale), key, `${locale}:${key}`);
+  }
+});

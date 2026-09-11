@@ -10,7 +10,7 @@
     "dev": "vite",
     "build": "vite build",
     "typecheck": "tsc --noEmit",
-    "test:match": "node --test scripts/match.test.mjs",
+    "test:match": "node --test scripts/match.test.mjs scripts/local-multiplayer.test.mjs",
     "test:rules": "node --test scripts/rulebook.test.mjs",
     "test:referee": "node --test scripts/referee.test.mjs",
     "test:learning": "node --test scripts/learning.test.mjs",

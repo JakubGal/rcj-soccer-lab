@@ -15,6 +15,7 @@ import {
   RotateCw,
   Scale,
   Timer,
+  Users,
   Zap,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -46,20 +47,15 @@ import {
   practiceLayout,
   preparePracticeMatch,
 } from '@/lib/simulator/practice-layout';
-
-const DRIVE_KEYS = new Set([
-  'KeyW',
-  'KeyA',
-  'KeyS',
-  'KeyD',
-  'ArrowUp',
-  'ArrowDown',
-  'ArrowLeft',
-  'ArrowRight',
-  'KeyQ',
-  'KeyE',
-  'Space',
-]);
+import {
+  PLAY_BINDINGS,
+  isPlayControlTarget,
+  playDriveInput,
+  playDriveKeys,
+  playerKeys,
+  withPlayTeamControl,
+  type PlayControlScheme,
+} from '@/lib/simulator/play-controls';
 const clock = (seconds: number) =>
   `${Math.floor(seconds / 60)}:${String(Math.floor(seconds % 60)).padStart(2, '0')}`;
 type Props = {
@@ -92,7 +88,11 @@ export function MatchPlay({
     duration: 120,
   });
   const [camera, setCamera] = useState<CameraPreset>('overhead');
-  const [dribble, setDribble] = useState(true);
+  const [dribble, setDribble] = useState({ blue: true, yellow: true });
+  const [humanRobots, setHumanRobots] = useState({
+    blue: 'blue-1',
+    yellow: 'yellow-1',
+  });
   const [showTrail, setShowTrail] = useState(true);
   const [ready, setReady] = useState(false);
   const [editingId, setEditingId] = useState<string | null>('blue-1');
@@ -100,17 +100,32 @@ export function MatchPlay({
   const [layoutName, setLayoutName] = useState('match');
   const baseline = useRef<Record<string, Pose>>(clonePoses(frame.actors));
   const keyboard = useRef(new Set<string>());
+  const buttonKeys = useRef(new Set<string>());
   const pointers = useRef(new Map<number, string>());
   const fieldRef = useRef<HTMLElement>(null);
   const selected = MATCH_ROBOTS.find(
     (robot) => robot.id === settings.selectedRobot,
   )!;
   const manual = settings.controls[selected.team as MatchTeam] === 'manual';
+  const twoPlayer =
+    settings.controls.blue === 'manual' &&
+    settings.controls.yellow === 'manual';
   const onReady = useCallback(() => setReady(true), []);
   const clearInput = useCallback(() => {
     keyboard.current.clear();
+    buttonKeys.current.clear();
     pointers.current.clear();
   }, []);
+  const clearPlayerInput = useCallback((team: MatchTeam) => {
+    const codes = playerKeys(team);
+    for (const code of codes) {
+      keyboard.current.delete(code);
+      buttonKeys.current.delete(code);
+    }
+    for (const [pointer, code] of pointers.current)
+      if (codes.has(code)) pointers.current.delete(pointer);
+  }, []);
+  useEffect(() => clearInput, [clearInput]);
   const focusField = useCallback(
     () => fieldRef.current?.focus({ preventScroll: true }),
     [],
@@ -205,8 +220,10 @@ export function MatchPlay({
   const editPose = editingId ? frame.actors[editingId] : null;
   const selectRobot = useCallback(
     (id: string) => {
-      clearInput();
       const robot = MATCH_ROBOTS.find((actor) => actor.id === id)!;
+      if (twoPlayer) clearPlayerInput(robot.team as MatchTeam);
+      else clearInput();
+      setHumanRobots((current) => ({ ...current, [robot.team]: id }));
       setSettings((current) => ({
         ...current,
         selectedRobot: id,
@@ -214,20 +231,19 @@ export function MatchPlay({
       }));
       focusField();
     },
-    [clearInput, focusField],
+    [clearInput, clearPlayerInput, focusField, twoPlayer],
   );
 
   const setControl = (team: MatchTeam, control: TeamControl) => {
     clearInput();
-    setSettings((current) => ({
-      ...current,
-      controls: { ...current.controls, [team]: control },
-      selectedRobot: control === 'manual' ? `${team}-1` : current.selectedRobot,
-    }));
+    setSettings((current) =>
+      withPlayTeamControl(current, humanRobots, team, control),
+    );
   };
 
   const preset = (blue: TeamControl, yellow: TeamControl) => {
     clearInput();
+    setHumanRobots({ blue: 'blue-1', yellow: 'yellow-1' });
     setSettings((current) => ({
       ...current,
       controls: { blue, yellow },
@@ -249,19 +265,28 @@ export function MatchPlay({
       publishElapsed += elapsed;
       const down = (code: string) =>
         keyboard.current.has(code) ||
+        buttonKeys.current.has(code) ||
         [...pointers.current.values()].includes(code);
       while (accumulator >= MATCH_STEP) {
-        engine.step(settings, {
-          forward:
-            Number(down('KeyW') || down('ArrowUp')) -
-            Number(down('KeyS') || down('ArrowDown')),
-          strafe:
-            Number(down('KeyD') || down('ArrowRight')) -
-            Number(down('KeyA') || down('ArrowLeft')),
-          turn: Number(down('KeyE')) - Number(down('KeyQ')),
-          kick: down('Space'),
-          dribble,
-        });
+        if (twoPlayer) {
+          engine.step({
+            ...settings,
+            manualRobots: humanRobots,
+            robotCommands: {
+              [humanRobots.blue]: playDriveInput(down, 'blue', dribble.blue),
+              [humanRobots.yellow]: playDriveInput(
+                down,
+                'yellow',
+                dribble.yellow,
+              ),
+            },
+          });
+        } else {
+          engine.step(
+            settings,
+            playDriveInput(down, 'single', dribble[selected.team as MatchTeam]),
+          );
+        }
         accumulator -= MATCH_STEP;
       }
       if (publishElapsed >= 1 / 30 || engine.state.phase === 'finished') {
@@ -278,9 +303,19 @@ export function MatchPlay({
     animationFrame = window.requestAnimationFrame(animate);
     return () => {
       window.cancelAnimationFrame(animationFrame);
-      clearInput();
     };
-  }, [active, arrange, clearInput, dribble, engine, running, settings]);
+  }, [
+    active,
+    arrange,
+    clearInput,
+    dribble,
+    engine,
+    running,
+    settings,
+    humanRobots,
+    selected.team,
+    twoPlayer,
+  ]);
 
   useEffect(() => {
     if (!active) return;
@@ -291,18 +326,19 @@ export function MatchPlay({
     const visibility = () => {
       if (document.hidden) stop();
     };
+    const focusInput = (event: FocusEvent) => {
+      if (isPlayControlTarget(event.target)) clearInput();
+    };
     const keydown = (event: KeyboardEvent) => {
       const target = event.target as HTMLElement | null;
       if (
-        target?.closest('input, select, textarea, [contenteditable="true"]') ||
+        isPlayControlTarget(target) ||
         event.ctrlKey ||
         event.altKey ||
         event.metaKey
       )
         return;
-      if (event.code === 'Space' && target?.closest('button, a')) return;
       if (arrange) {
-        if (target?.closest('button, a')) return;
         const step = event.shiftKey ? 0.05 : 0.01;
         if (event.code.startsWith('Arrow')) {
           event.preventDefault();
@@ -324,18 +360,30 @@ export function MatchPlay({
         else if (event.code === 'Escape') setEditingId(null);
         return;
       }
-      if (DRIVE_KEYS.has(event.code)) {
+      const switchTeam = twoPlayer
+        ? event.code === 'KeyC'
+          ? 'blue'
+          : event.code === 'Slash'
+            ? 'yellow'
+            : null
+        : event.code === 'KeyC'
+          ? (selected.team as MatchTeam)
+          : null;
+      if (switchTeam) {
         event.preventDefault();
-        if (running && manual) keyboard.current.add(event.code);
+        if (!event.repeat) {
+          const id = twoPlayer ? humanRobots[switchTeam] : selected.id;
+          selectRobot(`${switchTeam}-${id.endsWith('-1') ? 2 : 1}`);
+        }
+      } else if (playDriveKeys(twoPlayer).has(event.code)) {
+        event.preventDefault();
+        if (running && (manual || twoPlayer)) keyboard.current.add(event.code);
       } else if (!event.repeat && event.code === 'KeyP') {
         event.preventDefault();
         toggleRunning();
       } else if (!event.repeat && event.code === 'KeyR') {
         event.preventDefault();
         reset();
-      } else if (!event.repeat && event.code === 'KeyC') {
-        event.preventDefault();
-        selectRobot(`${selected.team}-${selected.number === 1 ? 2 : 1}`);
       }
     };
     const keyup = (event: KeyboardEvent) => keyboard.current.delete(event.code);
@@ -343,12 +391,13 @@ export function MatchPlay({
     window.addEventListener('keyup', keyup);
     window.addEventListener('blur', stop);
     document.addEventListener('visibilitychange', visibility);
+    document.addEventListener('focusin', focusInput);
     return () => {
-      clearInput();
       window.removeEventListener('keydown', keydown);
       window.removeEventListener('keyup', keyup);
       window.removeEventListener('blur', stop);
       document.removeEventListener('visibilitychange', visibility);
+      document.removeEventListener('focusin', focusInput);
     };
   }, [
     active,
@@ -362,7 +411,10 @@ export function MatchPlay({
     running,
     selectRobot,
     selected.number,
+    selected.id,
     selected.team,
+    humanRobots,
+    twoPlayer,
     toggleRunning,
   ]);
 
@@ -377,6 +429,8 @@ export function MatchPlay({
       playing: running,
       controls: settings.controls,
       selectedActor: settings.selectedRobot,
+      localMultiplayer: twoPlayer,
+      humanRobots: twoPlayer ? humanRobots : undefined,
       duration: settings.duration,
       camera,
       robotVisual,
@@ -385,15 +439,30 @@ export function MatchPlay({
     return () => {
       if (target.snapshot === snapshot) delete target.snapshot;
     };
-  }, [active, camera, engine, frame, robotVisual, running, settings]);
+  }, [
+    active,
+    camera,
+    engine,
+    frame,
+    robotVisual,
+    running,
+    settings,
+    twoPlayer,
+    humanRobots,
+  ]);
 
-  const heldButton = (code: string, label: string, icon: React.ReactNode) => (
+  const heldButton = (
+    code: string,
+    label: string,
+    icon: React.ReactNode,
+    keyLabel: string,
+  ) => (
     <Button
       variant="outline"
       className="drive-button"
       aria-label={label}
       title={label}
-      disabled={!running || !manual || arrange}
+      disabled={!running || (!manual && !twoPlayer) || arrange}
       onPointerDown={(event) => {
         event.preventDefault();
         event.currentTarget.setPointerCapture(event.pointerId);
@@ -405,21 +474,76 @@ export function MatchPlay({
       onKeyDown={(event) => {
         if (event.key === 'Enter' || event.key === ' ') {
           event.preventDefault();
-          keyboard.current.add(code);
+          event.stopPropagation();
+          buttonKeys.current.add(code);
         }
       }}
       onKeyUp={(event) => {
         if (event.key === 'Enter' || event.key === ' ') {
           event.preventDefault();
-          keyboard.current.delete(code);
+          event.stopPropagation();
+          buttonKeys.current.delete(code);
         }
       }}
-      onBlur={() => keyboard.current.delete(code)}
+      onBlur={() => buttonKeys.current.delete(code)}
     >
       {icon}
-      <span>{code === 'Space' ? 'Kick' : code.slice(-1)}</span>
+      <span data-i18n-skip translate="no">
+        {keyLabel}
+      </span>
     </Button>
   );
+
+  const drivePad = (scheme: PlayControlScheme) => {
+    const keys = PLAY_BINDINGS[scheme];
+    const arrows = scheme === 'yellow';
+    return (
+      <div className="drive-pad">
+        {heldButton(
+          keys.turnLeft,
+          'Turn left',
+          <RotateCcw />,
+          arrows ? ',' : 'Q',
+        )}
+        {heldButton(
+          keys.forward,
+          'Drive forward',
+          <ArrowUp />,
+          arrows ? '↑' : 'W',
+        )}
+        {heldButton(
+          keys.turnRight,
+          'Turn right',
+          <RotateCw />,
+          arrows ? '.' : 'E',
+        )}
+        {heldButton(
+          keys.left,
+          'Strafe left',
+          <ArrowLeft />,
+          arrows ? '←' : 'A',
+        )}
+        {heldButton(
+          keys.backward,
+          'Drive backward',
+          <ArrowDown />,
+          arrows ? '↓' : 'S',
+        )}
+        {heldButton(
+          keys.right,
+          'Strafe right',
+          <ArrowRight />,
+          arrows ? '→' : 'D',
+        )}
+        {heldButton(
+          keys.kick,
+          scheme === 'single' ? 'Kick ball (Space)' : 'Kick ball',
+          <Zap />,
+          arrows ? 'Enter' : 'Space',
+        )}
+      </div>
+    );
+  };
 
   if (!active) return null;
   return (
@@ -429,6 +553,9 @@ export function MatchPlay({
         ref={fieldRef}
         tabIndex={-1}
         aria-label="Live match field and controls"
+        onPointerDown={(event) => {
+          if (!isPlayControlTarget(event.target)) focusField();
+        }}
       >
         <PlayCanvasViewport
           actors={MATCH_ACTORS}
@@ -440,7 +567,9 @@ export function MatchPlay({
           ballTrail={engine.ballTrail()}
           phaseLabel={frame.message}
           robotVisual={robotVisual}
-          selectedActorId={arrange ? editingId : manual ? selected.id : null}
+          selectedActorId={
+            arrange ? editingId : twoPlayer ? null : manual ? selected.id : null
+          }
           editable={arrange}
           motionStopped={!running || arrange}
           onActorSelect={setEditingId}
@@ -508,9 +637,11 @@ export function MatchPlay({
           <span>
             {arrange
               ? 'Arrange robots and ball, then play from this layout'
-              : manual
-                ? `Driving ${selected.label} · C switches teammate`
-                : 'Autonomous match · Pick a robot to take control'}
+              : twoPlayer
+                ? 'Player 1 · WASD / Player 2 · arrows'
+                : manual
+                  ? `Driving ${selected.label} · C switches teammate`
+                  : 'Autonomous match · Pick a robot to take control'}
           </span>
         </div>
       </section>
@@ -683,6 +814,15 @@ export function MatchPlay({
             </Button>
             <Button
               size="sm"
+              variant={twoPlayer ? 'secondary' : 'outline'}
+              aria-pressed={twoPlayer}
+              onClick={() => preset('manual', 'manual')}
+            >
+              <Users />
+              Human vs human
+            </Button>
+            <Button
+              size="sm"
               variant="outline"
               onClick={() => preset('ai', 'ai')}
             >
@@ -697,6 +837,13 @@ export function MatchPlay({
               Free practice
             </Button>
           </div>
+          {twoPlayer && (
+            <p className="match-hint mt-3">
+              Local two-player match on one keyboard. Each player drives one
+              robot; an AI teammate defends. No account or network connection is
+              needed.
+            </p>
+          )}
           <div className="match-team-settings">
             {(['blue', 'yellow'] as const).map((team) => (
               <label
@@ -757,12 +904,19 @@ export function MatchPlay({
               <Button
                 key={robot.id}
                 variant="outline"
-                aria-pressed={manual && selected.id === robot.id}
+                aria-pressed={
+                  twoPlayer
+                    ? humanRobots[robot.team as MatchTeam] === robot.id
+                    : manual && selected.id === robot.id
+                }
                 onClick={() => selectRobot(robot.id)}
                 className={cn(
                   'match-robot',
                   robot.team === 'blue' ? 'text-sky-300' : 'text-amber-300',
-                  manual && selected.id === robot.id && 'match-robot-active',
+                  (twoPlayer
+                    ? humanRobots[robot.team as MatchTeam] === robot.id
+                    : manual && selected.id === robot.id) &&
+                    'match-robot-active',
                 )}
               >
                 <span
@@ -775,32 +929,92 @@ export function MatchPlay({
               </Button>
             ))}
           </div>
-          <p className="match-hint">
-            {manual
-              ? `${selected.label} is yours. Its teammate defends.`
-              : 'Pick a robot to switch its team to manual.'}
-          </p>
-          <div className="drive-pad">
-            {heldButton('KeyQ', 'Turn left (Q)', <RotateCcw />)}
-            {heldButton('KeyW', 'Drive forward (W or Up)', <ArrowUp />)}
-            {heldButton('KeyE', 'Turn right (E)', <RotateCw />)}
-            {heldButton('KeyA', 'Strafe left (A or Left)', <ArrowLeft />)}
-            {heldButton('KeyS', 'Drive backward (S or Down)', <ArrowDown />)}
-            {heldButton('KeyD', 'Strafe right (D or Right)', <ArrowRight />)}
-            {heldButton('Space', 'Kick ball (Space)', <Zap />)}
-          </div>
-          <p className="match-hint">
-            Hold WASD / arrows to drive relative to the robot. Q / E turns;
-            Space kicks a ball in front. P pauses, R resets.
-          </p>
-          <label className="match-toggle" htmlFor="match-dribbler">
-            <span>Manual robot dribbler</span>
-            <Switch
-              id="match-dribbler"
-              checked={dribble}
-              onCheckedChange={setDribble}
-            />
-          </label>
+          {!twoPlayer && (
+            <p className="match-hint">
+              {manual
+                ? `${selected.label} is yours. Its teammate defends.`
+                : 'Pick a robot to switch its team to manual.'}
+            </p>
+          )}
+          {twoPlayer ? (
+            <div className="match-players">
+              {(['blue', 'yellow'] as const).map((team) => (
+                <section
+                  key={team}
+                  className={`match-player match-player-${team}`}
+                  aria-label={
+                    team === 'blue' ? 'Player 1 · Blue' : 'Player 2 · Yellow'
+                  }
+                >
+                  <h3>
+                    {team === 'blue' ? 'Player 1 · Blue' : 'Player 2 · Yellow'}
+                  </h3>
+                  <p className="match-hint">
+                    {
+                      MATCH_ROBOTS.find(
+                        (robot) => robot.id === humanRobots[team],
+                      )!.label
+                    }
+                  </p>
+                  <p className="match-hint">
+                    {team === 'blue'
+                      ? 'WASD moves · Q/E turns · Space kicks · C switches teammate'
+                      : 'Arrows move · ,/. turns · Enter kicks · / switches teammate'}
+                  </p>
+                  {drivePad(team)}
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() =>
+                      selectRobot(
+                        `${team}-${humanRobots[team].endsWith('-1') ? 2 : 1}`,
+                      )
+                    }
+                  >
+                    Switch teammate
+                  </Button>
+                  <label
+                    className="match-toggle"
+                    htmlFor={`match-dribbler-${team}`}
+                  >
+                    Dribbler
+                    <Switch
+                      id={`match-dribbler-${team}`}
+                      checked={dribble[team]}
+                      onCheckedChange={(value) =>
+                        setDribble((current) => ({ ...current, [team]: value }))
+                      }
+                    />
+                  </label>
+                </section>
+              ))}
+              <p className="match-hint">
+                Movement is relative to each robot. P pauses both players; R
+                resets the match.
+              </p>
+            </div>
+          ) : (
+            <>
+              {drivePad('single')}
+              <p className="match-hint">
+                Hold WASD / arrows to drive relative to the robot. Q / E turns;
+                Space kicks a ball in front. P pauses, R resets.
+              </p>
+              <label className="match-toggle" htmlFor="match-dribbler">
+                <span>Manual robot dribbler</span>
+                <Switch
+                  id="match-dribbler"
+                  checked={dribble[selected.team as MatchTeam]}
+                  onCheckedChange={(value) =>
+                    setDribble((current) => ({
+                      ...current,
+                      [selected.team]: value,
+                    }))
+                  }
+                />
+              </label>
+            </>
+          )}
           <label className="match-toggle" htmlFor="match-trail">
             <span>Ball trail</span>
             <Switch

@@ -118,6 +118,39 @@ const PRESERVED_SENTENCES = new Set([
 
 const MANUAL = {
   sk: {
+    'Human vs human': 'Hráč proti hráčovi',
+    'Player 1 · Blue': 'Hráč 1 · Modrý tím',
+    'Player 2 · Yellow': 'Hráč 2 · Žltý tím',
+    'Player 1 · WASD / Player 2 · arrows': 'Hráč 1 · WASD / Hráč 2 · šípky',
+    'Local two-player match on one keyboard. Each player drives one robot; an AI teammate defends. No account or network connection is needed.':
+      'Lokálny zápas dvoch hráčov na jednej klávesnici. Každý hráč ovláda jedného robota; spoluhráč riadený AI bráni. Účet ani sieťové pripojenie nie sú potrebné.',
+    'WASD moves · Q/E turns · Space kicks · C switches teammate':
+      'WASD pohyb · Q/E otáčanie · Space kop · C prepnutie spoluhráča',
+    'Arrows move · ,/. turns · Enter kicks · / switches teammate':
+      'Šípky pohyb · ,/. otáčanie · Enter kop · / prepnutie spoluhráča',
+    'Movement is relative to each robot. P pauses both players; R resets the match.':
+      'Smer pohybu sa riadi natočením každého robota. P pozastaví hru pre oboch hráčov; R reštartuje zápas.',
+    'Hold WASD / arrows to drive relative to the robot. Q / E turns; Space kicks a ball in front. P pauses, R resets.':
+      'Podržaním WASD / šípok sa pohybujete podľa natočenia robota. Q / E otáča; Space kopne loptičku pred robotom. P pozastaví hru, R reštartuje zápas.',
+    'Switch teammate': 'Prepnúť spoluhráča',
+    'Turn left': 'Otočiť doľava',
+    'Turn right': 'Otočiť doprava',
+    'Drive forward': 'Ísť dopredu',
+    'Drive backward': 'Ísť dozadu',
+    'Strafe left': 'Posunúť sa doľava',
+    'Strafe right': 'Posunúť sa doprava',
+    'Kick ball': 'Kopnúť loptičku',
+    Dribbler: 'Dribbler',
+    A: 'A',
+    S: 'S',
+    D: 'D',
+    W: 'W',
+    Q: 'Q',
+    E: 'E',
+    C: 'C',
+    P: 'P',
+    R: 'R',
+    Enter: 'Enter',
     'Inspect both ball control under rule 2.5 and the 1.5 cm ball-capturing-zone limit under rule 6.2.1. A compliant capture depth alone does not establish legal holding behavior: check freedom of movement, opponent access and the permitted dribbler exception.':
       'Skontrolujte ovládanie loptičky podľa pravidla 2.5 aj limit zóny zachytenia loptičky 1,5 cm podľa pravidla 6.2.1. Samotná vyhovujúca hĺbka zachytenia neznamená, že holding je dovolený: skontrolujte voľnosť pohybu loptičky, prístup súpera a povolenú výnimku pre dribbler.',
     'Fail; a passing rebound must not hit the starting goal’s back wall':
@@ -275,6 +308,41 @@ const MANUAL = {
       'Úplný vstup robota znamená out of bounds. Odstráňte robota na jednu minútu alebo do skoršieho kick-off.',
   },
   de: {
+    'Human vs human': 'Mensch gegen Mensch',
+    'Player 1 · Blue': 'Spieler 1 · Blau',
+    'Player 2 · Yellow': 'Spieler 2 · Gelb',
+    'Player 1 · WASD / Player 2 · arrows':
+      'Spieler 1 · WASD / Spieler 2 · Pfeiltasten',
+    'Local two-player match on one keyboard. Each player drives one robot; an AI teammate defends. No account or network connection is needed.':
+      'Lokales Spiel für zwei Personen an einer Tastatur. Jede Person steuert einen Roboter; ein KI-Teamkollege verteidigt. Ein Konto oder eine Netzwerkverbindung ist nicht erforderlich.',
+    'WASD moves · Q/E turns · Space kicks · C switches teammate':
+      'WASD bewegt · Q/E dreht · Space schießt · C wechselt den Teamkollegen',
+    'Arrows move · ,/. turns · Enter kicks · / switches teammate':
+      'Pfeiltasten bewegen · ,/. dreht · Enter schießt · / wechselt den Teamkollegen',
+    'Movement is relative to each robot. P pauses both players; R resets the match.':
+      'Die Bewegungsrichtung richtet sich nach der Ausrichtung des jeweiligen Roboters. P pausiert für beide Spieler; R setzt das Spiel zurück.',
+    'Hold WASD / arrows to drive relative to the robot. Q / E turns; Space kicks a ball in front. P pauses, R resets.':
+      'WASD / Pfeiltasten gedrückt halten, um sich relativ zur Ausrichtung des Roboters zu bewegen. Q / E dreht; Space schießt einen Ball vor dem Roboter. P pausiert, R setzt das Spiel zurück.',
+    'Switch teammate': 'Teamkollegen wechseln',
+    'Turn left': 'Nach links drehen',
+    'Turn right': 'Nach rechts drehen',
+    'Drive forward': 'Vorwärts fahren',
+    'Drive backward': 'Rückwärts fahren',
+    'Strafe left': 'Seitwärts nach links fahren',
+    'Strafe right': 'Seitwärts nach rechts fahren',
+    'Kick ball': 'Ball schießen',
+    Dribbler: 'Dribbler',
+    A: 'A',
+    S: 'S',
+    D: 'D',
+    W: 'W',
+    Q: 'Q',
+    E: 'E',
+    C: 'C',
+    P: 'P',
+    R: 'R',
+    Space: 'Space',
+    Enter: 'Enter',
     'Inspect both ball control under rule 2.5 and the 1.5 cm ball-capturing-zone limit under rule 6.2.1. A compliant capture depth alone does not establish legal holding behavior: check freedom of movement, opponent access and the permitted dribbler exception.':
       'Prüfen Sie sowohl die Ballkontrolle nach Regel 2.5 als auch die Grenze von 1,5 cm für die Ballfangzone nach Regel 6.2.1. Eine zulässige Fangtiefe allein macht holding nicht erlaubt: Prüfen Sie die Bewegungsfreiheit des Balls, den Zugang für Gegner und die erlaubte Ausnahme für dribbler.',
     'Fail; a passing rebound must not hit the starting goal’s back wall':
@@ -426,6 +494,41 @@ const MANUAL = {
       'Das vollständige Einfahren gilt als out of bounds. Entfernen Sie den Roboter für eine Minute oder bis zu einem früheren kick-off.',
   },
   ja: {
+    'Human vs human': 'プレイヤー同士で対戦',
+    'Player 1 · Blue': 'プレイヤー 1 · 青チーム',
+    'Player 2 · Yellow': 'プレイヤー 2 · 黄チーム',
+    'Player 1 · WASD / Player 2 · arrows':
+      'プレイヤー 1 · WASD / プレイヤー 2 · 矢印キー',
+    'Local two-player match on one keyboard. Each player drives one robot; an AI teammate defends. No account or network connection is needed.':
+      '1台のキーボードを使って2人で対戦します。各プレイヤーが1台のロボットを操縦し、AIのチームメイトが守備を担当します。アカウントやネットワーク接続は不要です。',
+    'WASD moves · Q/E turns · Space kicks · C switches teammate':
+      'WASD で移動 · Q/E で回転 · Space でキック · C でチームメイトに切り替え',
+    'Arrows move · ,/. turns · Enter kicks · / switches teammate':
+      '矢印キーで移動 · ,/. で回転 · Enter でキック · / でチームメイトに切り替え',
+    'Movement is relative to each robot. P pauses both players; R resets the match.':
+      '移動方向は各ロボットの向きを基準にします。P で両プレイヤーのゲームを一時停止し、R で試合をリセットします。',
+    'Hold WASD / arrows to drive relative to the robot. Q / E turns; Space kicks a ball in front. P pauses, R resets.':
+      'WASD / 矢印キーを押し続けると、ロボットの向きを基準に移動します。Q / E で回転し、Space で前方のボールを蹴ります。P で一時停止し、R で試合をリセットします。',
+    'Switch teammate': 'チームメイトに切り替え',
+    'Turn left': '左に回転',
+    'Turn right': '右に回転',
+    'Drive forward': '前進',
+    'Drive backward': '後退',
+    'Strafe left': '左へ平行移動',
+    'Strafe right': '右へ平行移動',
+    'Kick ball': 'ボールを蹴る',
+    Dribbler: 'Dribbler',
+    A: 'A',
+    S: 'S',
+    D: 'D',
+    W: 'W',
+    Q: 'Q',
+    E: 'E',
+    C: 'C',
+    P: 'P',
+    R: 'R',
+    Space: 'Space',
+    Enter: 'Enter',
     'Inspect both ball control under rule 2.5 and the 1.5 cm ball-capturing-zone limit under rule 6.2.1. A compliant capture depth alone does not establish legal holding behavior: check freedom of movement, opponent access and the permitted dribbler exception.':
       'ルール2.5のボール制御と、ルール6.2.1のボール捕捉ゾーンの上限1.5 cmの両方を確認してください。捕捉の深さが適合しているだけではholdingが認められるわけではありません。ボールの運動の自由度、相手ロボットの接触可能性、dribblerに認められた例外を確認してください。',
     '2.4 GHz at no more than 100 mW EIRP; spectrum availability is not guaranteed':

@@ -2557,6 +2557,31 @@ a {
   color: #c2d1dd;
 }
 
+.match-players {
+  display: grid;
+  gap: 12px;
+  margin-top: 14px;
+}
+.match-player {
+  padding: 14px;
+  border: 1px solid #2d5367;
+  border-radius: 12px;
+  background: #112632;
+}
+.match-player h3 {
+  color: #7dd3fc;
+  font-size: 0.9375rem;
+  font-weight: 600;
+  margin-bottom: 5px;
+}
+.match-player-yellow {
+  border-color: #6a5b32;
+  background: #292719;
+}
+.match-player-yellow h3 {
+  color: #fcd34d;
+}
+
 @media (max-width: 920px) {
   .match-workspace {
     display: flex;
