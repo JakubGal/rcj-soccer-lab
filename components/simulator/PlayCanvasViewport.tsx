@@ -48,6 +48,12 @@ type ViewportProps = {
   onActorMove?: (actorId: string, position: { x: number; z: number }) => void;
   onActorMoveEnd?: (actorId: string) => void;
   onReady?: () => void;
+  /** Optional replay timestamp, committed together with the actor poses. */
+  captureTime?: number;
+  captureHeight?: number;
+  ballDiameter?: number;
+  /** Called after rendering, while the WebGL framebuffer is still available. */
+  onCaptureFrame?: (canvas: HTMLCanvasElement, renderedTime?: number) => void;
 };
 
 type ManualInteraction = {
@@ -76,6 +82,7 @@ type SceneHandles = {
     poses: Record<string, Pose>,
   ) => void;
   setRobotVisual: (visual: RobotVisualId) => Promise<void>;
+  setCaptureHeight: (height: number | null) => void;
   setDamageCue: (cue: DamageCue | null, timing: DamagePlayback | null) => void;
   setPenaltyEvidence: (
     enabled: boolean,
@@ -1501,9 +1508,11 @@ function buildScene(
   canvas.addEventListener('wheel', onWheel, { passive: false });
 
   const resizeTarget = canvas.parentElement ?? canvas;
+  let captureHeight: number | null = null;
   const resizeRenderer = (width: number, height: number) => {
     if (width < 1 || height < 1) return;
-    app.graphicsDevice.resizeCanvas(Math.round(width), Math.round(height));
+    if(captureHeight) app.graphicsDevice.setResolution(Math.round(captureHeight*width/height),captureHeight);
+    else app.graphicsDevice.resizeCanvas(Math.round(width), Math.round(height));
     if (activePreset === 'overhead') fitOverheadCamera();
   };
   const resizeObserver = new ResizeObserver((entries) => {
@@ -1532,6 +1541,11 @@ function buildScene(
     selectionDisc,
     selectionArrow,
     setRobotVisual,
+    setCaptureHeight: (height) => {
+      captureHeight=height===null?null:Math.max(240,Math.min(2160,Math.round(height)));
+      const rect=resizeTarget.getBoundingClientRect();
+      resizeRenderer(rect.width,rect.height);
+    },
     setCameraPreset,
     updateCameraTarget,
     setDamageCue: (cue, timing) => damageEffects.setCue(cue, timing),
@@ -1576,6 +1590,10 @@ export function PlayCanvasViewport({
   onActorMove,
   onActorMoveEnd,
   onReady,
+  onCaptureFrame,
+  captureTime,
+  captureHeight,
+  ballDiameter = RCJ_FIELD_SPEC_2026.ball.diameter,
 }: ViewportProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const sceneRef = useRef<SceneHandles | null>(null);
@@ -1586,6 +1604,9 @@ export function PlayCanvasViewport({
   const onActorSelectRef = useRef(onActorSelect);
   const onActorMoveRef = useRef(onActorMove);
   const onActorMoveEndRef = useRef(onActorMoveEnd);
+  const captureRef = useRef(onCaptureFrame);
+  const renderedTimeRef = useRef<number | undefined>(undefined);
+  captureRef.current = onCaptureFrame;
   const [engineError, setEngineError] = useState<string | null>(null);
   const [robotAssetError, setRobotAssetError] = useState<string | null>(null);
   const [sceneVersion, setSceneVersion] = useState(0);
@@ -1635,6 +1656,7 @@ export function PlayCanvasViewport({
           finishMovingActor: (actorId) => onActorMoveEndRef.current?.(actorId),
         });
         sceneRef.current = handles;
+        handles.app.on('postrender', () => captureRef.current?.(canvas, renderedTimeRef.current));
         setSceneVersion((version) => version + 1);
         handles.setCameraPreset(cameraPresetRef.current, posesRef.current);
         void handles
@@ -1675,9 +1697,12 @@ export function PlayCanvasViewport({
       }
       entity.enabled = true;
       if (actor.kind === 'ball') {
+        const diameter = Math.max(.01, Math.min(.2, ballDiameter));
+        const ballScale = diameter / RCJ_FIELD_SPEC_2026.ball.diameter;
+        entity.setLocalScale(ballScale, ballScale, ballScale);
         entity.setPosition(
           pose.x,
-          actorHeights?.[actor.id] ?? BALL_CENTER_HEIGHT,
+          actorHeights?.[actor.id] ?? diameter / 2 + .001,
           pose.z,
         );
         entity.setEulerAngles((pose.yaw * 180) / Math.PI, 0, 0);
@@ -1705,8 +1730,11 @@ export function PlayCanvasViewport({
       scene.selectionDisc.setLocalScale(discDiameter, 0.003, discDiameter);
       scene.selectionArrow.enabled = selectedActor.kind === 'robot';
     }
+    renderedTimeRef.current = captureTime;
   }, [
     actorHeights,
+    ballDiameter,
+    captureTime,
     actors,
     cameraPreset,
     editable,
@@ -1715,6 +1743,10 @@ export function PlayCanvasViewport({
     sceneVersion,
     selectedActorId,
   ]);
+
+  useEffect(() => {
+    sceneRef.current?.setCaptureHeight(captureHeight ?? null);
+  }, [captureHeight, sceneVersion]);
 
   useEffect(() => {
     sceneRef.current?.setDamageCue(damageCue, damagePlayback);

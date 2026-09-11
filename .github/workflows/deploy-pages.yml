@@ -53,6 +53,7 @@ jobs:
           pnpm test:certification
           pnpm test:i18n
           pnpm test:committee
+          pnpm test:reconstruction
 
       - name: Upload GitHub Pages artifact
         uses: actions/upload-pages-artifact@v4

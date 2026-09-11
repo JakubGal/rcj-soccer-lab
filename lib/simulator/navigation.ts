@@ -1,4 +1,4 @@
-export type AppMode = 'rules' | 'play' | 'referee' | 'academy';
+export type AppMode = 'rules' | 'play' | 'referee' | 'academy' | 'reconstruct';
 export type AcademyPage = 'profile' | 'certification' | 'referees';
 export type CertificationTrack = 'rules' | 'step' | 'continuous' | null;
 export type AppNavigation = {
@@ -40,7 +40,9 @@ export function readNavigation(search: string): AppNavigation {
             ? 'play'
             : mode === 'academy'
               ? 'academy'
-              : 'rules',
+              : mode === 'reconstruct'
+                ? 'reconstruct'
+                : 'rules',
     sectionId: query.get('rule') ?? INITIAL_NAVIGATION.sectionId,
     situationId:
       query.get('situation') ??

@@ -522,6 +522,19 @@ The ivory sprite backgrounds intentionally match the character cards.
 Run `pnpm test:committee` for catalogue, fairness, privacy, integration, UI,
 translation, and artwork checks.
 
+## Video match reconstruction
+
+The **Video replay** tab opens local match recordings, calibrates fixed camera
+views, tracks identified robots/ball, and provides an editable 3D timeline.
+Reviewed scores and event notes accompany portable `.rcj-replay.json` files and
+silent 720p/1080p video exports. It works without login or a backend.
+
+This is assisted, experimental tracking—not a promise of exact automatic
+reconstruction. Occlusions, similar robots, camera changes and side-view
+parallax need review. Scoreboard OCR and automatic referee judgments are not
+included. See [workflow, limitations and file format](docs/video-reconstruction.md).
+Run `pnpm test:reconstruction` for focused regression checks.
+
 ## Robot asset pipeline
 
 Browser-ready models live in `public/models/robots`. New designs should ideally

@@ -1,6 +1,13 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import {
+  lazy,
+  Suspense,
+  useCallback,
+  useEffect,
+  useMemo,
+  useState,
+} from 'react';
 import {
   BookOpen,
   CircleDot,
@@ -8,6 +15,7 @@ import {
   GraduationCap,
   Languages,
   Scale,
+  Film,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import {
@@ -45,8 +53,12 @@ const tabs = [
   { id: 'rules', label: 'Rules', icon: BookOpen },
   { id: 'play', label: 'Play', icon: Gamepad2 },
   { id: 'referee', label: 'Referee', icon: Scale },
+  { id: 'reconstruct', label: 'Video replay', icon: Film },
   { id: 'academy', label: 'Academy', icon: GraduationCap },
 ] as const;
+const ReconstructionWorkspace = lazy(
+  () => import('../reconstruction/ReconstructionWorkspace'),
+);
 
 export function SimulatorApp() {
   const { locale, setLocale } = useLocalization();
@@ -386,6 +398,14 @@ export function SimulatorApp() {
           tracking={practiceTrackingBridge}
           certification={certificationBridge}
         />
+      )}
+      {visited.includes('reconstruct') && (
+        <Suspense fallback={<p role="status">Loading video replay tools…</p>}>
+          <ReconstructionWorkspace
+            active={nav.mode === 'reconstruct'}
+            robotVisual={robotVisual}
+          />
+        </Suspense>
       )}
       {nav.mode === 'academy' && (
         <AcademyHub

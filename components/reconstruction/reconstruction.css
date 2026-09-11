@@ -1,0 +1,525 @@
+.reconstruction-workspace {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  padding: 24px;
+  background: #09121a;
+  color: #dbe8ee;
+  font-size: 16px;
+  line-height: 1.5;
+}
+.reconstruction-heading {
+  display: flex;
+  gap: 24px;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  margin-bottom: 16px;
+}
+.reconstruction-heading h1 {
+  font-size: 28px;
+  font-weight: 750;
+  letter-spacing: -0.03em;
+}
+.reconstruction-heading p {
+  color: #a0b7c6;
+  margin-top: 4px;
+}
+.reconstruction-eyebrow {
+  font-size: 12px;
+  letter-spacing: 0.14em;
+  color: #39c6e7 !important;
+  font-weight: 700;
+}
+.reconstruction-actions {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+.reconstruction-actions button {
+  white-space: normal;
+  min-height: 36px;
+}
+.reconstruction-notice {
+  background: #112a35;
+  border-left: 3px solid #31bcda;
+  border-radius: 5px;
+  padding: 12px 16px;
+  margin-bottom: 18px;
+  font-size: 14px;
+  color: #bedde8;
+}
+.reconstruction-error {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 12px;
+  background: #492b25;
+  border: 1px solid #ba7160;
+  border-radius: 8px;
+  margin: 12px 0;
+}
+.reconstruction-message {
+  display: block;
+  color: #91d2c7;
+  margin: 12px 0;
+  font-size: 14px;
+}
+.reconstruction-views {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+}
+.reconstruction-panel {
+  border: 1px solid #2c4352;
+  border-radius: 12px;
+  background: #101e28;
+  min-width: 0;
+  overflow: hidden;
+}
+.reconstruction-panel-title {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 16px;
+  border-bottom: 1px solid #2c4352;
+  flex-wrap: wrap;
+}
+.reconstruction-panel-title h2,
+.reconstruction-tool h2 {
+  font-size: 18px;
+  font-weight: 700;
+}
+.reconstruction-panel-title > span {
+  font-size: 12px;
+  color: #98adba;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 55%;
+}
+.reconstruction-panel-title select {
+  max-width: 180px;
+}
+.reconstruction-source {
+  position: relative;
+  background: #03090e;
+  min-height: 220px;
+}
+.reconstruction-source video {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+.reconstruction-source.has-video {
+  min-height: 0;
+}
+.reconstruction-source.is-editing {
+  cursor: crosshair;
+  outline: 2px solid #34c4df;
+  outline-offset: -2px;
+}
+.reconstruction-overlay {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+}
+.reconstruction-empty {
+  min-height: 320px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 32px;
+  gap: 12px;
+  text-align: center;
+  color: #8facbf;
+}
+.reconstruction-empty h3 {
+  font-size: 22px;
+  color: #daeaf2;
+}
+.reconstruction-empty p {
+  max-width: 420px;
+}
+.reconstruction-3d {
+  position: relative;
+  aspect-ratio: 16/9;
+  min-height: 260px;
+}
+.reconstruction-3d > div:first-child {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+}
+.reconstruction-3d canvas {
+  width: 100%;
+  height: 100%;
+}
+.reconstruction-score {
+  position: absolute;
+  top: 14px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 22px;
+  background: #081621ed;
+  padding: 8px 18px;
+  border: 1px solid #344956;
+  border-radius: 12px;
+  pointer-events: none;
+  font-size: 13px;
+  white-space: nowrap;
+}
+.reconstruction-score b {
+  font-size: 26px;
+  margin: 0 5px;
+}
+.reconstruction-score > span:first-child {
+  color: #54c8ff;
+}
+.reconstruction-score > span:last-child {
+  color: #ffdc48;
+}
+.reconstruction-quality {
+  padding: 12px 16px;
+  display: flex;
+  gap: 8px 16px;
+  flex-wrap: wrap;
+  color: #b9c9d5;
+  font-size: 13px;
+}
+.reconstruction-quality > span:last-child {
+  color: #efc675;
+}
+.reconstruction-live-event {
+  padding: 8px 16px;
+  color: #73d2c3;
+  font-size: 14px;
+  display: flex;
+  gap: 12px;
+}
+.reconstruction-source-controls {
+  padding: 12px 16px;
+}
+.reconstruction-source-controls output {
+  margin-left: auto;
+  font-variant-numeric: tabular-nums;
+}
+.reconstruction-source-controls label {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  font-size: 14px;
+}
+.reconstruction-source-controls input[type='range'] {
+  width: 100%;
+  margin: 5px 0 12px;
+}
+.reconstruction-number {
+  max-width: 110px;
+}
+.reconstruction-transport {
+  padding: 16px;
+  background: #142835;
+  margin: 16px 0;
+  border-radius: 12px;
+  border: 1px solid #304958;
+}
+.reconstruction-transport > .reconstruction-actions {
+  margin-bottom: 12px;
+}
+.reconstruction-transport input[type='range'] {
+  width: 100%;
+  accent-color: #39c6e7;
+}
+.reconstruction-clip-strip {
+  display: flex;
+  gap: 5px;
+  margin-top: 12px;
+  overflow: auto;
+}
+.reconstruction-clip-strip button {
+  min-width: 90px;
+  padding: 8px;
+  background: #1d3544;
+  border-radius: 6px;
+  text-align: left;
+  border: 1px solid transparent;
+}
+.reconstruction-clip-strip small {
+  display: block;
+  font-size: 12px;
+  color: #a8bdc8;
+}
+.reconstruction-clip-strip .selected {
+  border-color: #34c4df;
+  background: #164357;
+}
+.reconstruction-tools {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 16px;
+}
+.reconstruction-tool {
+  padding: 20px;
+}
+.reconstruction-tool h2 {
+  margin-bottom: 10px;
+}
+.reconstruction-tool h3 {
+  font-weight: 700;
+  margin: 24px 0 12px;
+}
+.reconstruction-tool p,
+.reconstruction-events > p {
+  font-size: 14px;
+  color: #aabfcb;
+  margin: 12px 0;
+}
+.reconstruction-workspace label {
+  font-size: 14px;
+  color: #bed2df;
+}
+.reconstruction-tool > label {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 12px 0;
+}
+.reconstruction-workspace input:not([type='range']):not([type='file']) {
+  background: #08151f;
+  border: 1px solid #355163;
+  padding: 8px 10px;
+  border-radius: 6px;
+  min-height: 36px;
+  color: #e2eff5;
+  min-width: 0;
+  width: 100%;
+}
+.reconstruction-form-row {
+  display: flex;
+  gap: 10px;
+  margin: 12px 0;
+}
+.reconstruction-form-row > label {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.reconstruction-tool details {
+  margin: 16px 0;
+  border-top: 1px solid #304753;
+  padding-top: 12px;
+  font-size: 14px;
+}
+.reconstruction-tool details label {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  margin-top: 12px;
+}
+.reconstruction-tool summary {
+  cursor: pointer;
+  color: #7dd3ef;
+}
+.reconstruction-instruction {
+  background: #174353;
+  padding: 10px;
+  border-radius: 6px;
+  color: #d3f6ff !important;
+}
+.reconstruction-calibration-key {
+  display: flex;
+  flex-direction: column;
+  text-align: center;
+  border: 1px dashed #6d909f;
+  padding: 12px;
+  margin: 12px 0;
+  gap: 12px;
+  background: #112b2b;
+  font-size: 14px;
+}
+.reconstruction-calibration-key small {
+  font-size: 12px;
+  color: #9ac0c0;
+}
+.reconstruction-actor-buttons {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  margin: 12px 0;
+}
+.reconstruction-actor-buttons button {
+  border: 1px solid;
+  padding: 6px 10px;
+  border-radius: 6px;
+  font-size: 14px;
+}
+.reconstruction-actor-buttons button.selected {
+  background: #315264;
+  box-shadow: inset 0 0 0 1px white;
+}
+.reconstruction-tool progress {
+  width: 100%;
+  accent-color: #34c4df;
+  margin-top: 16px;
+}
+.reconstruction-download {
+  display: block;
+  color: #7edcf3;
+  text-decoration: underline;
+  margin: 16px 0;
+}
+.reconstruction-events {
+  margin-top: 16px;
+  padding: 0 20px 20px;
+}
+.reconstruction-events .reconstruction-panel-title {
+  margin: 0 -20px;
+}
+.reconstruction-event-form {
+  display: flex;
+  gap: 12px;
+  align-items: end;
+  margin: 18px 0;
+  flex-wrap: wrap;
+}
+.reconstruction-event-form label {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  flex: 1;
+  min-width: 140px;
+}
+.reconstruction-event-form label:has(input:not([type='number'])) {
+  flex: 2;
+}
+.reconstruction-event-list {
+  max-height: 480px;
+  overflow: auto;
+}
+.reconstruction-event-list article {
+  display: flex;
+  gap: 16px;
+  align-items: start;
+  padding: 16px 0;
+  border-top: 1px solid #2a424f;
+}
+.reconstruction-event-list article > div:nth-child(2) {
+  flex: 1;
+  min-width: 0;
+}
+.reconstruction-event-list p {
+  font-size: 14px;
+  color: #9fb8c5;
+  margin-top: 5px;
+  overflow-wrap: anywhere;
+}
+.reconstruction-event-time {
+  font-variant-numeric: tabular-nums;
+  color: #60d7ed;
+  min-width: 95px;
+  text-align: left;
+}
+.reconstruction-event-time small {
+  display: block;
+  font-size: 12px;
+  color: #8ba5b4;
+}
+.reconstruction-event-status {
+  font-size: 12px;
+  padding: 3px 8px;
+  margin-left: 10px;
+  border-radius: 20px;
+  background: #554324;
+  color: #ffdb82;
+}
+.reconstruction-event-status.confirmed {
+  background: #1b493f;
+  color: #8dd7bf;
+}
+.reconstruction-event-status.dismissed {
+  background: #31414a;
+  color: #b6c5cc;
+}
+.reconstruction-workspace button:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+.reconstruction-workspace button:focus-visible,
+.reconstruction-workspace input:focus-visible {
+  outline: 2px solid #73e1f7;
+  outline-offset: 3px;
+}
+@media (min-width: 1600px) {
+  .reconstruction-workspace {
+    padding: 28px 36px;
+  }
+  .reconstruction-source video {
+    max-height: none;
+  }
+}
+@media (max-width: 1100px) {
+  .reconstruction-tools {
+    grid-template-columns: 1fr 1fr;
+  }
+  .reconstruction-tools > section:last-child {
+    grid-column: 1/-1;
+  }
+  .reconstruction-views {
+    grid-template-columns: 1fr 1fr;
+  }
+  .reconstruction-workspace {
+    padding: 16px;
+  }
+  .reconstruction-heading h1 {
+    font-size: 25px;
+  }
+}
+@media (max-width: 760px) {
+  .reconstruction-views,
+  .reconstruction-tools {
+    grid-template-columns: 1fr;
+  }
+  .reconstruction-tools > section:last-child {
+    grid-column: auto;
+  }
+  .reconstruction-workspace {
+    padding: 12px;
+  }
+  .reconstruction-3d {
+    min-height: 240px;
+  }
+  .reconstruction-event-list article {
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+  .reconstruction-event-list article > div:nth-child(2) {
+    flex-basis: 65%;
+  }
+  .reconstruction-heading {
+    gap: 14px;
+  }
+  .reconstruction-heading .reconstruction-actions {
+    gap: 6px;
+  }
+  .reconstruction-heading .reconstruction-actions button {
+    font-size: 13px;
+  }
+  .reconstruction-form-row {
+    flex-wrap: wrap;
+  }
+  .reconstruction-form-row > label {
+    min-width: 100px;
+  }
+}
