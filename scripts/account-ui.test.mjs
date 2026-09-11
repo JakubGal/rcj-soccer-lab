@@ -72,6 +72,10 @@ const { GitHubSubmissionPanel } =
   await import('../components/account/GitHubSubmissionPanel.tsx');
 const { ProfilePanel } = await import('../components/account/ProfilePanel.tsx');
 const { AcademyHub } = await import('../components/account/AcademyHub.tsx');
+const { AccountMenu, AccountMenuItems } =
+  await import('../components/account/AccountMenu.tsx');
+const { DropdownMenu, DropdownMenuLabel } =
+  await import('../components/ui/dropdown-menu.tsx');
 const { CERTIFICATION_POLICY } = await import('../lib/certification/policy.ts');
 
 const noop = () => {};
@@ -178,6 +182,94 @@ function render(Component, props = {}, context = mockContext()) {
   globalThis.__rcjAccountUiTest = context;
   return renderToStaticMarkup(createElement(Component, props));
 }
+
+function renderAccountMenuItems(profile = mockContext().account.profile) {
+  // Render the actual popup contents, not the closed trigger: a server-rendered
+  // Portal intentionally omits its children and would hide missing UI contexts.
+  // Root, Group, GroupLabel and Item are all the real Base UI components.
+  return renderToStaticMarkup(
+    createElement(
+      DropdownMenu,
+      null,
+      createElement(AccountMenuItems, {
+        profile,
+        onNavigate: noop,
+        onSignOut: noop,
+      }),
+    ),
+  );
+}
+
+test('expanded account menu renders a labelled group and all account actions with or without a referee number', () => {
+  for (const refereeNumber of ['', 'RCJ-2026-42']) {
+    const html = renderAccountMenuItems({
+      ...mockContext().account.profile,
+      refereeNumber,
+    });
+    assert.match(html, /role="group"/);
+    assert.match(html, /data-slot="dropdown-menu-label"/);
+    assert.match(html, /Local profile/);
+    assert.match(html, /Training Alias/);
+    assert.match(html, /Profile and progress/);
+    assert.match(html, /Certification/);
+    assert.match(html, /Use guest mode/);
+    assert.equal((html.match(/role="menuitem"/g) ?? []).length, 3);
+    if (refereeNumber) assert.match(html, /RCJ-2026-42/);
+    else assert.doesNotMatch(html, /RCJ-2026-/);
+  }
+});
+
+test('expanded account menu escapes user-provided names and referee numbers', () => {
+  const html = renderAccountMenuItems({
+    ...mockContext().account.profile,
+    displayName: '<script>alert("name")</script> & Training',
+    refereeNumber: '<img src=x onerror=alert(1)>',
+  });
+  assert.match(
+    html,
+    /&lt;script&gt;alert\(&quot;name&quot;\)&lt;\/script&gt; &amp; Training/,
+  );
+  assert.match(html, /&lt;img src=x onerror=alert\(1\)&gt;/);
+  assert.doesNotMatch(html, /<script|<img/i);
+  assert.match(html, /Profile and progress/);
+});
+
+test('account-menu regression harness detects a label without the required real Base UI group', () => {
+  assert.throws(
+    () =>
+      renderToStaticMarkup(
+        createElement(
+          DropdownMenu,
+          null,
+          createElement(DropdownMenuLabel, null, 'Local profile'),
+        ),
+      ),
+    /MenuGroupContext is missing|base-ui\.com\/production-error\?code=31/,
+  );
+});
+
+test('account-menu trigger supports compact, named, guest and loading states', () => {
+  const compact = render(AccountMenu, { onNavigate: noop, compact: true });
+  assert.match(compact, /Open account menu/);
+  assert.match(compact, />TA</);
+  assert.doesNotMatch(compact, /Training Alias/);
+  const named = render(AccountMenu, { onNavigate: noop });
+  assert.match(named, /Training Alias/);
+  const guest = render(
+    AccountMenu,
+    { onNavigate: noop },
+    mockContext({ status: 'guest' }),
+  );
+  assert.match(guest, /Create local profile/);
+  assert.doesNotMatch(guest, /Open account menu|Training Alias/);
+  const loading = render(
+    AccountMenu,
+    { onNavigate: noop },
+    mockContext({ status: 'loading' }),
+  );
+  assert.match(loading, /data-slot="skeleton"/);
+  assert.doesNotMatch(loading, /Open account menu|Create local profile/);
+});
 
 test('guest entry describes a local profile without requesting remote credentials', () => {
   const html = render(AccountAccessCard);
