@@ -12,7 +12,7 @@
     "typecheck": "tsc --noEmit",
     "test:match": "node --test scripts/match.test.mjs scripts/local-multiplayer.test.mjs",
     "test:rules": "node --test scripts/rulebook.test.mjs",
-    "test:referee": "node --test scripts/referee.test.mjs",
+    "test:referee": "node --test scripts/referee.test.mjs scripts/refmate-controls.test.mjs scripts/refmate-ui.test.mjs",
     "test:learning": "node --test scripts/learning.test.mjs",
     "test:certification": "node --test scripts/certification.test.mjs",
     "test:github": "node --test scripts/github-academy.test.mjs scripts/github-local.test.mjs scripts/replay.test.mjs scripts/account-ui.test.mjs scripts/account-recovery.test.mjs",

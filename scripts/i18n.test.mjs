@@ -524,3 +524,94 @@ test('multiplayer instructions preserve actual keyboard labels and official Drib
       assert.equal(translateText(key, locale), key, `${locale}:${key}`);
   }
 });
+
+test('RefMate controls and guidance translate while hardware labels and official calls stay stable', () => {
+  const labels = [
+    'RefMate controls',
+    'Classic controls',
+    'Referee control layout',
+    'Other referee calls',
+    'Additional referee action category',
+    'RefMate-style training controller',
+    'Training console',
+    'Simulated link',
+    'Award goal · Team A / Blue',
+    'Award goal · Team B / Yellow',
+    'Training time remaining',
+    'Pause training clock',
+    'Resume training clock',
+    'RefMate activation',
+    'Double-tap',
+    'Single-tap',
+    'RefMate penalty reason',
+    'Apply 1-minute penalty',
+    'Return now',
+    'RefMate start signal',
+    'Resume same positions',
+    'How this training controller works',
+  ];
+  /** @type {Array<[string, string[]]>} */
+  const guidance = [
+    [
+      'A1/A2 are Blue; B1/B2 are Yellow. Tile colors show robot status, not team color.',
+      ['A1/A2', 'B1/B2', 'Blue', 'Yellow'],
+    ],
+    [
+      'Robot links are simulated. No Bluetooth connection or physical robot commands are sent.',
+      ['Bluetooth'],
+    ],
+    [
+      'START/STOP beside the clock pauses or resumes training without grading a call. START ALL / STOP ALL records your referee signal. Choose kickoff or same-position resume yourself.',
+      ['START/STOP', 'START ALL / STOP ALL', 'kickoff'],
+    ],
+    [
+      'Penalty timers use simulation time. Expiry and START ALL never return a robot automatically. Select Return now to give permission; continuous mode also accepts early or mistaken returns.',
+      ['START ALL'],
+    ],
+    [
+      'Unlike the hardware app, a stopped tile can still receive a penalty during a teaching pause. Use the penalty-reason selector to record out of bounds or damaged explicitly.',
+      ['out of bounds', 'damaged'],
+    ],
+    [
+      'Enter or Space activates a focused control once. The two smaller selected-robot buttons always use one click.',
+      ['Enter', 'Space'],
+    ],
+  ];
+  for (const locale of ['sk', 'de', 'ja']) {
+    for (const source of [...labels, ...guidance.map(([source]) => source)]) {
+      assert.ok(
+        Object.hasOwn(generated.locales[locale].exact, source),
+        `${locale}:${source}`,
+      );
+      assert.notEqual(
+        translateText(source, locale),
+        source,
+        `${locale}:${source}`,
+      );
+    }
+    for (const [source, preserved] of guidance) {
+      const translated = translateText(source, locale);
+      for (const term of preserved)
+        assert.ok(translated.includes(term), `${locale}:${term}:${translated}`);
+    }
+    for (const source of [
+      'START',
+      'STOP',
+      'START ALL ROBOTS',
+      'STOP ALL ROBOTS',
+      'out of bounds',
+      'damaged',
+      'kickoff',
+    ])
+      assert.equal(
+        translateText(source, locale),
+        source,
+        `${locale}:${source}`,
+      );
+    assert.match(
+      translateText('Out of bounds · remove', locale),
+      /^Out of bounds/,
+    );
+    assert.match(translateText('Damaged · remove', locale), /^Damaged/);
+  }
+});

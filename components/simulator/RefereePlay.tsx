@@ -33,6 +33,8 @@ import { PlayCanvasViewport, type CameraPreset } from './PlayCanvasViewport';
 import { MATCH_ACTORS, MATCH_ROBOTS, MATCH_STEP } from '@/lib/simulator/match';
 import { RefereeMatch } from '@/lib/simulator/referee-match';
 import { PreMatchToss } from './PreMatchToss';
+import { RefMateConsole } from './RefMateConsole';
+import { REFMATE_MAIN_ACTIONS } from '@/lib/simulator/refmate-controls';
 import {
   sampleSituation,
   type SituationReplay,
@@ -225,6 +227,18 @@ export function RefereePlay({
   const [camera, setCamera] = useState<CameraPreset>('overhead');
   const [speed, setSpeed] = useState(1);
   const [group, setGroup] = useState('common');
+  const [controlLayout, setControlLayout] = useState<'refmate' | 'classic'>(
+    () => {
+      try {
+        return window.localStorage.getItem('rcj-referee-control-layout') ===
+          'classic'
+          ? 'classic'
+          : 'refmate';
+      } catch {
+        return 'refmate';
+      }
+    },
+  );
   const [topic, setTopic] = useState('random');
   const [seed, setSeed] = useState(String(initialSeed));
   const [replay, setReplay] = useState<SituationReplay | null>(null);
@@ -236,6 +250,7 @@ export function RefereePlay({
   const [reviewEventId, setReviewEventId] = useState<number | null>(null);
   const replayCursor = useRef(0);
   const resultsHeading = useRef<HTMLHeadingElement>(null);
+  const matchSettings = useRef<HTMLDetailsElement>(null);
   const practiceStartsReported = useRef(new Set<string>());
   const preKickoffGroup = useRef<string | null>(null);
   const wasKickoffDue = useRef(false);
@@ -901,9 +916,43 @@ export function RefereePlay({
     frame.feedback && ['correct', 'supported'].includes(frame.feedback.verdict);
   const revealReplay = frame.trainingMode === 'step' || frame.sessionFinished;
   const remainingSeconds = Math.ceil(frame.trainingRemaining);
+  const continueLabel = frame.feedback?.final
+    ? frame.pendingDecisions > 0
+      ? 'Next referee decision'
+      : frame.kickoffDue
+        ? 'Continue to kickoff'
+        : frame.motionHeld
+          ? 'Resume match'
+          : 'Dismiss feedback'
+    : supported
+      ? frame.count !== null
+        ? 'Resume count'
+        : 'Continue decision'
+      : 'Try again';
   const actions = REFEREE_ACTIONS.filter(
-    (action) => action.id !== 'goal' && actionInGroup(group, action.id),
+    (action) =>
+      action.id !== 'goal' &&
+      actionInGroup(group, action.id) &&
+      (controlLayout === 'classic' || !REFMATE_MAIN_ACTIONS.has(action.id)),
   );
+
+  const continueDecision = () => {
+    session.continue();
+    recordReplayOperation(session, { op: 'continue' });
+    sync();
+    setRunning(session.canAdvance);
+  };
+  const arrangeKickoff = () => {
+    if (session.arrangeKickoff()) {
+      recordReplayOperation(session, { op: 'arrange-kickoff' });
+      sync();
+      setRunning(false);
+      setGroup((current) => {
+        if (current !== 'restart') preKickoffGroup.current = current;
+        return 'restart';
+      });
+    }
+  };
 
   // Restore the category the referee had chosen before the automatic
   // 'restart' switch for arranging kickoff, once kickoff is no longer due.
@@ -969,7 +1018,12 @@ export function RefereePlay({
 
   if (!active) return null;
   return (
-    <div className="match-workspace referee-workspace">
+    <div
+      className={cn(
+        'match-workspace referee-workspace',
+        controlLayout === 'refmate' && 'referee-workspace-refmate',
+      )}
+    >
       <section
         ref={field}
         tabIndex={-1}
@@ -1345,6 +1399,141 @@ export function RefereePlay({
               Play
             </Button>
           </div>
+          <fieldset
+            className="referee-control-layout"
+            aria-label="Referee control layout"
+          >
+            {(['refmate', 'classic'] as const).map((layout) => (
+              <Button
+                key={layout}
+                size="sm"
+                variant={controlLayout === layout ? 'secondary' : 'outline'}
+                aria-pressed={controlLayout === layout}
+                onClick={() => {
+                  setControlLayout(layout);
+                  try {
+                    window.localStorage.setItem(
+                      'rcj-referee-control-layout',
+                      layout,
+                    );
+                  } catch {
+                    /* Preference is optional. */
+                  }
+                }}
+              >
+                {layout === 'refmate' ? 'RefMate controls' : 'Classic controls'}
+              </Button>
+            ))}
+            <Button
+              size="sm"
+              variant="ghost"
+              onClick={() => {
+                if (matchSettings.current) {
+                  matchSettings.current.open = true;
+                  matchSettings.current.scrollIntoView({
+                    behavior: 'smooth',
+                    block: 'start',
+                  });
+                  matchSettings.current.querySelector('summary')?.focus();
+                }
+              }}
+            >
+              Match settings
+            </Button>
+          </fieldset>
+          {controlLayout === 'refmate' && !frame.sessionFinished && (
+            <>
+              <RefMateConsole
+                key={session.seed}
+                frame={frame}
+                running={running}
+                target={target}
+                blocked={Boolean(blocked)}
+                returnBlocked={
+                  !ready ||
+                  !certificationSessionReady ||
+                  Boolean(replay) ||
+                  Boolean(frame.opening) ||
+                  frame.resolving
+                }
+                startBlocked={
+                  !ready ||
+                  !certificationSessionReady ||
+                  Boolean(replay) ||
+                  frame.resolving ||
+                  (frame.trainingMode === 'step' &&
+                    frame.phase === 'feedback') ||
+                  Boolean(frame.opening && frame.opening.stage !== 'ready')
+                }
+                transportBlocked={
+                  !ready ||
+                  !certificationSessionReady ||
+                  Boolean(replay) ||
+                  Boolean(frame.opening) ||
+                  (!running && !frame.canAdvance && !frame.canResumeMotion)
+                }
+                onSelect={setTarget}
+                onCall={submit}
+                onTransport={toggleRunning}
+                onContinue={continueDecision}
+                continueLabel={continueLabel}
+                onArrangeKickoff={arrangeKickoff}
+              />
+              <section
+                className="referee-other-calls"
+                aria-label="Other referee calls"
+              >
+                <h2>Other referee calls</h2>
+                <p>
+                  Field decisions and corrections outside the robot controller.
+                </p>
+                <NativeSelect
+                  aria-label="Additional referee action category"
+                  value={group}
+                  onChange={(event) => {
+                    preKickoffGroup.current = null;
+                    setGroup(event.target.value);
+                  }}
+                >
+                  <NativeSelectOption value="common">
+                    Common calls
+                  </NativeSelectOption>
+                  <NativeSelectOption value="robot">
+                    Robot penalties & returns
+                  </NativeSelectOption>
+                  <NativeSelectOption value="restart">
+                    Restarts & other decisions
+                  </NativeSelectOption>
+                  <NativeSelectOption value="all">
+                    All referee actions
+                  </NativeSelectOption>
+                </NativeSelect>
+                <p className="referee-other-target">
+                  Selected robot:{' '}
+                  <span data-i18n-skip>
+                    {MATCH_ROBOTS.find((robot) => robot.id === target)?.label}
+                  </span>
+                </p>
+                <div className="referee-actions">
+                  {actions.map((action) => (
+                    <Button
+                      key={action.id}
+                      variant="outline"
+                      disabled={Boolean(blocked)}
+                      onClick={() =>
+                        submit({
+                          action: action.id,
+                          ...(action.target ? { target } : {}),
+                        })
+                      }
+                    >
+                      {action.label}
+                    </Button>
+                  ))}
+                </div>
+              </section>
+            </>
+          )}
           <div className="referee-stats">
             {frame.trainingMode === 'continuous' && !frame.sessionFinished ? (
               <>
@@ -1393,6 +1582,7 @@ export function RefereePlay({
             </p>
           )}
           <details
+            ref={matchSettings}
             className="referee-details referee-session-setup"
             open={Boolean(frame.opening)}
             hidden={sessionKind === 'review'}
@@ -1884,18 +2074,7 @@ export function RefereePlay({
                 disabled={!ready}
                 onClick={() => {
                   if (frame.canArrangeKickoff) {
-                    if (session.arrangeKickoff()) {
-                      recordReplayOperation(session, {
-                        op: 'arrange-kickoff',
-                      });
-                      sync();
-                      setRunning(false);
-                      setGroup((current) => {
-                        if (current !== 'restart')
-                          preKickoffGroup.current = current;
-                        return 'restart';
-                      });
-                    }
+                    arrangeKickoff();
                   } else startNext();
                 }}
               >
@@ -2032,113 +2211,102 @@ export function RefereePlay({
                     Read the official rule <ExternalLink className="size-3" />
                   </a>
                 )}
-                <Button
-                  onClick={() => {
-                    session.continue();
-                    recordReplayOperation(session, { op: 'continue' });
-                    sync();
-                    setRunning(session.canAdvance);
-                  }}
-                >
-                  {frame.feedback.final
-                    ? frame.pendingDecisions > 0
-                      ? 'Next referee decision'
-                      : frame.kickoffDue
-                        ? 'Continue to kickoff'
-                        : frame.motionHeld
-                          ? 'Resume match'
-                          : 'Dismiss feedback'
-                    : supported
-                      ? frame.count !== null
-                        ? 'Resume count'
-                        : 'Continue decision'
-                      : 'Try again'}
+                <Button onClick={continueDecision}>
+                  {continueLabel}
                   <ChevronRight />
                 </Button>
               </section>
             )}
 
-          <div className="referee-goals">
-            <Button
-              disabled={blocked}
-              variant="outline"
-              className="text-sky-300"
-              onClick={() => submit({ action: 'goal', target: 'blue' })}
-            >
-              Blue goal +1
-            </Button>
-            <Button
-              disabled={blocked}
-              variant="outline"
-              className="text-amber-300"
-              onClick={() => submit({ action: 'goal', target: 'yellow' })}
-            >
-              Yellow goal +1
-            </Button>
-          </div>
-          <div className="referee-target">
-            <span>Robot for your call</span>
-            <div>
-              {MATCH_ROBOTS.map((robot) => (
+          {controlLayout === 'classic' && (
+            <>
+              <div className="referee-goals">
                 <Button
-                  key={robot.id}
-                  size="sm"
-                  variant={target === robot.id ? 'secondary' : 'outline'}
-                  aria-pressed={target === robot.id}
-                  aria-label={`${robot.label}, ${frame.bench.some((item) => item.robot === robot.id) ? 'off field' : 'on field'}`}
-                  onClick={() => setTarget(robot.id)}
-                  className={
-                    robot.team === 'blue' ? 'text-sky-300' : 'text-amber-300'
-                  }
+                  disabled={blocked}
+                  variant="outline"
+                  className="text-sky-300"
+                  onClick={() => submit({ action: 'goal', target: 'blue' })}
                 >
-                  {robot.label}
-                  <small>
-                    {frame.bench.some((item) => item.robot === robot.id)
-                      ? 'OFF'
-                      : 'ON'}
-                  </small>
+                  Blue goal +1
                 </Button>
-              ))}
-            </div>
-          </div>
-          <NativeSelect
-            aria-label="Referee action category"
-            value={group}
-            onChange={(e) => {
-              preKickoffGroup.current = null;
-              setGroup(e.target.value);
-            }}
-          >
-            <NativeSelectOption value="common">Common calls</NativeSelectOption>
-            <NativeSelectOption value="robot">
-              Robot penalties & returns
-            </NativeSelectOption>
-            <NativeSelectOption value="restart">
-              Restarts & other decisions
-            </NativeSelectOption>
-            <NativeSelectOption value="all">
-              All referee actions
-            </NativeSelectOption>
-          </NativeSelect>
-          <div className="referee-actions">
-            {actions.map((action) => (
-              <Button
-                key={action.id}
-                variant="outline"
-                disabled={blocked}
-                onClick={() =>
-                  submit({
-                    action: action.id,
-                    ...(action.target ? { target } : {}),
-                  })
-                }
+                <Button
+                  disabled={blocked}
+                  variant="outline"
+                  className="text-amber-300"
+                  onClick={() => submit({ action: 'goal', target: 'yellow' })}
+                >
+                  Yellow goal +1
+                </Button>
+              </div>
+              <div className="referee-target">
+                <span>Robot for your call</span>
+                <div>
+                  {MATCH_ROBOTS.map((robot) => (
+                    <Button
+                      key={robot.id}
+                      size="sm"
+                      variant={target === robot.id ? 'secondary' : 'outline'}
+                      aria-pressed={target === robot.id}
+                      aria-label={`${robot.label}, ${frame.bench.some((item) => item.robot === robot.id) ? 'off field' : 'on field'}`}
+                      onClick={() => setTarget(robot.id)}
+                      className={
+                        robot.team === 'blue'
+                          ? 'text-sky-300'
+                          : 'text-amber-300'
+                      }
+                    >
+                      {robot.label}
+                      <small>
+                        {frame.bench.some((item) => item.robot === robot.id)
+                          ? 'OFF'
+                          : 'ON'}
+                      </small>
+                    </Button>
+                  ))}
+                </div>
+              </div>
+              <NativeSelect
+                aria-label="Referee action category"
+                value={group}
+                onChange={(e) => {
+                  preKickoffGroup.current = null;
+                  setGroup(e.target.value);
+                }}
               >
-                {action.label}
-              </Button>
-            ))}
-          </div>
+                <NativeSelectOption value="common">
+                  Common calls
+                </NativeSelectOption>
+                <NativeSelectOption value="robot">
+                  Robot penalties & returns
+                </NativeSelectOption>
+                <NativeSelectOption value="restart">
+                  Restarts & other decisions
+                </NativeSelectOption>
+                <NativeSelectOption value="all">
+                  All referee actions
+                </NativeSelectOption>
+              </NativeSelect>
+              <div className="referee-actions">
+                {actions.map((action) => (
+                  <Button
+                    key={action.id}
+                    variant="outline"
+                    disabled={blocked}
+                    onClick={() =>
+                      submit({
+                        action: action.id,
+                        ...(action.target ? { target } : {}),
+                      })
+                    }
+                  >
+                    {action.label}
+                  </Button>
+                ))}
+              </div>
+            </>
+          )}
 
-          {frame.bench.length > 0 && (
+          {controlLayout === 'classic' && frame.bench.length > 0 && (
             <section className="referee-bench">
               <h2>Off the field</h2>
               {frame.bench.map((entry) => (

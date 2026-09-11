@@ -99,6 +99,43 @@ setting; leaving the browser tab pauses play and clears held inputs. Existing
 solo WASD/arrow controls and Arrange mode remain available. Play matches do not
 count as referee-certification attempts.
 
+## RefMate-style referee controls
+
+In **Referee**, choose **RefMate controls** (the default) or **Classic controls**.
+Changing the layout keeps the current match, penalties and certification attempt.
+**Match settings** jumps to the existing practice-mode and duration controls.
+
+The training console is inspired by the open-source
+[RCJ Soccer RefMate app](https://github.com/robocup-junior/soccer-referee-app)
+(Apache-2.0, reviewed at commit `cafef25ed9e58de2fcd659f413b2be59c57d8e3d`).
+This is an independently implemented simulator interface, not a Bluetooth
+controller or an official replacement for the hardware app.
+
+- A1/A2 map to Blue 1/2; B1/B2 map to Yellow 1/2. Tile colors indicate status,
+  not team: blue during setup, green while playing, red while stopped/penalized.
+- Select **out of bounds** or **damaged** as the penalty reason. Tap a robot to
+  select it, then double-tap to remove it; double-tap a benched robot to return it.
+  Double-tap a score to award that team a goal. Single-tap activation is optional.
+  Keyboard Enter/Space and the smaller selected-robot buttons activate once.
+- **START/STOP** beside the clock is an ungraded training pause/resume.
+  **START ALL ROBOTS / STOP ALL ROBOTS** records a referee signal. Select
+  kickoff or same-position resume explicitly. Arranging kickoff positions and
+  signalling kickoff remain separate actions.
+- The four penalty countdowns use simulation time, not wall-clock time. Expiry
+  does not automatically return a robot, and START/STOP ALL does not clear its
+  penalty. Return permission still belongs to the referee; Continuous mode
+  accepts mistaken removals and premature returns and assesses them afterward.
+- **Other referee calls** retains field decisions, pushed-out waivers,
+  relocations, inspection and corrections. The category selector exposes all
+  remaining actions. Calls from both layouts use the same scoring and replay
+  path, with no assessment-policy or recording-format changes.
+
+These differences from the physical RefMate app are deliberate training
+adaptations. Links are simulated, no radio commands are transmitted, and a
+stopped robot can receive a penalty during a Step-mode teaching pause. The
+controls and guidance are available in all four interface languages; hardware
+START/STOP labels, robot IDs and official rules terminology stay recognizable.
+
 ## GitHub-only training certification
 
 The whole app is a static Vite/React application on GitHub Pages. It does not use
