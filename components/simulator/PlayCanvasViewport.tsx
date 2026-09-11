@@ -1511,8 +1511,14 @@ function buildScene(
   let captureHeight: number | null = null;
   const resizeRenderer = (width: number, height: number) => {
     if (width < 1 || height < 1) return;
-    if(captureHeight) app.graphicsDevice.setResolution(Math.round(captureHeight*width/height),captureHeight);
-    else app.graphicsDevice.resizeCanvas(Math.round(width), Math.round(height));
+    if(captureHeight) {
+      app.graphicsDevice.maxPixelRatio=1;
+      app.setCanvasResolution(pc.RESOLUTION_FIXED,Math.round(captureHeight*width/height),captureHeight);
+    } else {
+      app.graphicsDevice.maxPixelRatio=maxRenderPixelRatio;
+      app.setCanvasResolution(pc.RESOLUTION_AUTO);
+      app.graphicsDevice.resizeCanvas(Math.round(width), Math.round(height));
+    }
     if (activePreset === 'overhead') fitOverheadCamera();
   };
   const resizeObserver = new ResizeObserver((entries) => {
