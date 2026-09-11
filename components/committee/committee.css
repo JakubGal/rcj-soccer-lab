@@ -305,6 +305,8 @@
   cursor: pointer;
 }
 .committee-page-count {
+  flex-shrink: 0;
+  white-space: nowrap;
   margin-left: auto;
   color: #778c80;
   font-size: 10px;
@@ -316,6 +318,7 @@
 }
 .committee-primary-button,
 .committee-secondary-button {
+  white-space: nowrap;
   display: inline-flex;
   gap: 7px;
   align-items: center;
@@ -527,8 +530,17 @@
     padding: 10px 0;
   }
   .committee-dialog-footer {
+    display: grid;
+    grid-template-columns: 1fr auto;
     gap: 7px;
     margin-top: 14px;
+  }
+  .committee-dialog-footer > .committee-text-button {
+    justify-self: start;
+  }
+  .committee-navigation {
+    grid-column: 1 / -1;
+    justify-content: end;
   }
   .committee-primary-button,
   .committee-secondary-button {
