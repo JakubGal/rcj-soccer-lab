@@ -490,6 +490,35 @@ specification dated 2026-06-03. Dimensions not fixed by the rules, such as wall
 board thickness, follow the accompanying `SoccerField_202605.step` construction
 model and are explicitly labelled as construction values.
 
+## Committee companions
+
+The optional sideline crew includes Marek Chupa, Isa, Tom Pila, Will, Roberto,
+David, Jakub Ga, and Caroline. Each has three illustrated poses and fifteen
+short fictional lines. A skippable first-visit Rules tour introduces everyone;
+**Meet the committee** reopens it, previews poses, and controls reactions and
+motion. Operating-system reduced-motion preferences are always respected.
+
+Companions react to practice quiz answers, rule sections, submitted referee
+calls, and public play-mode goals/results. Speaking turns rotate across the
+cast, with Isa assigned to damage calls and Caroline always joining Jakub.
+Short queues, timed dismissal, and mute controls keep the panel optional.
+Certification and saved match reviews hide the crew entirely. During a live
+continuous match, remarks merely acknowledge submitted calls: they never
+reveal hidden incidents or correct answers. Jokes are not real quotations,
+official rulings, investment advice, or endorsements; existing sourced
+feedback and grading remain authoritative.
+
+All copy is available in English, Slovak, German, and Japanese. The runtime is
+entirely static: no image-generation, chat, or paid service is called by the
+site. Consent-based generated artwork is in `public/characters/`; original
+reference photos are not shipped. `docs/committee-artwork-prompts.json`
+records the built-in image generator prompts and the three-column sprite
+layout; `docs/committee-artwork-refinements.json` records the final gutter
+corrections. CSS animates the poses; these are illustrations, not skeletal rigs.
+The ivory sprite backgrounds intentionally match the character cards.
+Run `pnpm test:committee` for catalogue, fairness, privacy, integration, UI,
+translation, and artwork checks.
+
 ## Robot asset pipeline
 
 Browser-ready models live in `public/models/robots`. New designs should ideally

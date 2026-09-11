@@ -35,6 +35,7 @@ import {
 import { LOCALE_OPTIONS, appendLocaleToSearch, type Locale } from '@/lib/i18n';
 import { useLocalization } from '@/components/i18n/LocalizationProvider';
 import { AccountMenu, AcademyHub, useAccount } from '@/components/account';
+import { CommitteeCompanions } from '@/components/committee/CommitteeCompanions';
 import type { CertificationGameLaunch } from '@/lib/account';
 import type { RefereeCertificationBridge } from '@/lib/certification/client-types';
 import { LEARNING_SITUATIONS } from '@/lib/rulebook/learning';
@@ -266,6 +267,7 @@ export function SimulatorApp() {
               key={id}
               size="sm"
               variant={nav.mode === id ? 'secondary' : 'ghost'}
+              aria-label={label}
               aria-pressed={nav.mode === id}
               onClick={() => {
                 setSavedReview(null);
@@ -404,6 +406,13 @@ export function SimulatorApp() {
           }}
         />
       )}
+      <CommitteeCompanions
+        mode={nav.mode}
+        embedded={Boolean(nav.embed)}
+        assessmentActive={
+          Boolean(nav.certificationTrack) || Boolean(savedReview)
+        }
+      />
     </main>
   );
 }

@@ -1,6 +1,7 @@
 'use client';
 
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useId, useRef, useState } from 'react';
+import { emitCommitteeEvent } from '@/lib/committee/events';
 import {
   ArrowDown,
   ArrowLeft,
@@ -81,6 +82,56 @@ export function MatchPlay({
     return match;
   });
   const [frame, setFrame] = useState(() => engine.snapshot());
+  const committeeId = useId();
+  const committeeSequence = useRef(0);
+  const committeeMatch = useRef({
+    engine,
+    blue: frame.score.blue,
+    yellow: frame.score.yellow,
+    phase: frame.phase,
+  });
+  useEffect(() => {
+    const previous = committeeMatch.current;
+    committeeMatch.current = {
+      engine,
+      blue: frame.score.blue,
+      yellow: frame.score.yellow,
+      phase: frame.phase,
+    };
+    // Imported/arranged layouts and engine resets are not new match events.
+    if (!active || arrange || previous.engine !== engine) return;
+    try {
+      if (
+        frame.score.blue > previous.blue ||
+        frame.score.yellow > previous.yellow
+      )
+        emitCommitteeEvent({
+          id: `${committeeId}:play:${++committeeSequence.current}`,
+          surface: 'play',
+          context: 'practice',
+          outcome: 'recorded',
+          topic: 'goal',
+        });
+      if (frame.phase === 'finished' && previous.phase !== 'finished')
+        emitCommitteeEvent({
+          id: `${committeeId}:play:${++committeeSequence.current}`,
+          surface: 'play',
+          context: 'practice',
+          outcome: 'complete',
+          topic: 'general',
+        });
+    } catch {
+      /* A cosmetic listener must never interrupt play or change its score. */
+    }
+  }, [
+    active,
+    arrange,
+    committeeId,
+    engine,
+    frame.phase,
+    frame.score.blue,
+    frame.score.yellow,
+  ]);
   const [running, setRunning] = useState(false);
   const [settings, setSettings] = useState<MatchSettings>({
     controls: { blue: 'manual', yellow: 'ai' },

@@ -1,6 +1,7 @@
 import { readFile, readdir, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import ts from 'typescript';
+import committeeTranslations from './committee-translations.mjs';
 
 const ROOT = path.resolve(import.meta.dirname, '..');
 const OUTPUT = path.join(ROOT, 'lib', 'i18n', 'catalog.generated.json');
@@ -902,6 +903,9 @@ const MANUAL = {
 };
 
 const normalize = (value) => value.trim().replace(/\s+/g, ' ');
+// The fictional voices are reviewed copy, not machine-translated rule guidance.
+for (const locale of TARGETS)
+  Object.assign(MANUAL[locale], committeeTranslations[locale]);
 const hasLetters = (value) => /\p{L}/u.test(value);
 
 function looksHuman(value) {

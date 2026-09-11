@@ -17,6 +17,7 @@
     "test:certification": "node --test scripts/certification.test.mjs",
     "test:github": "node --test scripts/github-academy.test.mjs scripts/github-local.test.mjs scripts/replay.test.mjs scripts/account-ui.test.mjs scripts/account-recovery.test.mjs",
     "test:i18n": "node --test scripts/i18n.test.mjs",
+    "test:committee": "node --test scripts/committee-catalog.test.mjs scripts/committee-events.test.mjs scripts/committee-integration.test.mjs scripts/committee-ui.test.mjs scripts/committee-translations.test.mjs",
     "i18n:generate": "node scripts/generate-i18n-catalog.mjs",
     "start": "vite preview --host localhost --port 3000",
     "lint": "oxlint",

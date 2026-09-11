@@ -1,6 +1,11 @@
 'use client';
 
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useId, useRef, useState } from 'react';
+import {
+  committeeTopic,
+  emitCommitteeEvent,
+  emitCommitteeReset,
+} from '@/lib/committee/events';
 import {
   TRAINING_TOPICS,
   trainingTopic,
@@ -221,6 +226,8 @@ export function RefereePlay({
   const [trainingTopics, setTrainingTopics] =
     useState<TrainingTopic[]>(ALL_TRAINING_TOPICS);
   const [frame, setFrame] = useState(() => session.snapshot());
+  const committeeId = useId();
+  const committeeSequence = useRef(0);
   const [running, setRunning] = useState(false);
   const [ready, setReady] = useState(false);
   const [target, setTarget] = useState('blue-1');
@@ -312,6 +319,28 @@ export function RefereePlay({
   const displayedTopics = certification ? ALL_TRAINING_TOPICS : trainingTopics;
   const effectiveSpeed = certification ? 1 : speed;
   const onCheckpoint = certification?.onCheckpoint;
+  const committeeLifecycle = useRef({
+    session,
+    mode: displayedMode,
+    replay,
+    active,
+  });
+  useEffect(() => {
+    const previous = committeeLifecycle.current;
+    committeeLifecycle.current = {
+      session,
+      mode: displayedMode,
+      replay,
+      active,
+    };
+    if (
+      previous.session !== session ||
+      previous.mode !== displayedMode ||
+      previous.replay !== replay ||
+      previous.active !== active
+    )
+      emitCommitteeReset('referee');
+  }, [session, displayedMode, replay, active]);
 
   const installCertificationAttempt = useCallback(
     (attempt: RefereeCertificationAttempt) => {
@@ -753,7 +782,8 @@ export function RefereePlay({
     if (!certificationSessionReady) return;
     const displayedDecisionKey = frame.decisionKey;
     const replayDecisionKey = session.decisionKey;
-    if (session.submit(displayedDecisionKey, call))
+    const applied = session.submit(displayedDecisionKey, call);
+    if (applied)
       recordReplayOperation(session, {
         op: 'call',
         decisionKey: replayDecisionKey,
@@ -764,6 +794,40 @@ export function RefereePlay({
       });
     setRunning(session.canAdvance);
     sync();
+    if (applied && active && !replay && sessionKind !== 'review') {
+      try {
+        const context = certification
+          ? 'certification'
+          : session.mode === 'continuous'
+            ? 'continuous'
+            : 'practice';
+        let outcome: 'recorded' | 'correct' | 'retry' = 'recorded';
+        let topic = committeeTopic(call.action);
+        // Only practice step mode already reveals this verdict. Continuous and
+        // certification notifications know the submitted call, not its answer.
+        if (context === 'practice') {
+          const visibleFrame = session.snapshot();
+          const visibleFeedback = visibleFrame.feedback;
+          if (!visibleFeedback) return;
+          outcome = ['correct', 'supported'].includes(visibleFeedback.verdict)
+            ? 'correct'
+            : 'retry';
+          // The visible step-feedback title can distinguish an own goal from
+          // the identical Award goal action. Never inspect it in live exams.
+          if (committeeTopic(visibleFrame.decisionTitle) === 'own-goal')
+            topic = 'own-goal';
+        }
+        emitCommitteeEvent({
+          id: `${committeeId}:referee:${++committeeSequence.current}`,
+          surface: 'referee',
+          context,
+          outcome,
+          topic,
+        });
+      } catch {
+        /* Optional encouragement cannot affect a call or its replay evidence. */
+      }
+    }
   };
 
   const openMatchReplay = useCallback(

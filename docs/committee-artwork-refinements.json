@@ -1,0 +1,35 @@
+{
+  "purpose": "Final sprite gutter refinements; applied after the original prompts in committee-artwork-prompts.json. All referenced input sheets were generated from the consent-based portraits. Final files remain public/characters/{id}.png.",
+  "revisions": [
+    {
+      "id": "will",
+      "mode": "Built-in image generation edit",
+      "prompt": "Use case: precise-object-edit. Edit target: attached Will three-pose sprite sheet. Preserve the recognizable face, dark swept hair, navy shirt, tan trousers, warm illustrated style, kangaroos, globe and ivory background. ONLY repair pose spacing. Output exactly1536x1024. Three standalone figures centered at x256,x768,x1280. Each figure INCLUDING all hands, shoes, kangaroo, globe and motion marks MUST fit within just360px width, leaving76px completely blank ivory at BOTH sides of each512px cell. Make each figure slightly smaller than the input to achieve this. Entire columns x436-588 and x948-1100 must be BLANK IVORY gutters, absolutely no hands/props. Left celebrate, middle explain with globe, right encouraging thumbs up with elbows tucked in, NOT wide open shrug. Each complete figure head-to-toe y100-930. No floating body parts, no new people, no cropping. No labels, borders, text, watermarks. Solid warm ivory #fff8ed background."
+    },
+    {
+      "id": "isa",
+      "mode": "Built-in image generation edit",
+      "prompt": "Use case: precise-object-edit. Edit target: attached isa three-pose sprite sheet. Preserve EXACT recognizable face, hair, outfit, friendly illustration style, all personality props and ivory background. ONLY repair pose spacing: resize ALL THREE figures and their props to fit each individual cell with large blank gutters. Output exactly1536x1024. Three standalone figures centered at x256,x768,x1280. Each figure INCLUDING all hands, shoes, every prop and motion mark MUST fit within360px width, leaving76px completely blank ivory at BOTH sides of each512px cell. Entire columns x436-588 and x948-1100 must be BLANK IVORY, absolutely no hands/props. Smaller complete figures are BETTER than cropped hands. Left celebrate, middle explain, right encourage. Right hands close to body, elbows tucked in, not a wide shrug. Entire figure head-to-toe y100-930. No floating body parts, no cropping, no extra humans. Keep dark hair at sides bald head black beard, navy clothing and orange-trimmed pyro vest, safety glasses, tiny firework/broken toy robot. Solid warm ivory #fff8ed background. No panel lines, labels, watermarks."
+    },
+    {
+      "id": "tom",
+      "mode": "Built-in image generation edit",
+      "prompt": "Use case: precise-object-edit. Edit target: attached tom three-pose sprite sheet. Preserve EXACT recognizable face, hair, outfit, friendly illustration style, all personality props and ivory background. ONLY repair pose spacing: resize ALL THREE figures and their props to fit each individual cell with large blank gutters. Output exactly1536x1024. Three standalone figures centered at x256,x768,x1280. Each figure INCLUDING all hands, shoes, every prop and motion mark MUST fit within360px width, leaving76px completely blank ivory at BOTH sides of each512px cell. Entire columns x436-588 and x948-1100 must be BLANK IVORY, absolutely no hands/props. Smaller complete figures are BETTER than cropped hands. Left celebrate, middle explain, right encourage. Right hands close to body, elbows tucked in, not a wide shrug. Entire figure head-to-toe y100-930. No floating body parts, no cropping, no extra humans. Shrink first pose toy robot and keep it beside his RIGHT foot inside x300-425. Preserve rectangular glasses, maze map and tiny rocket; encouraging third crouching with small rescue robot. Solid warm ivory #fff8ed background. No panel lines, labels, watermarks."
+    },
+    {
+      "id": "caroline",
+      "mode": "Built-in image generation edit",
+      "prompt": "Use case: precise-object-edit. Edit target: attached caroline three-pose sprite sheet. Preserve EXACT recognizable face, hair, outfit, friendly illustration style, all personality props and ivory background. ONLY repair pose spacing: resize ALL THREE figures and their props to fit each individual cell with large blank gutters. Output exactly1536x1024. Three standalone figures centered at x256,x768,x1280. Each figure INCLUDING all hands, shoes, every prop and motion mark MUST fit within360px width, leaving76px completely blank ivory at BOTH sides of each512px cell. Entire columns x436-588 and x948-1100 must be BLANK IVORY, absolutely no hands/props. Smaller complete figures are BETTER than cropped hands. Left celebrate, middle explain, right encourage. Right hands close to body, elbows tucked in, not a wide shrug. Entire figure head-to-toe y100-930. No floating body parts, no cropping, no extra humans. Preserve long brown hair, distinctive travel-print blouse, jeans/white sneakers, camera, headset and task list. Solid warm ivory #fff8ed background. No panel lines, labels, watermarks."
+    },
+    {
+      "id": "jakub",
+      "mode": "Built-in image generation edit",
+      "prompt": "Use case: precise-object-edit. Edit target: attached jakub sprite sheet. Keep EXACT face, hairstyle, outfit, illustration style and props. ONLY fix spacing: each complete figure WITH ALL hands, props, shoes MUST stay in its own512px-widecell in a1536x1024image. Make each person+props 360pxwide with76px blankivory eachside. Centers x256,768,1280; entire columns x436-588 and x948-1100 MUST be blankivory. Reduce scale modestly, head/feet between y100and930. Left celebrate,middle explain,right encourage. Keep elbows tucked in, hands near chest, NO WIDE SHRUG. Slovak embroidered white shirt and dark folk vest, blondbrown hair shortbeard, RoboFuse namebadge, orange electronic ball, module, smallcarvedvalaška groundedbesidebody, clipboard/camera. No strayhandtips from neighborcells. Solid ivory #fff8ed,no textbesidesexistingnamebadge,noborders,no newpeople."
+    },
+    {
+      "id": "finance",
+      "mode": "Built-in image generation edit",
+      "prompt": "Use case: precise-object-edit. Edit target: attached finance sprite sheet. Keep EXACT face, hairstyle, outfit, illustration style and props. ONLY fix spacing: each complete figure WITH ALL hands, props, shoes MUST stay in its own512px-widecell in a1536x1024image. Make each person+props 360pxwide with76px blankivory eachside. Centers x256,768,1280; entire columns x436-588 and x948-1100 MUST be blankivory. Reduce scale modestly, head/feet between y100and930. Left celebrate,middle explain,right encourage. Keep elbows tucked in, hands near chest, NO WIDE SHRUG. Navy suit white shirt redtie, slick darkhair, financebriefcase, toycoins, clipboardchart, pocketcalculator, tinyfriendlyrobot. No strayhandtips from neighborcells. Solid ivory #fff8ed,no textbesidesexistingnamebadge,noborders,no newpeople."
+    }
+  ]
+}

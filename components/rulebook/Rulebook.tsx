@@ -1,6 +1,13 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import {
+  useCallback,
+  useEffect,
+  useId,
+  useMemo,
+  useRef,
+  useState,
+} from 'react';
 import {
   ArrowLeft,
   ArrowRight,
@@ -58,7 +65,11 @@ import { QuestionLesson } from './QuestionLesson';
 import { COMMITTEE_TRAINING_POLICY } from '@/lib/simulator/training-policy';
 import { useLocalization } from '@/components/i18n/LocalizationProvider';
 import { translateText } from '@/lib/i18n';
-import type { RuleLearningBridge } from '@/lib/certification/client-types';
+import type {
+  RuleLearningBridge,
+  RuleLearningEvent,
+} from '@/lib/certification/client-types';
+import { committeeTopic, emitCommitteeEvent } from '@/lib/committee/events';
 
 const DEFAULT_SECTION = 'soccer:inside-penalty-area';
 const PROGRESS_KEY = 'rcj-rulebook-read-2026-06-03-v1';
@@ -225,6 +236,98 @@ export function Rulebook({
     requestedSituation ??
     sectionSituations.find((item) => item.kind === 'case') ??
     sectionSituations[0];
+  const committeeId = useId();
+  const committeeSequence = useRef(0);
+  const committeeScope = useRef({
+    active,
+    context: learningContextKey,
+    situationId: situation?.id,
+  });
+  useEffect(() => {
+    committeeScope.current = {
+      active,
+      context: learningContextKey,
+      situationId: situation?.id,
+    };
+    return () => {
+      committeeScope.current.active = false;
+    };
+  }, [active, learningContextKey, situation?.id]);
+  const committeeReading = useRef({
+    active,
+    mode: learningMode,
+    sectionId: selected.id,
+  });
+  useEffect(() => {
+    const previous = committeeReading.current;
+    committeeReading.current = {
+      active,
+      mode: learningMode,
+      sectionId: selected.id,
+    };
+    // Reading companionship starts on a new section, never on initial mount,
+    // returning to a cached tab, an exam, or selecting an unanswered question.
+    if (
+      !active ||
+      !previous.active ||
+      learningMode !== 'practice' ||
+      previous.mode !== 'practice' ||
+      situationId !== null ||
+      previous.sectionId === selected.id
+    )
+      return;
+    try {
+      emitCommitteeEvent({
+        id: `${committeeId}:study:${++committeeSequence.current}`,
+        surface: 'rules',
+        context: 'practice',
+        outcome: 'study',
+        topic: committeeTopic(selected.id),
+      });
+    } catch {
+      /* Reading remains available without the optional character commentary. */
+    }
+  }, [active, committeeId, learningMode, selected.id, situationId]);
+  const onLearningEvent = (event: RuleLearningEvent) => {
+    // Preserve the existing persistence contract and errors. Cosmetic events
+    // are independent and are never dispatched before an answer is saved.
+    const saved = learning?.onEvent?.(event);
+    if (
+      active &&
+      event.type === 'answer' &&
+      !completedSituationIds.includes(event.questionId)
+    ) {
+      const id = `${committeeId}:rules:${++committeeSequence.current}`;
+      void Promise.resolve(saved)
+        .then(() => {
+          const scope = committeeScope.current;
+          if (
+            !scope.active ||
+            scope.context !== learningContextKey ||
+            scope.situationId !== event.questionId
+          )
+            return;
+          try {
+            emitCommitteeEvent({
+              id,
+              surface: 'rules',
+              context: event.mode,
+              outcome:
+                event.mode === 'certification'
+                  ? 'recorded'
+                  : event.accepted
+                    ? 'correct'
+                    : 'retry',
+              topic: committeeTopic(event.sourceId),
+            });
+          } catch {
+            /* Optional encouragement must never affect answer persistence. */
+          }
+        })
+        .catch(() => undefined);
+    }
+    return saved;
+  };
   const chooseSituation = (id: string) => {
     const item = LEARNING_SITUATIONS.find((item) => item.id === id)!;
     onSelect(
@@ -715,7 +818,7 @@ export function Rulebook({
                     onPassed={passSituation}
                     learningMode={learningMode}
                     certificationRunId={certificationRunId}
-                    onLearningEvent={learning?.onEvent}
+                    onLearningEvent={onLearningEvent}
                   />
                 )}
                 {situation?.kind === 'scenario' && (
@@ -740,7 +843,7 @@ export function Rulebook({
                     onPassed={passSituation}
                     learningMode={learningMode}
                     certificationRunId={certificationRunId}
-                    onLearningEvent={learning?.onEvent}
+                    onLearningEvent={onLearningEvent}
                   />
                 )}
                 {situation?.kind === 'clip' && (
@@ -755,7 +858,7 @@ export function Rulebook({
                     onPassed={passSituation}
                     learningMode={learningMode}
                     certificationRunId={certificationRunId}
-                    onLearningEvent={learning?.onEvent}
+                    onLearningEvent={onLearningEvent}
                   />
                 )}
                 {situation?.kind === 'question' && (
@@ -767,7 +870,7 @@ export function Rulebook({
                     onPassed={passSituation}
                     learningMode={learningMode}
                     certificationRunId={certificationRunId}
-                    onLearningEvent={learning?.onEvent}
+                    onLearningEvent={onLearningEvent}
                   />
                 )}
                 {guide === 'animation' && !situation && clips.length > 0 && (
