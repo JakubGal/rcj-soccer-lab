@@ -1,5 +1,6 @@
 {
   "generator": "Built-in image generation",
+  "superseded": "For the current Jakub and Isa artwork, see committee-portrait-refresh.json. These original prompts are retained as production history.",
   "source": "User-supplied reference photos, used with the permission stated by the user. Original photographs are not included in the site.",
   "artwork": "Original educational caricatures with three illustrated poses each, animated in CSS. Ivory background, not transparent.",
   "layout": {

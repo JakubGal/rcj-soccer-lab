@@ -1,5 +1,5 @@
 {
-  "purpose": "Final sprite gutter refinements; applied after the original prompts in committee-artwork-prompts.json. All referenced input sheets were generated from the consent-based portraits. Final files remain public/characters/{id}.png.",
+  "purpose": "Historical sprite gutter refinements, applied after the original prompts in committee-artwork-prompts.json. Jakub and Isa are now superseded by committee-portrait-refresh.json. All referenced input sheets were generated from the consent-based portraits. Files remain public/characters/{id}.png.",
   "revisions": [
     {
       "id": "will",

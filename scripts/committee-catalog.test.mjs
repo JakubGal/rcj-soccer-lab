@@ -58,9 +58,9 @@ test('the committee cast has eight stable identities and safe local image paths'
     new Set(CHARACTERS.map((character) => character.name)).size,
     ids.length,
   );
-  assert.equal(
-    CHARACTERS.find((character) => character.id === 'finance').name,
-    'Roberto',
+  assert.deepEqual(
+    CHARACTERS.map((character) => character.name),
+    ['Marek', 'Isa', 'Tom', 'Will', 'Roberto', 'David', 'Jakub', 'Caroline'],
   );
   for (const character of CHARACTERS) {
     assert.equal(character.asset, `/characters/${character.id}.png`);
@@ -73,6 +73,34 @@ test('the committee cast has eight stable identities and safe local image paths'
   assert.match(COMMITTEE_VOICE_DISCLAIMER, /fictional/i);
   assert.match(COMMITTEE_VOICE_DISCLAIMER, /not real quotations/i);
   assert.match(COMMITTEE_VOICE_DISCLAIMER, /sourced feedback.*authoritative/i);
+});
+
+test('Isa stays in the cast as the chair and Jakub focuses on his technical equipment', () => {
+  const isa = CHARACTERS.find((character) => character.id === 'isa');
+  const jakub = CHARACTERS.find((character) => character.id === 'jakub');
+  const characterCopy = (character) =>
+    [
+      character.role,
+      character.bio,
+      ...DIALOGUE.filter((line) => line.character === character.id).map(
+        (line) => line.text,
+      ),
+    ].join(' ');
+  assert.match(isa.role, /committee chair/i);
+  assert.match(isa.bio, /rulebook/);
+  assert.doesNotMatch(
+    characterCopy(isa),
+    /firework|pyro|spark|confetti|explosion|\bboom\b/i,
+  );
+  assert.match(jakub.bio, /Black T-shirt/);
+  assert.match(jakub.bio, /orange IR balls/);
+  assert.match(jakub.bio, /ESP\/OLED/);
+  assert.match(jakub.bio, /livestreams/);
+  assert.match(jakub.bio, /poles/);
+  assert.doesNotMatch(
+    characterCopy(jakub),
+    /Jánošík|folklore|costume|valaška/i,
+  );
 });
 
 test('each character has at least twelve distinct compact lines and covers every topic', () => {
@@ -160,7 +188,22 @@ test('every shipped character has a full-resolution three-pose PNG and a recorde
       'utf8',
     ),
   );
-  const serialized = JSON.stringify(manifest);
+  const refresh = JSON.parse(
+    readFileSync(
+      new URL('../docs/committee-portrait-refresh.json', import.meta.url),
+      'utf8',
+    ),
+  );
+  assert.deepEqual(
+    refresh.revisions.map((entry) => entry.id),
+    ['jakub', 'isa'],
+  );
+  for (const entry of refresh.revisions) {
+    assert.equal(entry.asset, `/characters/${entry.id}.png`);
+    assert.ok(entry.prompt.length > 100);
+    assert.ok(entry.verified.length > 100);
+  }
+  const serialized = JSON.stringify([manifest, refresh]);
   for (const character of CHARACTERS) {
     const file = readFileSync(
       new URL(`../public${character.asset}`, import.meta.url),

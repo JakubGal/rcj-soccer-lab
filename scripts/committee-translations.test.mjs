@@ -95,7 +95,7 @@ test('reviewed committee translations cover every cast line and current tour con
 
 test('committee translations retain names, rule terms, brands and keyboard labels', () => {
   const preserved =
-    /\b(?:Out of bounds|out of bounds|Damaged|damaged|pushed out|kickoff|Kickoff|Dribbler|RoboFuse|Slido|Vim|git blame|JP Morgan|Jánošík|Jakub|Caroline|RefMate|RCJ|WASD|Space|Enter|ROI)\b/g;
+    /\b(?:Out of bounds|out of bounds|Damaged|damaged|pushed out|kickoff|Kickoff|Dribbler|RoboFuse|Slido|Vim|git blame|JP Morgan|IR|ESP|OLED|Jakub|Caroline|RefMate|RCJ|WASD|Space|Enter|ROI)\b/g;
   for (const [locale, dictionary] of Object.entries(translations)) {
     for (const [source, translated] of Object.entries(dictionary)) {
       for (const term of new Set(source.match(preserved) ?? []))

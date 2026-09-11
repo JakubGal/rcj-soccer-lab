@@ -492,8 +492,8 @@ model and are explicitly labelled as construction values.
 
 ## Committee companions
 
-The optional sideline crew includes Marek Chupa, Isa, Tom Pila, Will, Roberto,
-David, Jakub Ga, and Caroline. Each has three illustrated poses and fifteen
+The optional sideline crew includes Marek, Isa, Tom, Will, Roberto,
+David, Jakub, and Caroline. Each has three illustrated poses and fifteen
 short fictional lines. A skippable first-visit Rules tour introduces everyone;
 **Meet the committee** reopens it, previews poses, and controls reactions and
 motion. Operating-system reduced-motion preferences are always respected.
@@ -514,7 +514,10 @@ site. Consent-based generated artwork is in `public/characters/`; original
 reference photos are not shipped. `docs/committee-artwork-prompts.json`
 records the built-in image generator prompts and the three-column sprite
 layout; `docs/committee-artwork-refinements.json` records the final gutter
-corrections. CSS animates the poses; these are illustrations, not skeletal rigs.
+corrections. `docs/committee-portrait-refresh.json` supersedes the earlier
+Jakub and Isa artwork: Jakub wears a black T-shirt with IR-ball, ESP/OLED,
+streaming and long-pole props; Isa carries a rulebook with a literal chair.
+CSS animates the poses; these are illustrations, not skeletal rigs.
 The ivory sprite backgrounds intentionally match the character cards.
 Run `pnpm test:committee` for catalogue, fairness, privacy, integration, UI,
 translation, and artwork checks.
