@@ -28,6 +28,108 @@ const { DarkBallDetector } = await import('../lib/reconstruction/dark-ball.ts');
 const { suggestEvents, mergeSuggestions } =
   await import('../lib/reconstruction/events.ts');
 const { seekVideo } = await import('../lib/reconstruction/video.ts');
+const { inspectMp4Timing } = await import('../lib/reconstruction/mp4.ts');
+
+function mp4Box(type, ...payloads) {
+  const payload = Buffer.concat(payloads);
+  const header = Buffer.alloc(8);
+  header.writeUInt32BE(payload.length + 8);
+  header.write(type, 4, 4, 'ascii');
+  return Buffer.concat([header, payload]);
+}
+function mp4Fixture({
+  bad = false,
+  version = 0,
+  handler = 'vide',
+  truncated = false,
+} = {}) {
+  const mdhd = Buffer.alloc(version ? 36 : 24);
+  mdhd[0] = version;
+  mdhd.writeUInt32BE(30000, version ? 20 : 12);
+  if (version) mdhd.writeBigUInt64BE(60000n, 24);
+  else mdhd.writeUInt32BE(60000, 16);
+  const hdlr = Buffer.alloc(12);
+  hdlr.write(handler, 8);
+  const stts = Buffer.alloc(24);
+  stts.writeUInt32BE(truncated ? 100000 : 2, 4);
+  stts.writeUInt32BE(30, 8);
+  stts.writeUInt32BE(1000, 12);
+  stts.writeUInt32BE(30, 16);
+  stts.writeUInt32BE(bad ? 4294966267 : 1000, 20);
+  return mp4Box(
+    'moov',
+    mp4Box(
+      'trak',
+      mp4Box(
+        'mdia',
+        mp4Box('mdhd', mdhd),
+        mp4Box('hdlr', hdlr),
+        mp4Box('minf', mp4Box('stbl', mp4Box('stts', stts))),
+      ),
+    ),
+  );
+}
+
+test('MP4 compatibility check detects unsigned negative video timing without modifying media', async () => {
+  for (const version of [0, 1]) {
+    const metadata = mp4Fixture({ bad: true, version });
+    const before = Buffer.from(metadata);
+    assert.deepEqual(await inspectMp4Timing(new Blob([metadata])), {
+      invalidSamples: 30,
+    });
+    assert.deepEqual(metadata, before);
+    assert.equal(
+      await inspectMp4Timing(new Blob([mp4Fixture({ version })])),
+      null,
+    );
+  }
+  assert.equal(
+    await inspectMp4Timing(
+      new Blob([mp4Fixture({ bad: true, handler: 'soun' })]),
+    ),
+    null,
+  );
+});
+
+test('MP4 check skips media payloads and bounds metadata reads', async () => {
+  const media = mp4Box('mdat', Buffer.alloc(10 * 1024 * 1024));
+  const blob = new Blob([media, mp4Fixture({ bad: true })]);
+  let readBytes = 0;
+  const bounded = {
+    size: blob.size,
+    slice(start, end) {
+      readBytes += Math.min(blob.size, end) - start;
+      return blob.slice(start, end);
+    },
+  };
+  assert.deepEqual(await inspectMp4Timing(bounded), { invalidSamples: 30 });
+  assert.ok(readBytes < 1024, `must not read mdat: ${readBytes}`);
+  assert.equal(
+    await inspectMp4Timing(
+      new Blob([mp4Box('moov', Buffer.alloc(17 * 1024 * 1024))]),
+    ),
+    null,
+  );
+});
+
+test('malformed or unsupported container inspection never blocks video opening', async () => {
+  for (const bytes of [
+    Buffer.from('not mp4'),
+    Buffer.alloc(20),
+    mp4Fixture({ bad: true, truncated: true }),
+    mp4Box('moov', Buffer.from('bad track')),
+  ])
+    assert.equal(await inspectMp4Timing(new Blob([bytes])), null);
+  assert.equal(
+    await inspectMp4Timing({
+      size: 20,
+      slice() {
+        throw new Error('unreadable');
+      },
+    }),
+    null,
+  );
+});
 
 test('tracking samples every 100 or 500 milliseconds with one exact endpoint', () => {
   assert.equal(makeClip(400, 401).fps, 10);

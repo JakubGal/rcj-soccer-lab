@@ -71,6 +71,7 @@ import {
   readVideoFrame,
   seekVideo,
 } from '@/lib/reconstruction/video';
+import { inspectMp4Timing } from '@/lib/reconstruction/mp4';
 import './reconstruction.css';
 
 type WorkerReply = {
@@ -80,6 +81,12 @@ type WorkerReply = {
   reacquired?: TrackId[];
   error?: string;
 };
+type TransportMode =
+  | 'idle'
+  | 'source'
+  | 'linked-replay'
+  | 'synthetic-replay'
+  | 'export';
 const COLORS: Record<TrackId, string> = {
   'blue-1': '#35baff',
   'blue-2': '#35baff',
@@ -113,7 +120,13 @@ export default function ReconstructionWorkspace({
   const [rangeEnd, setRangeEnd] = useState(60);
   const [clipId, setClipId] = useState('');
   const [at, setAt] = useState(0);
-  const [playing, setPlaying] = useState(false);
+  const [transport, setTransport] = useState<TransportMode>('idle');
+  const playing =
+    transport === 'linked-replay' ||
+    transport === 'synthetic-replay' ||
+    transport === 'export';
+  const originalPlaying =
+    transport === 'source' || transport === 'linked-replay';
   const [speed, setSpeed] = useState(1);
   const [camera, setCamera] = useState<CameraPreset>('broadcast');
   const [editMode, setEditMode] = useState<
@@ -134,6 +147,7 @@ export default function ReconstructionWorkspace({
   });
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
+  const [sourceWarning, setSourceWarning] = useState('');
   const [eventKind, setEventKind] =
     useState<ReconstructionEvent['kind']>('goal');
   const [eventTeam, setEventTeam] = useState<'blue' | 'yellow'>('blue');
@@ -153,18 +167,23 @@ export default function ReconstructionWorkspace({
   const pendingFile = useRef<{ file: File; relink: boolean } | null>(null);
   const abortRef = useRef<AbortController | null>(null);
   const sourceSeekRef = useRef<AbortController | null>(null);
+  const seekEditedRef = useRef(false);
+  const transportRef = useRef<TransportMode>('idle');
+  const sourceInspectionRef = useRef(0);
   const workerRef = useRef<Worker | null>(null);
   const recorderRef = useRef<MediaRecorder | null>(null);
   const latestCanvas = useRef<HTMLCanvasElement | null>(null);
   const compositionRef = useRef<HTMLCanvasElement | null>(null);
   const projectRef = useRef(project);
   const atRef = useRef(at);
+  const speedRef = useRef(speed);
   const clipIdRef = useRef(clipId);
   useLayoutEffect(() => {
     projectRef.current = project;
     atRef.current = at;
+    speedRef.current = speed;
     clipIdRef.current = clipId;
-  }, [project, at, clipId]);
+  }, [project, at, clipId, speed]);
   const exportInterrupted = useRef(false);
   const selectedClip = project?.clips.find((c) => c.id === clipId) ?? null;
   const liveFrame =
@@ -237,18 +256,80 @@ export default function ReconstructionWorkspace({
         ? { ...p, clips: p.clips.map((c) => (c.id === clipId ? change(c) : c)) }
         : p,
     );
-  const stopWork = useCallback(() => {
+  const setTransportMode = useCallback((mode: TransportMode) => {
+    transportRef.current = mode;
+    setTransport(mode);
+  }, []);
+  const pauseTransport = useCallback(() => {
     sourceSeekRef.current?.abort();
+    sourceSeekRef.current = null;
+    setTransportMode('idle');
+    videoRef.current?.pause();
+  }, [setTransportMode]);
+  const showReplayClip = useCallback((clip: Clip) => {
+    clipIdRef.current = clip.id;
+    setClipId(clip.id);
+    setRangeStart(clip.start);
+    setRangeEnd(clip.end);
+  }, []);
+  const stopWork = useCallback(() => {
+    pauseTransport();
     abortRef.current?.abort();
     workerRef.current?.terminate();
     workerRef.current = null;
-  }, []);
-  const stopExport = useCallback((interrupted = false) => {
-    exportInterrupted.current ||= interrupted;
-    const recorder = recorderRef.current;
-    if (recorder && recorder.state !== 'inactive') recorder.stop();
-    setPlaying(false);
-  }, []);
+  }, [pauseTransport]);
+  const stopExport = useCallback(
+    (interrupted = false) => {
+      exportInterrupted.current ||= interrupted;
+      const recorder = recorderRef.current;
+      if (recorder && recorder.state !== 'inactive') recorder.stop();
+      pauseTransport();
+    },
+    [pauseTransport],
+  );
+  const startNativePlayback = useCallback(
+    async (
+      mode: 'source' | 'linked-replay',
+      sourceTime?: number,
+      clip?: Clip,
+    ) => {
+      const video = videoRef.current;
+      if (!video || !Number.isFinite(video.duration) || video.readyState < 1)
+        return;
+      pauseTransport();
+      const controller = new AbortController();
+      sourceSeekRef.current = controller;
+      if (clip) showReplayClip(clip);
+      setTransportMode(mode);
+      setError('');
+      try {
+        // Starts and clip transitions are explicit seeks. Once playing, the
+        // decoded video owns time; the replay never seeks to correct drift.
+        if (sourceTime !== undefined)
+          await seekVideo(video, sourceTime, controller.signal);
+        if (controller.signal.aborted) return;
+        setSourceAt(video.currentTime);
+        video.playbackRate = speedRef.current;
+        await video.play();
+        if (
+          controller.signal.aborted &&
+          (videoRef.current !== video ||
+            !['source', 'linked-replay'].includes(transportRef.current))
+        )
+          video.pause();
+      } catch (e) {
+        if (controller.signal.aborted) return;
+        pauseTransport();
+        setError(
+          'The original recording could not play.' +
+            (e instanceof Error ? ` — ${e.message}` : ''),
+        );
+      } finally {
+        if (sourceSeekRef.current === controller) sourceSeekRef.current = null;
+      }
+    },
+    [pauseTransport, setTransportMode, showReplayClip],
+  );
 
   useEffect(
     () => () => {
@@ -265,6 +346,7 @@ export default function ReconstructionWorkspace({
   useEffect(() => {
     if (!active) {
       videoRef.current?.pause();
+      // eslint-disable-next-line react/react-compiler -- Deactivation cancels external media work and clears the transport that owns it.
       stopWork();
       // eslint-disable-next-line react/react-compiler -- Deactivating this workspace must stop external browser recording and its playback state together.
       stopExport(true);
@@ -284,6 +366,7 @@ export default function ReconstructionWorkspace({
   }, [stopExport]);
   useEffect(
     () => () => {
+      sourceInspectionRef.current++;
       stopWork();
       const r = recorderRef.current;
       if (r && r.state !== 'inactive') r.stop();
@@ -302,10 +385,16 @@ export default function ReconstructionWorkspace({
     return () => window.removeEventListener('beforeunload', warn);
   }, []);
   useEffect(() => {
-    if (!playing || !active || !total) return;
+    if (
+      !active ||
+      !total ||
+      (transport !== 'synthetic-replay' && transport !== 'export')
+    )
+      return;
     let raf = 0,
       last = performance.now();
     const tick = (now: number) => {
+      if (transportRef.current !== transport) return;
       const next = Math.min(
         total,
         atRef.current + Math.min((now - last) / 1000, 0.2) * speed,
@@ -316,13 +405,10 @@ export default function ReconstructionWorkspace({
       const p = projectRef.current;
       const loc = p && locate(p, next);
       if (loc && loc.clip.id !== clipIdRef.current) {
-        clipIdRef.current = loc.clip.id;
-        setClipId(loc.clip.id);
-        setRangeStart(loc.clip.start);
-        setRangeEnd(loc.clip.end);
+        showReplayClip(loc.clip);
       }
       if (next >= total) {
-        setPlaying(false);
+        pauseTransport();
         if (recorderRef.current) setTimeout(() => stopExport(), 150);
         return;
       }
@@ -330,30 +416,145 @@ export default function ReconstructionWorkspace({
     };
     raf = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(raf);
-  }, [playing, active, total, speed, stopExport]);
+  }, [
+    transport,
+    active,
+    total,
+    speed,
+    stopExport,
+    pauseTransport,
+    showReplayClip,
+  ]);
   useEffect(() => {
     const video = videoRef.current;
     if (
       !video ||
       !active ||
       !ready ||
-      video.readyState < 1 ||
-      !Number.isFinite(video.duration) ||
-      !location ||
-      tracking ||
-      sourceSeekRef.current ||
-      editMode !== 'none'
+      (transport !== 'source' && transport !== 'linked-replay')
     )
       return;
-    if (Math.abs(video.currentTime - location.time) > (playing ? 0.3 : 0.04))
-      video.currentTime = Math.min(location.time, video.duration - 0.005);
-    video.playbackRate = speed;
-    if (playing && video.paused)
-      void video.play().catch(() => {
-        /* 3D playback remains available without source audio. */
-      });
-    if (!playing) video.pause();
-  }, [at, ready, playing, speed, tracking, editMode, location, active]);
+    let raf = 0;
+    let frameCallback: number | null = null;
+    let disposed = false;
+    let presentedAt = performance.now();
+    let presentedSourceTime = video.currentTime;
+    const canWatchFrames =
+      typeof video.requestVideoFrameCallback === 'function';
+    const resetFrameWatch = () => {
+      presentedAt = performance.now();
+      presentedSourceTime = video.currentTime;
+    };
+    const failPresentation = () => {
+      pauseTransport();
+      setError(
+        'The browser stopped presenting video frames. Try a remuxed MP4 copy.',
+      );
+    };
+    const presented: VideoFrameRequestCallback = (_now, metadata) => {
+      frameCallback = null;
+      if (disposed || transportRef.current !== transport) return;
+      if (
+        !Number.isFinite(metadata.mediaTime) ||
+        metadata.mediaTime < -1 ||
+        metadata.mediaTime > video.duration + 1
+      ) {
+        failPresentation();
+        return;
+      }
+      resetFrameWatch();
+      frameCallback = video.requestVideoFrameCallback(presented);
+    };
+    if (canWatchFrames)
+      frameCallback = video.requestVideoFrameCallback(presented);
+    document.addEventListener('visibilitychange', resetFrameWatch);
+    const tick = () => {
+      if (transportRef.current !== transport) return;
+      if (
+        video.paused ||
+        video.seeking ||
+        sourceSeekRef.current ||
+        document.hidden
+      ) {
+        resetFrameWatch();
+      } else if (
+        canWatchFrames &&
+        sourceWarning &&
+        performance.now() - presentedAt > 3000
+      ) {
+        // Valid variable-frame-rate footage may intentionally hold a frame.
+        // A timeout is actionable only for a source with verified bad timing.
+        const rect = video.getBoundingClientRect();
+        const visible =
+          rect.width > 0 &&
+          rect.height > 0 &&
+          rect.bottom > 0 &&
+          rect.right > 0 &&
+          rect.top < window.innerHeight &&
+          rect.left < window.innerWidth;
+        if (!visible) resetFrameWatch();
+        else if (video.currentTime > presentedSourceTime + 0.5) {
+          failPresentation();
+          return;
+        }
+      }
+      if (!sourceSeekRef.current && !video.seeking) {
+        const sourceTime = video.currentTime;
+        setSourceAt(sourceTime);
+        if (transport === 'linked-replay') {
+          const p = projectRef.current;
+          const index =
+            p?.clips.findIndex((c) => c.id === clipIdRef.current) ?? -1;
+          const clip = p?.clips[index];
+          if (!p || !clip) {
+            pauseTransport();
+            return;
+          }
+          const next = timelineTime(
+            p,
+            clip.id,
+            Math.max(clip.start, Math.min(clip.end, sourceTime)),
+          );
+          atRef.current = next;
+          setAt(next);
+          if (sourceTime >= clip.end - 0.002 || video.ended) {
+            const following = p.clips[index + 1];
+            if (following) {
+              void startNativePlayback(
+                'linked-replay',
+                following.start,
+                following,
+              );
+            } else {
+              pauseTransport();
+              return;
+            }
+          }
+        } else if (video.ended) {
+          pauseTransport();
+          return;
+        }
+      }
+      raf = requestAnimationFrame(tick);
+    };
+    raf = requestAnimationFrame(tick);
+    return () => {
+      disposed = true;
+      cancelAnimationFrame(raf);
+      if (frameCallback !== null) video.cancelVideoFrameCallback(frameCallback);
+      document.removeEventListener('visibilitychange', resetFrameWatch);
+    };
+  }, [
+    transport,
+    active,
+    ready,
+    sourceWarning,
+    pauseTransport,
+    startNativePlayback,
+  ]);
+  useEffect(() => {
+    if (videoRef.current) videoRef.current.playbackRate = speed;
+  }, [speed, ready]);
 
   const chooseSource = (file: File, relink: boolean) => {
     if (
@@ -366,10 +567,25 @@ export default function ReconstructionWorkspace({
       return;
     stopWork();
     stopExport(true);
-    setPlaying(false);
     setReady(false);
     setError('');
     setMessage('');
+    setSourceWarning('');
+    const inspection = ++sourceInspectionRef.current;
+    void inspectMp4Timing(file)
+      .then((result) => {
+        if (
+          sourceInspectionRef.current === inspection &&
+          result &&
+          result.invalidSamples > 0
+        )
+          setSourceWarning(
+            'This recording has damaged video timestamps. If playback freezes, open a remuxed MP4 copy; your original file is unchanged.',
+          );
+      })
+      .catch(() => {
+        // Optional metadata inspection must not prevent native video playback.
+      });
     setEditMode('none');
     pendingFile.current = { file, relink };
     setSeekDraft(null);
@@ -385,12 +601,12 @@ export default function ReconstructionWorkspace({
       pending = pendingFile.current;
     if (!video) return;
     if (!pending) {
-      const p = projectRef.current;
-      const loc = p && locate(p, atRef.current);
-      if (loc) {
-        video.currentTime = Math.min(loc.time, video.duration - 0.005);
-        setSourceAt(loc.time);
-      }
+      // Reopening this workspace restores the inspected source frame, which
+      // may be outside every replay clip during calibration or source playback.
+      video.currentTime = Math.max(
+        0,
+        Math.min(sourceAt, video.duration - 0.005),
+      );
       setReady(true);
       return;
     }
@@ -421,6 +637,8 @@ export default function ReconstructionWorkspace({
         metadata.width !== existing.source.width ||
         metadata.height !== existing.source.height)
     ) {
+      sourceInspectionRef.current++;
+      setSourceWarning('');
       setUrl('');
       setError(
         'This is not the recording used by the replay. Choose the original file with matching size, duration and resolution.',
@@ -447,9 +665,7 @@ export default function ReconstructionWorkspace({
   ) => {
     const video = videoRef.current;
     if (!video || !ready || tracking || recording) return;
-    setPlaying(false);
-    video.pause();
-    sourceSeekRef.current?.abort();
+    pauseTransport();
     const controller = new AbortController();
     sourceSeekRef.current = controller;
     try {
@@ -462,8 +678,11 @@ export default function ReconstructionWorkspace({
         mapTimeline &&
         video.currentTime >= targetClip.start &&
         video.currentTime <= targetClip.end
-      )
-        setAt(timelineTime(project, targetClip.id, video.currentTime));
+      ) {
+        const next = timelineTime(project, targetClip.id, video.currentTime);
+        atRef.current = next;
+        setAt(next);
+      }
     } catch (e) {
       if (controller.signal.aborted) return;
       setError(e instanceof Error ? e.message : 'Could not seek recording.');
@@ -471,15 +690,59 @@ export default function ReconstructionWorkspace({
       if (sourceSeekRef.current === controller) sourceSeekRef.current = null;
     }
   };
-  const selectClip = (c: Clip) => {
+  const seekReplay = (
+    value: number,
+    preferredClipId?: string,
+    nextProject = projectRef.current,
+  ) => {
     if (tracking || recording) return;
-    setPlaying(false);
+    pauseTransport();
     setEditMode('none');
-    setClipId(c.id);
-    setRangeStart(c.start);
-    setRangeEnd(c.end);
-    if (project) setAt(timelineTime(project, c.id, c.start));
-    if (ready) void seekSource(c.start, c);
+    const next = Math.max(
+      0,
+      Math.min(value, nextProject ? duration(nextProject) : 0),
+    );
+    atRef.current = next;
+    setAt(next);
+    const loc = nextProject && locate(nextProject, next, preferredClipId);
+    if (loc) {
+      showReplayClip(loc.clip);
+      if (ready) void seekSource(loc.time, loc.clip, false);
+    } else {
+      clipIdRef.current = '';
+      setClipId('');
+    }
+  };
+  const selectClip = (c: Clip) => {
+    if (project) seekReplay(timelineTime(project, c.id, c.start), c.id);
+  };
+  const toggleReplay = () => {
+    if (tracking || recording || !project || !total) return;
+    if (playing) {
+      pauseTransport();
+      return;
+    }
+    if (url && !ready) return;
+    pauseTransport();
+    setEditMode('none');
+    const next = atRef.current >= total - 0.001 ? 0 : atRef.current;
+    const loc = locate(project, next);
+    if (!loc) return;
+    atRef.current = next;
+    setAt(next);
+    showReplayClip(loc.clip);
+    if (url) void startNativePlayback('linked-replay', loc.time, loc.clip);
+    else setTransportMode('synthetic-replay');
+  };
+  const toggleOriginal = () => {
+    if (!ready || tracking || recording) return;
+    if (originalPlaying) {
+      pauseTransport();
+      return;
+    }
+    setEditMode('none');
+    const video = videoRef.current;
+    if (video) void startNativePlayback('source', video.ended ? 0 : undefined);
   };
   const addClip = () => {
     if (
@@ -565,7 +828,7 @@ export default function ReconstructionWorkspace({
           }
         : p,
     );
-    setPlaying(false);
+    pauseTransport();
     setEditMode(selectedClip.corners.length === 4 ? 'seed' : 'corners');
     setSelected('ball');
   };
@@ -580,9 +843,7 @@ export default function ReconstructionWorkspace({
       )
         return;
       setProject(trimmed);
-      setPlaying(false);
-      setEditMode('none');
-      setAt(timelineTime(trimmed, clipId, rangeStart));
+      seekReplay(timelineTime(trimmed, clipId, rangeStart), clipId, trimmed);
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Could not trim clip.');
     }
@@ -746,10 +1007,7 @@ export default function ReconstructionWorkspace({
       );
       return;
     }
-    setPlaying(false);
-    sourceSeekRef.current?.abort();
-    sourceSeekRef.current = null;
-    videoRef.current.pause();
+    pauseTransport();
     setTracking(true);
     setTrackingPreview(null);
     setProgress(0);
@@ -931,7 +1189,21 @@ export default function ReconstructionWorkspace({
       setProgress(0);
       setAt(timelineTime(project, c.id, finishedAt));
       setSourceAt(finishedAt);
-      if (active) void seekVideo(video, finishedAt).catch(() => {});
+      if (active && video.isConnected) {
+        const restore = new AbortController();
+        sourceSeekRef.current?.abort();
+        sourceSeekRef.current = restore;
+        void seekVideo(video, finishedAt, restore.signal)
+          .catch((e: unknown) => {
+            if (!restore.signal.aborted)
+              setError(
+                e instanceof Error ? e.message : 'Could not seek recording.',
+              );
+          })
+          .finally(() => {
+            if (sourceSeekRef.current === restore) sourceSeekRef.current = null;
+          });
+      }
     }
   };
 
@@ -969,6 +1241,8 @@ export default function ReconstructionWorkspace({
         return;
       stopWork();
       stopExport(true);
+      sourceInspectionRef.current++;
+      setSourceWarning('');
       setUrl('');
       setReady(false);
       setProject(value);
@@ -1112,7 +1386,7 @@ export default function ReconstructionWorkspace({
               'Export reached the 512 MB safety limit. This video is partial; use shorter clips or 720p.',
             );
             recorder.stop();
-            setPlaying(false);
+            pauseTransport();
           }
         }
       };
@@ -1142,19 +1416,20 @@ export default function ReconstructionWorkspace({
         }
       };
       setError('');
+      pauseTransport();
       setAt(0);
       atRef.current = 0;
       setSpeed(1);
       setEditMode('none');
       setRecording(true);
       recorder.start(1000);
-      setPlaying(true);
+      setTransportMode('export');
     } catch (e) {
       stream?.getTracks().forEach((t) => t.stop());
       compositionRef.current = null;
       recorderRef.current = null;
       setRecording(false);
-      setPlaying(false);
+      pauseTransport();
       setError(
         e instanceof Error ? e.message : 'Video export could not start.',
       );
@@ -1240,6 +1515,9 @@ export default function ReconstructionWorkspace({
         </div>
       )}
       {message && <output className="reconstruction-message">{message}</output>}
+      {sourceWarning && (
+        <output className="reconstruction-message">{sourceWarning}</output>
+      )}
       <div className="reconstruction-views">
         <section className="reconstruction-panel">
           <div className="reconstruction-panel-title">
@@ -1292,7 +1570,25 @@ export default function ReconstructionWorkspace({
                 onSeeked={(e) => {
                   if (!tracking) setSourceAt(e.currentTarget.currentTime);
                 }}
+                onPause={(e) => {
+                  if (
+                    e.currentTarget.paused &&
+                    !e.currentTarget.ended &&
+                    !sourceSeekRef.current &&
+                    (transportRef.current === 'source' ||
+                      transportRef.current === 'linked-replay')
+                  )
+                    pauseTransport();
+                }}
+                onEnded={() => {
+                  if (transportRef.current === 'source') pauseTransport();
+                }}
                 onError={() => {
+                  if (
+                    transportRef.current === 'source' ||
+                    transportRef.current === 'linked-replay'
+                  )
+                    pauseTransport();
                   setReady(false);
                   setError(
                     'The browser could not open this codec/container. MKV support varies: remux or convert a local copy to H.264 MP4, then open it here.',
@@ -1433,6 +1729,15 @@ export default function ReconstructionWorkspace({
                 />
               </label>
               <div className="reconstruction-actions">
+                <Button
+                  size="sm"
+                  variant="outline"
+                  disabled={!ready || tracking || recording}
+                  onClick={toggleOriginal}
+                >
+                  {originalPlaying ? <Pause /> : <Play />}
+                  {originalPlaying ? 'Pause original' : 'Play original'}
+                </Button>
                 {[-500, -100, 100, 500].map((milliseconds) => (
                   <Button
                     key={milliseconds}
@@ -1460,14 +1765,24 @@ export default function ReconstructionWorkspace({
                     step="0.1"
                     max={project.source.duration}
                     value={seekDraft ?? sourceAt.toFixed(3)}
-                    onChange={(e) => setSeekDraft(e.currentTarget.value)}
+                    onFocus={(e) => {
+                      // Freeze the text while it is selected/edited. Otherwise
+                      // advancing playback can replace it between Ctrl+A and typing.
+                      seekEditedRef.current = false;
+                      setSeekDraft(e.currentTarget.value);
+                    }}
+                    onChange={(e) => {
+                      seekEditedRef.current = true;
+                      setSeekDraft(e.currentTarget.value);
+                    }}
                     disabled={!ready || tracking || recording}
                     onBlur={(e) => {
                       if (
-                        seekDraft !== null &&
+                        seekEditedRef.current &&
                         Number.isFinite(e.currentTarget.valueAsNumber)
                       )
                         void seekSource(e.currentTarget.valueAsNumber);
+                      seekEditedRef.current = false;
                       setSeekDraft(null);
                     }}
                     onKeyDown={(e) => {
@@ -1566,18 +1881,8 @@ export default function ReconstructionWorkspace({
         )}
         <div className="reconstruction-actions">
           <Button
-            disabled={!total || tracking || recording}
-            onClick={() => {
-              sourceSeekRef.current?.abort();
-              sourceSeekRef.current = null;
-              setEditMode('none');
-              if (!playing && at >= total - 0.001) {
-                atRef.current = 0;
-                setAt(0);
-                if (project?.clips[0]) setClipId(project.clips[0].id);
-              }
-              setPlaying(!playing);
-            }}
+            disabled={!total || tracking || recording || (!!url && !ready)}
+            onClick={toggleReplay}
           >
             {playing ? <Pause /> : <Play />}
             {playing ? 'Pause replay' : 'Play replay'}
@@ -1585,14 +1890,7 @@ export default function ReconstructionWorkspace({
           <Button
             variant="outline"
             disabled={!total || tracking || recording}
-            onClick={() => {
-              sourceSeekRef.current?.abort();
-              sourceSeekRef.current = null;
-              setPlaying(false);
-              setAt(0);
-              setEditMode('none');
-              if (project?.clips[0]) setClipId(project.clips[0].id);
-            }}
+            onClick={() => seekReplay(0)}
           >
             Start
           </Button>
@@ -1620,15 +1918,7 @@ export default function ReconstructionWorkspace({
           step="0.02"
           value={at}
           disabled={!total || tracking || recording}
-          onChange={(e) => {
-            sourceSeekRef.current?.abort();
-            sourceSeekRef.current = null;
-            setPlaying(false);
-            setEditMode('none');
-            setAt(Number(e.target.value));
-            const next = project && locate(project, Number(e.target.value));
-            if (next) setClipId(next.clip.id);
-          }}
+          onChange={(e) => seekReplay(Number(e.target.value))}
         />
         <div className="reconstruction-clip-strip">
           {project?.clips.map((c) => (
@@ -1751,16 +2041,14 @@ export default function ReconstructionWorkspace({
                     tracking || recording || project!.clips[0].id === clipId
                   }
                   onClick={() => {
-                    setPlaying(false);
-                    setAt(0);
-                    setProject((p) => {
-                      if (!p) return p;
-                      const clips = [...p.clips],
-                        i = clips.findIndex((c) => c.id === clipId);
-                      if (i > 0)
-                        [clips[i - 1], clips[i]] = [clips[i], clips[i - 1]];
-                      return { ...p, clips };
-                    });
+                    if (!project) return;
+                    const clips = [...project.clips],
+                      i = clips.findIndex((c) => c.id === clipId);
+                    if (i > 0)
+                      [clips[i - 1], clips[i]] = [clips[i], clips[i - 1]];
+                    const reordered = { ...project, clips };
+                    setProject(reordered);
+                    seekReplay(0, undefined, reordered);
                   }}
                 >
                   Move clip earlier
@@ -1771,24 +2059,20 @@ export default function ReconstructionWorkspace({
                   disabled={tracking || recording}
                   onClick={() => {
                     if (
+                      project &&
                       window.confirm(
                         'Remove this clip, its tracking and its events?',
                       )
                     ) {
-                      setProject((p) =>
-                        p
-                          ? {
-                              ...p,
-                              clips: p.clips.filter((c) => c.id !== clipId),
-                              events: p.events.filter(
-                                (e) => e.clipId !== clipId,
-                              ),
-                            }
-                          : p,
-                      );
-                      setClipId('');
-                      setAt(0);
-                      setPlaying(false);
+                      const remaining = {
+                        ...project,
+                        clips: project.clips.filter((c) => c.id !== clipId),
+                        events: project.events.filter(
+                          (e) => e.clipId !== clipId,
+                        ),
+                      };
+                      setProject(remaining);
+                      seekReplay(0, undefined, remaining);
                     }
                   }}
                 >
@@ -2114,8 +2398,7 @@ export default function ReconstructionWorkspace({
                 recording
               }
               onClick={() => {
-                setPlaying(false);
-                videoRef.current?.pause();
+                pauseTransport();
                 setEditMode(editMode === 'correct' ? 'none' : 'correct');
               }}
             >
@@ -2410,10 +2693,10 @@ export default function ReconstructionWorkspace({
                   className="reconstruction-event-time"
                   disabled={tracking || recording}
                   onClick={() => {
-                    setPlaying(false);
-                    setEditMode('none');
-                    setClipId(e.clipId);
-                    setAt(timelineTime(project!, e.clipId, e.time));
+                    seekReplay(
+                      timelineTime(project!, e.clipId, e.time),
+                      e.clipId,
+                    );
                   }}
                 >
                   {formatTime(timelineTime(project!, e.clipId, e.time))}

@@ -17,6 +17,8 @@ This is an **experimental, assisted reconstruction tool**, not an exact video-to
 
 ### Live tracking and playback
 
+**Play original / Pause original** plays the source recording immediately, even before adding or tracking any clips. It is independent of the edited replay and can play outside the selected clip. **Play replay** follows the clips in their edited order. With a source attached, its native video clock drives the replay; temporary video decoding delays no longer cause the replay to repeatedly seek the source forwards. Only explicit seeks, playback starts and clip transitions reposition the video. Replay-only files and silent 3D exports retain an independent animation clock.
+
 While tracking runs, **both panels now show the latest processed frame**: the original image, detection outlines, 3D positions and timeline advance together. The original image is painted from the exact decoded frame sent to the detector, rather than depending on the browser to visibly present every paused-video seek. A progress bar, recording timestamp and processed-frame count appear directly below the views. This is a processing preview, not real-time video playback; its speed depends on the computer.
 
 Use **Stop and review** to keep completed samples and inspect the last processed moment. Completion and cancellation no longer reset the view to the clip's beginning. **Continue tracking here** resumes from that position; **Start** returns to the beginning. Pressing **Play replay** at the replay's end starts it again. Seeking while playing pauses the replay and keeps the new destination instead of allowing the old playback clock to overwrite it.
@@ -37,6 +39,14 @@ For precise inspection, use the **−500 ms / −100 ms / +100 ms / +500 ms** bu
 
 The browser uses a local `File` object URL and decodes frames incrementally at a maximum tracking width of 960 px. It does not read a multi-gigabyte recording into one JavaScript buffer. Processing speed and codec support depend on the computer/browser. H.264 MP4 is the safest starting point; MKV/MOV/WebM work only if the browser can decode their contents. For unsupported recordings, create a separate local H.264 MP4 copy with your video editor or FFmpeg. Audio is optional and never analysed. No remote conversion is performed.
 
+The app also checks up to 16 MB of MP4 metadata for a known broken sample-timestamp signature. This is a compatibility warning, not a full media validator or a claim that every browser will fail. It does not modify your recording. If that warning accompanies frozen playback, a **separate lossless remux** may fix the container without re-encoding video or audio:
+
+```sh
+ffmpeg -n -i original.mp4 -map 0:v:0 -map "0:a?" -c copy -movflags +faststart browser-compatible.mp4
+```
+
+The `-n` option refuses to overwrite an existing output. Open the resulting copy as a **new recording**. Its file size differs, so an existing replay's strict original-file relink check intentionally does not accept it; keep the original for those replays. If remuxing does not resolve playback, a fresh H.264 re-encode may be needed. No FFmpeg installation or remote conversion is bundled into the website.
+
 The versioned replay contains source filename/size/duration/resolution, calibrations, seeds, timestamped actor samples, confidence/provenance and reviewed events. It does not contain source video, audio, filesystem paths, accounts or credentials. Anyone you share this file with can read its metadata and your notes. It is not encrypted and is intentionally editable; it is a different format from certification evidence and cannot certify an account.
 
 Imports validate the schema, finite coordinates, chronological samples, clip bounds and unique event IDs. Limits: 200 clips, 100,000 sampled frames across the project, 20,000 events, 128 MB replay file, 512 MB buffered video export. One hour at 20 samples/s fits the replay capacity. Export long projects in shorter clips to avoid the video memory limit. A cancelled tracker keeps completed samples; if no new sample was produced, existing tracking remains intact.
@@ -46,6 +56,7 @@ Imports validate the schema, finite coordinates, chronological samples, clip bou
 See [validation method, detector choices and measured limitations](reconstruction-validation.md).
 
 - `pnpm test:reconstruction` covers calibration, validation, clip mapping, interpolation gaps, rotation wrapping, corrections, reviewed scoring, trimming, event deduplication, media-seek readiness, synthetic orange/dark ball tracking, camera cuts and hour-long save capacity.
+- Optional native Firefox playback regression: `node scripts/check-firefox-playback.mjs <firefox-executable> <recording.mp4> 0,173 8`. This opens an isolated headless browser with a temporary profile and a loopback-only video server, checks actual presented frames (not only the clock), prints JSON and cleans up its own browser/profile. Exit 0 means the sampled windows pass; 1 means failure; 2 means inconclusive. It does not install dependencies, use your normal browser profile or upload footage. Run on both an original and a compatibility copy when diagnosing timestamp problems.
 - Optional full-sequence benchmark: `node scripts/benchmark-match-reconstruction.mjs <ffmpeg-path> <Finale_lightweight.mp4> <manual-labels.json> <local-output.json> 10 1725.8 960`. This fixture uses the reference at 400 seconds, processes the full 28:45.8 recording chronologically, and separately reports detection, correct identities, centre error and false positives against manual labels. Sequential FFmpeg decoding is not a browser speed benchmark. Footage, extracted frames and generated tracking outputs remain local; they are not distributed with the site.
 - Components are lazy-loaded under `components/reconstruction/`; portable data, geometry, event proposals and worker tracking are under `lib/reconstruction/`. Existing game physics and certification verification remain separate. The shared viewport's post-render callback exports while the WebGL framebuffer is valid; score/event timestamps use the same committed frame time as its poses.
 

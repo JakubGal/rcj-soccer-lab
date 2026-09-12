@@ -21,6 +21,14 @@ const cut =
   'Large image change. Detection resumes when the calibrated view returns; use a separate calibration for a different view.';
 const reconstructionTranslations = {
   sk: {
+    'Play original': 'Prehrať originál',
+    'Pause original': 'Pozastaviť originál',
+    'The browser stopped presenting video frames. Try a remuxed MP4 copy.':
+      'Prehliadač prestal zobrazovať nové snímky videa. Skúste kópiu MP4 s opraveným kontajnerom.',
+    'The original recording could not play.':
+      'Pôvodný záznam sa nepodarilo prehrať.',
+    'This recording has damaged video timestamps. If playback freezes, open a remuxed MP4 copy; your original file is unchanged.':
+      'Tento záznam má poškodené časové údaje videa. Ak prehrávanie zamŕza, otvorte kópiu MP4 s opraveným kontajnerom; pôvodný súbor zostáva nezmenený.',
     'Live tracking preview': 'Živý náhľad sledovania',
     'Stop and review': 'Zastaviť a skontrolovať',
     'Processing: {0} · {1} frames': 'Spracovanie: {0} · {1} snímok',
@@ -50,6 +58,14 @@ const reconstructionTranslations = {
     'Use whole recording': 'Použiť celý záznam',
   },
   de: {
+    'Play original': 'Original abspielen',
+    'Pause original': 'Original pausieren',
+    'The browser stopped presenting video frames. Try a remuxed MP4 copy.':
+      'Der Browser zeigt keine neuen Videobilder mehr an. Versuche eine neu gemuxte MP4-Kopie.',
+    'The original recording could not play.':
+      'Die Originalaufnahme konnte nicht abgespielt werden.',
+    'This recording has damaged video timestamps. If playback freezes, open a remuxed MP4 copy; your original file is unchanged.':
+      'Diese Aufnahme enthält beschädigte Videozeitstempel. Falls die Wiedergabe einfriert, öffne eine neu gemuxte MP4-Kopie; die Originaldatei bleibt unverändert.',
     'Live tracking preview': 'Live-Vorschau der Erkennung',
     'Stop and review': 'Anhalten und prüfen',
     'Processing: {0} · {1} frames': 'Verarbeitung: {0} · {1} Bilder',
@@ -79,6 +95,14 @@ const reconstructionTranslations = {
     'Use whole recording': 'Gesamte Aufnahme verwenden',
   },
   ja: {
+    'Play original': '元の映像を再生',
+    'Pause original': '元の映像を一時停止',
+    'The browser stopped presenting video frames. Try a remuxed MP4 copy.':
+      'ブラウザーが新しい動画フレームを表示しなくなりました。再多重化したMP4のコピーを試してください。',
+    'The original recording could not play.':
+      '元の録画を再生できませんでした。',
+    'This recording has damaged video timestamps. If playback freezes, open a remuxed MP4 copy; your original file is unchanged.':
+      'この録画には破損した動画タイムスタンプがあります。再生が止まる場合は、再多重化したMP4のコピーを開いてください。元のファイルは変更されていません。',
     'Live tracking preview': '追跡のライブプレビュー',
     'Stop and review': '停止して確認',
     'Processing: {0} · {1} frames': '処理中: {0} · {1}フレーム',

@@ -8,6 +8,13 @@ export default defineConfig({
   plugins: [react()],
   resolve: { alias: { '@': fileURLToPath(new URL('.', import.meta.url)) } },
   css: { postcss: { plugins: [tailwindcss()] } },
-  server: { host: 'localhost', port: 3000, strictPort: true },
+  server: {
+    host: 'localhost',
+    port: 3000,
+    strictPort: true,
+    // Local recording/replay artifacts are not source code. Windows can lock
+    // a large MP4 while it is copied or played; watching it can crash Vite.
+    watch: { ignored: ['**/outputs/**', '**/work/**'] },
+  },
   build: { outDir: 'dist/client', emptyOutDir: true, target: 'es2022' },
 });
