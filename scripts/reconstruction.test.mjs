@@ -17,11 +17,51 @@ const {
   manualSample,
   renderPoses,
   trimClip,
+  trackingSampleTimes,
+  formatTime,
 } = await import('../lib/reconstruction/project.ts');
 const { LocalTracker } = await import('../lib/reconstruction/tracking.ts');
 const { suggestEvents, mergeSuggestions } =
   await import('../lib/reconstruction/events.ts');
 const { seekVideo } = await import('../lib/reconstruction/video.ts');
+
+test('tracking samples every 100 or 500 milliseconds with one exact endpoint', () => {
+  assert.equal(makeClip(400, 401).fps, 10);
+  for (const fps of [2, 5, 10, 15, 20]) {
+    const times = trackingSampleTimes(400.1, 401.1, fps);
+    assert.equal(times.length, fps + 1);
+    assert.equal(times[0], 400.1);
+    assert.equal(times.at(-1), 401.1);
+    for (let i = 1; i < times.length; i++)
+      assert.ok(Math.abs(times[i] - times[i - 1] - 1 / fps) < 1e-9);
+  }
+  assert.deepEqual(trackingSampleTimes(0, 1, 2), [0, 0.5, 1]);
+  assert.deepEqual(trackingSampleTimes(0, 0.3, 10), [0, 0.1, 0.2, 0.3]);
+  assert.deepEqual(trackingSampleTimes(0.1, 0.45, 2), [0.1, 0.45]);
+  const fractional = trackingSampleTimes(400.13, 401.18, 10);
+  assert.equal(fractional.length, 12);
+  assert.equal(fractional.at(-1), 401.18);
+  assert.ok(fractional.every((time, i) => !i || time > fractional[i - 1]));
+  assert.equal(trackingSampleTimes(0, 3600, 20).length, 72001);
+  assert.deepEqual(trackingSampleTimes(1, 1, 10), [1]);
+  for (const args of [
+    [NaN, 1, 10],
+    [2, 1, 10],
+    [0, 1, 0],
+    [0, 4000, 10],
+  ])
+    assert.throws(() => trackingSampleTimes(...args), /Invalid/);
+});
+
+test('precise replay clocks distinguish small steps and carry at minute boundaries', () => {
+  assert.equal(formatTime(400.1, true), '6:40.100');
+  assert.equal(formatTime(400.6, true), '6:40.600');
+  assert.equal(formatTime(59.9999, true), '1:00.000');
+  assert.equal(formatTime(0.05, true), '0:00.050');
+  assert.equal(formatTime(NaN, true), '0:00.000');
+  assert.equal(formatTime(-1, true), '0:00.000');
+  assert.equal(formatTime(400.9), '6:40');
+});
 
 test('seeking waits for decoded pixels even when currentTime already reports the destination', async () => {
   const video = new EventTarget();

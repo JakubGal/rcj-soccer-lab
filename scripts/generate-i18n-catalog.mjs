@@ -119,6 +119,11 @@ const PRESERVED_SENTENCES = new Set([
 
 const MANUAL = {
   sk: {
+    ms: 'ms',
+    'ms ·': 'ms ·',
+    'Tracking interval': 'Interval sledovania',
+    '100 ms is recommended for fast robots. 500 ms is coarser; 50 ms captures more detail but takes longer. Changing the interval applies when you track the clip again.':
+      'Pre rýchle roboty odporúčame 100 ms. Interval 500 ms je hrubší; 50 ms zachytí viac detailov, ale spracovanie trvá dlhšie. Zmena intervalu sa prejaví po opätovnom sledovaní klipu.',
     'RefMate controls': 'Ovládanie RefMate',
     'Classic controls': 'Klasické ovládanie',
     'Referee control layout': 'Rozloženie ovládania rozhodcu',
@@ -384,6 +389,11 @@ const MANUAL = {
       'Úplný vstup robota znamená out of bounds. Odstráňte robota na jednu minútu alebo do skoršieho kick-off.',
   },
   de: {
+    ms: 'ms',
+    'ms ·': 'ms ·',
+    'Tracking interval': 'Tracking-Intervall',
+    '100 ms is recommended for fast robots. 500 ms is coarser; 50 ms captures more detail but takes longer. Changing the interval applies when you track the clip again.':
+      'Für schnelle Roboter empfehlen wir 100 ms. 500 ms ist gröber; 50 ms erfasst mehr Details, benötigt aber mehr Zeit. Ein neues Intervall wird erst beim erneuten Tracken des Clips angewendet.',
     'RefMate controls': 'RefMate-Steuerung',
     'Classic controls': 'Klassische Steuerung',
     'Referee control layout': 'Anordnung der Schiedsrichtersteuerung',
@@ -645,6 +655,11 @@ const MANUAL = {
       'Das vollständige Einfahren gilt als out of bounds. Entfernen Sie den Roboter für eine Minute oder bis zu einem früheren kick-off.',
   },
   ja: {
+    ms: 'ms',
+    'ms ·': 'ms ·',
+    'Tracking interval': '追跡間隔',
+    '100 ms is recommended for fast robots. 500 ms is coarser; 50 ms captures more detail but takes longer. Changing the interval applies when you track the clip again.':
+      '高速で動くロボットには100 msを推奨します。500 msでは追跡が粗くなり、50 msではより細かく追跡できますが、処理に時間がかかります。間隔の変更は、クリップを再追跡すると適用されます。',
     'RefMate controls': 'RefMate操作',
     'Classic controls': '従来の操作',
     'Referee control layout': '審判操作パネルの配置',

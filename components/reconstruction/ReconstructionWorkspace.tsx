@@ -54,6 +54,7 @@ import {
   correctAt,
   trimClip,
   formatTime,
+  trackingSampleTimes,
   type Clip,
   type ReconstructionProject,
   type ReconstructionEvent,
@@ -138,6 +139,7 @@ export default function ReconstructionWorkspace({
   const replayFileRef = useRef<HTMLInputElement>(null);
   const pendingFile = useRef<{ file: File; relink: boolean } | null>(null);
   const abortRef = useRef<AbortController | null>(null);
+  const sourceSeekRef = useRef<AbortController | null>(null);
   const workerRef = useRef<Worker | null>(null);
   const recorderRef = useRef<MediaRecorder | null>(null);
   const latestCanvas = useRef<HTMLCanvasElement | null>(null);
@@ -196,6 +198,7 @@ export default function ReconstructionWorkspace({
         : p,
     );
   const stopWork = useCallback(() => {
+    sourceSeekRef.current?.abort();
     abortRef.current?.abort();
     workerRef.current?.terminate();
     workerRef.current = null;
@@ -403,18 +406,23 @@ export default function ReconstructionWorkspace({
     if (!video || !ready || tracking || recording) return;
     setPlaying(false);
     video.pause();
+    sourceSeekRef.current?.abort();
+    const controller = new AbortController();
+    sourceSeekRef.current = controller;
     try {
-      await seekVideo(video, value);
+      await seekVideo(video, value, controller.signal);
+      if (controller.signal.aborted) return;
       setSourceAt(video.currentTime);
       if (
         project &&
         targetClip &&
         mapTimeline &&
-        value >= targetClip.start &&
-        value <= targetClip.end
+        video.currentTime >= targetClip.start &&
+        video.currentTime <= targetClip.end
       )
-        setAt(timelineTime(project, targetClip.id, value));
+        setAt(timelineTime(project, targetClip.id, video.currentTime));
     } catch (e) {
+      if (controller.signal.aborted) return;
       setError(e instanceof Error ? e.message : 'Could not seek recording.');
     }
   };
@@ -638,14 +646,14 @@ export default function ReconstructionWorkspace({
       )
     )
       return;
+    const sampleTimes = trackingSampleTimes(start, c.end, c.fps);
     const otherCount = project.clips
       .filter((clip) => clip.id !== c.id)
       .reduce((n, clip) => n + clip.frames.length, 0);
     if (
       otherCount +
         c.frames.filter((f) => f.time < start).length +
-        Math.ceil((c.end - start) * c.fps) +
-        1 >
+        sampleTimes.length >
       MAX_SAMPLES
     ) {
       setError(
@@ -654,6 +662,7 @@ export default function ReconstructionWorkspace({
       return;
     }
     setPlaying(false);
+    sourceSeekRef.current?.abort();
     videoRef.current.pause();
     setTracking(true);
     setProgress(0);
@@ -722,11 +731,9 @@ export default function ReconstructionWorkspace({
         { type: 'module' },
       );
       workerRef.current = worker;
-      const steps = Math.ceil((c.end - start) * c.fps);
-      for (let index = 0; index <= steps; index++) {
+      for (const [index, time] of sampleTimes.entries()) {
         if (controller.signal.aborted)
           throw new DOMException('Cancelled', 'AbortError');
-        const time = Math.min(c.end, start + index / c.fps);
         await seekVideo(video, time, controller.signal);
         const result = await send(
           index === 0 ? 'init' : 'step',
@@ -739,7 +746,10 @@ export default function ReconstructionWorkspace({
           cutAt = time;
           break;
         }
-        if (index % 10 === 0 || index === steps) {
+        if (
+          index % Math.max(1, Math.round(c.fps / 2)) === 0 ||
+          index === sampleTimes.length - 1
+        ) {
           setProgress((time - start) / (c.end - start));
           setSourceAt(time);
         }
@@ -1260,7 +1270,8 @@ export default function ReconstructionWorkspace({
               <label>
                 Recording time{' '}
                 <output>
-                  {formatTime(sourceAt)} / {formatTime(project.source.duration)}
+                  {formatTime(sourceAt, true)} /{' '}
+                  {formatTime(project.source.duration)}
                 </output>
                 <input
                   type="range"
@@ -1274,28 +1285,31 @@ export default function ReconstructionWorkspace({
                 />
               </label>
               <div className="reconstruction-actions">
-                <Button
-                  size="sm"
-                  variant="outline"
-                  disabled={!ready || tracking || recording}
-                  onClick={() => void seekSource(sourceAt - 1)}
-                >
-                  −1 s
-                </Button>
-                <Button
-                  size="sm"
-                  variant="outline"
-                  disabled={!ready || tracking || recording}
-                  onClick={() => void seekSource(sourceAt + 1)}
-                >
-                  +1 s
-                </Button>
+                {[-500, -100, 100, 500].map((milliseconds) => (
+                  <Button
+                    key={milliseconds}
+                    size="sm"
+                    variant="outline"
+                    disabled={!ready || tracking || recording}
+                    onClick={() =>
+                      void seekSource(
+                        (videoRef.current?.currentTime ?? sourceAt) +
+                          milliseconds / 1000,
+                      )
+                    }
+                    data-i18n-skip
+                  >
+                    {milliseconds < 0 ? '−' : '+'}
+                    {Math.abs(milliseconds)} ms
+                  </Button>
+                ))}
                 <label>
                   Go to second{' '}
                   <input
                     className="reconstruction-number"
                     type="number"
                     min="0"
+                    step="0.1"
                     max={project.source.duration}
                     defaultValue="0"
                     disabled={!ready || tracking || recording}
@@ -1348,7 +1362,7 @@ export default function ReconstructionWorkspace({
               <span>
                 BLUE <b>{score.blue}</b>
               </span>
-              <span>{formatTime(at)}</span>
+              <span>{formatTime(at, true)}</span>
               <span>
                 <b>{score.yellow}</b> YELLOW
               </span>
@@ -1420,7 +1434,7 @@ export default function ReconstructionWorkspace({
             ))}
           </NativeSelect>
           <output>
-            {formatTime(at)} / {formatTime(total)}
+            {formatTime(at, true)} / {formatTime(total)}
           </output>
         </div>
         <input
@@ -1682,19 +1696,23 @@ export default function ReconstructionWorkspace({
             <>
               <div className="reconstruction-form-row">
                 <label>
-                  Samples / second
+                  Tracking interval
                   <NativeSelect
+                    data-i18n-skip
                     value={selectedClip.fps}
                     disabled={tracking || recording}
                     onChange={(e) =>
                       updateClip((c) => ({ ...c, fps: Number(e.target.value) }))
                     }
                   >
-                    {[5, 10, 15, 20].map((n) => (
-                      <NativeSelectOption value={n} key={n}>
-                        {n}
-                      </NativeSelectOption>
-                    ))}
+                    {Array.from(new Set([2, 5, 10, 15, 20, selectedClip.fps]))
+                      .sort((a, b) => a - b)
+                      .map((n) => (
+                        <NativeSelectOption value={n} key={n}>
+                          {Number.isInteger(1000 / n) ? '' : '≈'}
+                          {Math.round(1000 / n)} ms · {n}/s
+                        </NativeSelectOption>
+                      ))}
                   </NativeSelect>
                 </label>
                 <label htmlFor="reconstruction-ball-diameter">
@@ -1719,6 +1737,11 @@ export default function ReconstructionWorkspace({
                   </NativeSelect>
                 </label>
               </div>
+              <p>
+                100 ms is recommended for fast robots. 500 ms is coarser; 50 ms
+                captures more detail but takes longer. Changing the interval
+                applies when you track the clip again.
+              </p>
               <label htmlFor="reconstruction-attack-direction">
                 Blue team attacks
                 <NativeSelect

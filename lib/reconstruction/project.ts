@@ -436,8 +436,36 @@ export function trimClip(
     ),
   };
 }
-export function formatTime(seconds: number) {
-  if (!Number.isFinite(seconds)) return '0:00';
-  const t = Math.max(0, Math.floor(seconds));
-  return `${Math.floor(t / 60)}:${String(t % 60).padStart(2, '0')}`;
+/** Index-based sampling avoids accumulated drift, including when resuming mid-clip. */
+export function trackingSampleTimes(start: number, end: number, fps: number) {
+  if (
+    !Number.isFinite(start) ||
+    !Number.isFinite(end) ||
+    start < 0 ||
+    end < start ||
+    !Number.isInteger(fps) ||
+    fps < 2 ||
+    fps > 20 ||
+    end - start > 3600
+  )
+    throw new Error('Invalid tracking interval.');
+  const intervals = (end - start) * fps;
+  // Floating-point subtraction must not produce a duplicate near the endpoint.
+  const steps =
+    Math.abs(intervals - Math.round(intervals)) < 1e-7
+      ? Math.round(intervals)
+      : Math.ceil(intervals);
+  return Array.from({ length: steps + 1 }, (_, index) =>
+    index === steps ? end : start + index / fps,
+  );
+}
+
+export function formatTime(seconds: number, precise = false) {
+  const safe = Number.isFinite(seconds) ? Math.max(0, seconds) : 0;
+  const milliseconds = Math.round(safe * 1000);
+  const t = precise ? Math.floor(milliseconds / 1000) : Math.floor(safe);
+  const whole = `${Math.floor(t / 60)}:${String(t % 60).padStart(2, '0')}`;
+  return precise
+    ? `${whole}.${String(milliseconds % 1000).padStart(3, '0')}`
+    : whole;
 }
