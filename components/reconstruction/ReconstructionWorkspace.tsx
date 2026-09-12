@@ -55,6 +55,7 @@ import {
   trimClip,
   formatTime,
   trackingSampleTimes,
+  fieldCornersAt,
   type Clip,
   type ReconstructionProject,
   type ReconstructionEvent,
@@ -76,6 +77,7 @@ type WorkerReply = {
   frame: TrackFrame;
   cut: boolean;
   lost: TrackId[];
+  reacquired?: TrackId[];
   error?: string;
 };
 const COLORS: Record<TrackId, string> = {
@@ -106,6 +108,7 @@ export default function ReconstructionWorkspace({
   const [url, setUrl] = useState('');
   const [ready, setReady] = useState(false);
   const [sourceAt, setSourceAt] = useState(0);
+  const [seekDraft, setSeekDraft] = useState<string | null>(null);
   const [rangeStart, setRangeStart] = useState(0);
   const [rangeEnd, setRangeEnd] = useState(60);
   const [clipId, setClipId] = useState('');
@@ -120,6 +123,11 @@ export default function ReconstructionWorkspace({
   const [cursor, setCursor] = useState({ x: 0.5, y: 0.5 });
   const [tracking, setTracking] = useState(false);
   const [progress, setProgress] = useState(0);
+  const [trackingStats, setTrackingStats] = useState({
+    frames: 0,
+    visible: 0,
+    recovered: 0,
+  });
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
   const [eventKind, setEventKind] =
@@ -154,6 +162,11 @@ export default function ReconstructionWorkspace({
   }, [project, at, clipId]);
   const exportInterrupted = useRef(false);
   const selectedClip = project?.clips.find((c) => c.id === clipId) ?? null;
+  const displayCorners = selectedClip
+    ? editMode === 'corners'
+      ? selectedClip.corners
+      : fieldCornersAt(selectedClip, sourceAt)
+    : [];
   const total = project ? duration(project) : 0;
   const location = useMemo(
     () => (project ? locate(project, at) : null),
@@ -330,6 +343,7 @@ export default function ReconstructionWorkspace({
     setMessage('');
     setEditMode('none');
     pendingFile.current = { file, relink };
+    setSeekDraft(null);
     setUrl(URL.createObjectURL(file));
     if (!relink) {
       setProject(null);
@@ -387,7 +401,7 @@ export default function ReconstructionWorkspace({
     if (!pending.relink) {
       setProject(makeProject(metadata));
       setRangeStart(0);
-      setRangeEnd(Math.min(600, video.duration));
+      setRangeEnd(Math.min(3600, video.duration));
     }
     setReady(true);
     const loc =
@@ -487,7 +501,42 @@ export default function ReconstructionWorkspace({
         : p,
     );
     setEditMode('corners');
-    await seekSource(selectedClip.start);
+    await seekSource(selectedClip.referenceTime ?? selectedClip.start);
+  };
+  const useReferenceFrame = () => {
+    if (!selectedClip || !ready || tracking || recording) return;
+    if (
+      (selectedClip.frames.length || Object.keys(selectedClip.seeds).length) &&
+      !window.confirm(
+        'Use this frame as the appearance reference? Existing identities and tracking will be cleared. Confirmed events remain.',
+      )
+    )
+      return;
+    const referenceTime = sourceAt;
+    setProject((p) =>
+      p
+        ? {
+            ...p,
+            clips: p.clips.map((c) =>
+              c.id === clipId
+                ? {
+                    ...c,
+                    referenceTime,
+                    corners: fieldCornersAt(c, referenceTime),
+                    seeds: {},
+                    frames: [],
+                  }
+                : c,
+            ),
+            events: p.events.filter(
+              (e) => e.clipId !== clipId || e.status === 'confirmed',
+            ),
+          }
+        : p,
+    );
+    setPlaying(false);
+    setEditMode(selectedClip.corners.length === 4 ? 'seed' : 'corners');
+    setSelected('ball');
   };
   const trimSelected = () => {
     if (!project || !selectedClip) return;
@@ -542,9 +591,13 @@ export default function ReconstructionWorkspace({
         setSelected('ball');
       }
     } else if (editMode === 'seed') {
-      if (Math.abs(sourceAt - selectedClip.start) > 0.05) {
+      if (
+        Math.abs(
+          sourceAt - (selectedClip.referenceTime ?? selectedClip.start),
+        ) > 0.05
+      ) {
         setError(
-          'Identify the starting positions at the beginning of this clip. Use Correct position for later frames.',
+          'Identify the objects on the reference frame. Select Use this frame as reference to choose a different clear frame.',
         );
         return;
       }
@@ -589,6 +642,7 @@ export default function ReconstructionWorkspace({
               sampleClip(c, sourceAt)[selected]?.yaw ??
                 c.seeds[selected]?.yaw ??
                 0,
+              sourceAt,
             ),
           ),
         );
@@ -635,7 +689,7 @@ export default function ReconstructionWorkspace({
           }),
         )
       : c.seeds;
-    if (!Object.keys(startingSeeds).length) {
+    if (!Object.keys(startingSeeds).length && !Object.keys(c.seeds).length) {
       setError('Identify at least one visible robot or ball first.');
       return;
     }
@@ -666,6 +720,7 @@ export default function ReconstructionWorkspace({
     videoRef.current.pause();
     setTracking(true);
     setProgress(0);
+    setTrackingStats({ frames: 0, visible: 0, recovered: 0 });
     setError('');
     setEditMode('none');
     const controller = new AbortController();
@@ -675,8 +730,13 @@ export default function ReconstructionWorkspace({
     const video = videoRef.current;
     const frames = c.frames.filter((f) => f.time < start - 0.001);
     let newSamples = 0;
-    let cutAt: number | null = null;
-    const send = (type: 'init' | 'step', time: number, image: ImageData) =>
+    const cutTimes: number[] = [];
+    let recovered = 0;
+    const send = (
+      type: 'init' | 'step' | 'resume',
+      time: number,
+      image: ImageData,
+    ) =>
       new Promise<WorkerReply>((resolve, reject) => {
         if (!worker || controller.signal.aborted) {
           reject(new DOMException('Cancelled', 'AbortError'));
@@ -712,10 +772,9 @@ export default function ReconstructionWorkspace({
           {
             type,
             time,
-            clip:
-              type === 'init'
-                ? { ...c, frames: [], seeds: startingSeeds }
-                : undefined,
+            clip: type === 'init' ? { ...c, frames: [] } : undefined,
+            seeds: type === 'resume' ? startingSeeds : undefined,
+            corners: type === 'resume' ? fieldCornersAt(c, start) : undefined,
             image: {
               width: image.width,
               height: image.height,
@@ -731,32 +790,47 @@ export default function ReconstructionWorkspace({
         { type: 'module' },
       );
       workerRef.current = worker;
+      const referenceTime = c.referenceTime ?? c.start;
+      await seekVideo(video, referenceTime, controller.signal);
+      let initial = await send(
+        'init',
+        referenceTime,
+        readVideoFrame(video, canvas),
+      );
+      if (continueHere) {
+        await seekVideo(video, start, controller.signal);
+        initial = await send('resume', start, readVideoFrame(video, canvas));
+      }
       for (const [index, time] of sampleTimes.entries()) {
         if (controller.signal.aborted)
           throw new DOMException('Cancelled', 'AbortError');
         await seekVideo(video, time, controller.signal);
-        const result = await send(
-          index === 0 ? 'init' : 'step',
-          time,
-          readVideoFrame(video, canvas),
-        );
+        const result =
+          index === 0 &&
+          (continueHere || Math.abs(time - referenceTime) < 0.001)
+            ? initial
+            : await send('step', time, readVideoFrame(video, canvas));
         frames.push(result.frame);
         newSamples++;
-        if (result.cut) {
-          cutAt = time;
-          break;
-        }
+        recovered += result.reacquired?.length ?? 0;
+        if (result.cut && time - (cutTimes.at(-1) ?? -Infinity) > 2)
+          cutTimes.push(time);
         if (
           index % Math.max(1, Math.round(c.fps / 2)) === 0 ||
           index === sampleTimes.length - 1
         ) {
           setProgress((time - start) / (c.end - start));
           setSourceAt(time);
+          setTrackingStats({
+            frames: newSamples,
+            visible: Object.keys(result.frame.actors).length,
+            recovered,
+          });
         }
       }
       setMessage(
-        cutAt !== null
-          ? 'Large scene change detected. Tracking stopped here; create a new calibrated clip after the cut.'
+        cutTimes.length
+          ? 'Full range processed. Camera changes were marked for review; add separately calibrated clips for different views.'
           : 'Tracking finished. Review gaps and identity changes before trusting the reconstruction.',
       );
     } catch (e) {
@@ -774,14 +848,14 @@ export default function ReconstructionWorkspace({
       abortRef.current = null;
       const completed = newSamples ? { ...c, frames } : c;
       const suggestions = suggestEvents(completed);
-      if (cutAt !== null)
+      for (const cutAt of cutTimes)
         suggestions.push({
           id: `${c.id}:camera-cut:${cutAt.toFixed(3)}`,
           clipId: c.id,
           time: cutAt,
           kind: 'camera-cut',
           status: 'suggested',
-          note: 'Large image change. Recalibrate and identify the actors in a new clip.',
+          note: 'Large image change. Detection resumes when the calibrated view returns; use a separate calibration for a different view.',
         });
       setProject((p) =>
         p
@@ -843,6 +917,10 @@ export default function ReconstructionWorkspace({
       setReady(false);
       setProject(value);
       setClipId(value.clips[0]?.id ?? '');
+      setRangeStart(value.clips[0]?.start ?? 0);
+      setRangeEnd(value.clips[0]?.end ?? Math.min(3600, value.source.duration));
+      setSourceAt(value.clips[0]?.start ?? 0);
+      setSeekDraft(null);
       setAt(0);
       setEditMode('none');
       setError('');
@@ -1152,8 +1230,12 @@ export default function ReconstructionWorkspace({
                 playsInline
                 muted
                 onLoadedMetadata={metadataLoaded}
-                onTimeUpdate={(e) => setSourceAt(e.currentTarget.currentTime)}
-                onSeeked={(e) => setSourceAt(e.currentTarget.currentTime)}
+                onTimeUpdate={(e) => {
+                  if (!tracking) setSourceAt(e.currentTarget.currentTime);
+                }}
+                onSeeked={(e) => {
+                  if (!tracking) setSourceAt(e.currentTarget.currentTime);
+                }}
                 onError={() => {
                   setReady(false);
                   setError(
@@ -1190,14 +1272,14 @@ export default function ReconstructionWorkspace({
                     />
                   </g>
                 )}
-                {selectedClip.corners.length > 1 && (
+                {displayCorners.length > 1 && (
                   <polyline
                     points={
-                      selectedClip.corners
+                      displayCorners
                         .map((p) => `${p.x * 1000},${p.y * 1000}`)
                         .join(' ') +
-                      (selectedClip.corners.length === 4
-                        ? ` ${selectedClip.corners[0].x * 1000},${selectedClip.corners[0].y * 1000}`
+                      (displayCorners.length === 4
+                        ? ` ${displayCorners[0].x * 1000},${displayCorners[0].y * 1000}`
                         : '')
                     }
                     fill="none"
@@ -1205,7 +1287,7 @@ export default function ReconstructionWorkspace({
                     strokeWidth="3"
                   />
                 )}
-                {selectedClip.corners.map((p, i) => (
+                {displayCorners.map((p, i) => (
                   <g key={i}>
                     <circle
                       cx={p.x * 1000}
@@ -1311,11 +1393,19 @@ export default function ReconstructionWorkspace({
                     min="0"
                     step="0.1"
                     max={project.source.duration}
-                    defaultValue="0"
+                    value={seekDraft ?? sourceAt.toFixed(3)}
+                    onChange={(e) => setSeekDraft(e.currentTarget.value)}
                     disabled={!ready || tracking || recording}
                     onBlur={(e) => {
-                      if (Number.isFinite(e.currentTarget.valueAsNumber))
+                      if (
+                        seekDraft !== null &&
+                        Number.isFinite(e.currentTarget.valueAsNumber)
+                      )
                         void seekSource(e.currentTarget.valueAsNumber);
+                      setSeekDraft(null);
+                    }}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') e.currentTarget.blur();
                     }}
                   />
                 </label>
@@ -1508,6 +1598,17 @@ export default function ReconstructionWorkspace({
               variant="outline"
               size="sm"
               disabled={!ready || tracking || recording}
+              onClick={() => {
+                setRangeStart(0);
+                setRangeEnd(Math.min(3600, project?.source.duration ?? 0));
+              }}
+            >
+              Use whole recording
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={!ready || tracking || recording}
               onClick={() => setRangeStart(Number(sourceAt.toFixed(2)))}
             >
               Use current time as start
@@ -1626,6 +1727,22 @@ export default function ReconstructionWorkspace({
         <section className="reconstruction-panel reconstruction-tool">
           <h2>2 · Calibrate & track</h2>
           <p>
+            Choose a clear frame where the field and objects are visible, then
+            use it as the reference. Detection searches the whole selected
+            range, including footage before this frame.
+          </p>
+          {selectedClip && (
+            <p>
+              Reference frame:{' '}
+              <span data-i18n-skip>
+                {formatTime(
+                  selectedClip.referenceTime ?? selectedClip.start,
+                  true,
+                )}
+              </span>
+            </p>
+          )}
+          <p>
             Click the four corners of the white playing rectangle, not the outer
             walls. Order is from the blue-goal end, looking towards the opposite
             goal: left, right, far right, far left.
@@ -1639,6 +1756,13 @@ export default function ReconstructionWorkspace({
             <small>White rectangle: 1.58 × 2.19 m · 2026 field</small>
           </div>
           <div className="reconstruction-actions">
+            <Button
+              variant="outline"
+              disabled={!selectedClip || !ready || tracking || recording}
+              onClick={useReferenceFrame}
+            >
+              Use this frame as reference
+            </Button>
             <Button
               variant="outline"
               disabled={!selectedClip || !ready || tracking || recording}
@@ -1658,11 +1782,13 @@ export default function ReconstructionWorkspace({
               }
               onClick={() => {
                 setEditMode('seed');
-                void seekSource(selectedClip!.start);
+                void seekSource(
+                  selectedClip!.referenceTime ?? selectedClip!.start,
+                );
               }}
             >
               <Crosshair />
-              Identify starting positions
+              Identify reference objects
             </Button>
           </div>
           {editMode === 'corners' && (
@@ -1675,8 +1801,8 @@ export default function ReconstructionWorkspace({
           {editMode === 'seed' && (
             <p className="reconstruction-instruction">
               Click the centre of {TRACK_LABELS[selected]} in the original
-              frame. Choose the same visible point throughout. Identify only
-              actors you can see.
+              reference frame. Choose the same visible point throughout.
+              Identify only actors you can see.
             </p>
           )}
           <div className="reconstruction-actor-buttons">
@@ -1866,12 +1992,21 @@ export default function ReconstructionWorkspace({
                 Tracking frames… {Math.round(progress * 100)}% · Keep this tab
                 open.
               </output>
+              <p>
+                {`Frames processed: ${trackingStats.frames} · Detected now: ${trackingStats.visible}/5 · Re-detections: ${trackingStats.recovered}`}
+              </p>
+              <p>
+                Visibility counts are not an accuracy score. Review identities
+                and hidden objects against the recording.
+              </p>
             </>
           )}
           <p>
-            Appearance tracking supports orange and dark balls. A seed
-            identifies an object, not its team automatically. When objects merge
-            or disappear, the replay leaves a gap instead of inventing motion.
+            Field-aware object detection searches every frame and re-detects
+            missing objects automatically. You assign the team and robot number
+            when identifying each reference object. Up to four robots and one
+            ball are assigned without duplicating identities. Hidden or
+            ambiguous objects remain gaps, not invented motion.
           </p>
         </section>
         <section className="reconstruction-panel reconstruction-tool">

@@ -95,7 +95,13 @@ const seeds = z
     ball: seed.optional(),
   })
   .strict();
-const frame = z.object({ time, actors: tracks }).strict();
+const frame = z
+  .object({
+    time,
+    actors: tracks,
+    corners: z.array(point).length(4).optional(),
+  })
+  .strict();
 const clip = z
   .object({
     id: z.string().min(1).max(80),
@@ -106,6 +112,7 @@ const clip = z
     seeds,
     frames: z.array(frame).max(200000),
     fps: z.number().int().min(2).max(20),
+    referenceTime: time.optional(),
     ballDiameter: z.enum(['42', '74']),
     blueAttacksPositive: z.boolean(),
   })
@@ -181,6 +188,7 @@ export function parseProject(text: string): ReconstructionProject {
       c.end <= c.start ||
       c.end > p.source.duration + 0.05 ||
       c.end - c.start > 3600 ||
+      (c.referenceTime !== undefined && c.referenceTime > p.source.duration) ||
       (c.corners.length === 4 && !validCorners(c.corners)) ||
       (c.frames.length > 0 && c.corners.length !== 4)
     )
@@ -188,7 +196,12 @@ export function parseProject(text: string): ReconstructionProject {
     ids.add(c.id);
     let last = -1;
     for (const f of c.frames) {
-      if (f.time <= last || f.time < c.start - 0.001 || f.time > c.end + 0.001)
+      if (
+        f.time <= last ||
+        f.time < c.start - 0.001 ||
+        f.time > c.end + 0.001 ||
+        (f.corners && !validCorners(f.corners))
+      )
         throw new Error(
           'Replay samples must be ordered and inside their clip.',
         );
@@ -347,13 +360,27 @@ export function scoreAt(p: ReconstructionProject, at: number) {
     }
   return score;
 }
+/** Latest accepted white-line calibration, with original corners as a safe fallback. */
+export function fieldCornersAt(c: Clip, time: number) {
+  let lo = 0,
+    hi = c.frames.length;
+  while (lo < hi) {
+    const middle = (lo + hi) >> 1;
+    if (c.frames[middle].time <= time) lo = middle + 1;
+    else hi = middle;
+  }
+  for (let i = lo - 1; i >= 0; i--)
+    if (c.frames[i].corners) return c.frames[i].corners!;
+  return c.corners;
+}
 export function manualSample(
   c: Clip,
   id: TrackId,
   point: { x: number; y: number },
   yaw = 0,
+  time = c.referenceTime ?? c.start,
 ): TrackSample {
-  const h = homography(c.corners, FIELD_CORNERS);
+  const h = homography(fieldCornersAt(c, time), FIELD_CORNERS);
   const ground = projectPoint(h, {
     x: point.x,
     y: point.y + (c.seeds[id]?.groundOffset ?? 0),
@@ -379,7 +406,7 @@ export function correctAt(
   if (value) actors[id] = value;
   else delete actors[id];
   const frames = c.frames.filter((f) => Math.abs(f.time - time) > 0.001);
-  frames.push({ time, actors });
+  frames.push({ time, actors, corners: fieldCornersAt(c, time) });
   frames.sort((a, b) => a.time - b.time);
   return { ...c, frames };
 }
@@ -403,33 +430,24 @@ export function trimClip(
       'Trim must stay inside the selected clip. Add a new clip to include different footage.',
     );
   const samples = sampleClip(c, start);
-  const seeds: Clip['seeds'] =
-    start === c.start
-      ? c.seeds
-      : Object.fromEntries(
-          ACTOR_IDS.flatMap((id) =>
-            samples[id] && c.seeds[id]
-              ? [
-                  [
-                    id,
-                    {
-                      ...c.seeds[id],
-                      x: samples[id].imageX,
-                      y: samples[id].imageY,
-                      yaw: samples[id].yaw,
-                    },
-                  ],
-                ]
-              : [],
-          ),
-        );
+  // Trimming the timeline must not discard an exemplar because that actor is hidden at the new start.
+  const seeds = c.seeds;
+  const referenceTime = c.referenceTime ?? c.start;
   const frames = c.frames.filter((f) => f.time >= start && f.time <= end);
+  if (frames.length)
+    frames[0] = { ...frames[0], corners: fieldCornersAt(c, frames[0].time) };
   if (Object.keys(samples).length && (!frames.length || frames[0].time > start))
-    frames.unshift({ time: start, actors: samples });
+    frames.unshift({
+      time: start,
+      actors: samples,
+      corners: fieldCornersAt(c, start),
+    });
   return {
     ...project,
     clips: project.clips.map((clip) =>
-      clip.id === clipId ? { ...c, start, end, seeds, frames } : clip,
+      clip.id === clipId
+        ? { ...c, start, end, referenceTime, seeds, frames }
+        : clip,
     ),
     events: project.events.filter(
       (e) => e.clipId !== clipId || (e.time >= start && e.time <= end),

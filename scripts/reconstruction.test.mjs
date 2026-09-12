@@ -19,8 +19,12 @@ const {
   trimClip,
   trackingSampleTimes,
   formatTime,
+  fieldCornersAt,
 } = await import('../lib/reconstruction/project.ts');
 const { LocalTracker } = await import('../lib/reconstruction/tracking.ts');
+const { fitFieldBoundary } =
+  await import('../lib/reconstruction/field-alignment.ts');
+const { DarkBallDetector } = await import('../lib/reconstruction/dark-ball.ts');
 const { suggestEvents, mergeSuggestions } =
   await import('../lib/reconstruction/events.ts');
 const { seekVideo } = await import('../lib/reconstruction/video.ts');
@@ -478,6 +482,213 @@ test('trimming retains ordered valid samples and only events inside the kept ran
   assert.equal(trimmed.events.length, 1);
   assert.equal(trimmed.events[0].id, 'keep');
   assert.equal(p.clips[0].frames.length, 21);
+  assert.equal(trimmed.clips[0].referenceTime, 10);
+  assert.deepEqual(trimmed.clips[0].seeds, c.seeds);
   assert.doesNotThrow(() => parseProject(serializeProject(trimmed)));
   assert.throws(() => trimClip(p, c.id, 9, 12));
+});
+
+const squareCorners = [
+  { x: 0, y: 0 },
+  { x: 1, y: 0 },
+  { x: 1, y: 1 },
+  { x: 0, y: 1 },
+];
+function robotScene(robots = []) {
+  const frame = image(15, 15);
+  for (const { x: cx, y: cy, color } of robots)
+    for (let y = -12; y <= 12; y++)
+      for (let x = -12; x <= 12; x++)
+        if (x * x + y * y <= 144)
+          frame.data.set([...color, 255], ((cy + y) * 200 + cx + x) * 4);
+  return frame;
+}
+const robotSeed = (x, y) => ({
+  x: x / 200,
+  y: y / 200,
+  radius: 0.06,
+  groundOffset: 0,
+  yaw: 0,
+});
+test('whole-field detection reacquires after long absence, large displacement and a title card', () => {
+  const red = { x: 60, y: 70, color: [200, 30, 30] };
+  const c = {
+    ...clip(),
+    corners: squareCorners,
+    seeds: { 'blue-1': robotSeed(60, 70) },
+  };
+  const tracker = new LocalTracker(c, robotScene([red]), 400);
+  for (let time = 0; time < 3; time += 0.1)
+    assert.equal(
+      tracker.step(robotScene(), time).frame.actors['blue-1'],
+      undefined,
+    );
+  const recovered = tracker.step(robotScene([{ ...red, x: 145, y: 150 }]), 3.1);
+  assert.ok(Math.abs(recovered.frame.actors['blue-1'].imageX - 0.725) < 0.02);
+  assert.ok(recovered.reacquired.includes('blue-1'));
+  const card = robotScene();
+  card.data.fill(255);
+  assert.deepEqual(tracker.step(card, 3.2).frame.actors, {});
+  assert.ok(tracker.step(robotScene([red]), 3.3).frame.actors['blue-1']);
+});
+test('joint assignment never assigns the same visible body to two robot identities', () => {
+  const color = [200, 30, 30],
+    a = { x: 60, y: 70, color },
+    b = { x: 145, y: 140, color };
+  const c = {
+    ...clip(),
+    corners: squareCorners,
+    seeds: { 'blue-1': robotSeed(a.x, a.y), 'blue-2': robotSeed(b.x, b.y) },
+  };
+  const tracker = new LocalTracker(c, robotScene([a, b]), 10);
+  const result = tracker.step(robotScene([a]), 10.1);
+  assert.equal(Object.keys(result.frame.actors).length, 1);
+});
+test('resume keeps hidden reference identities available for subsequent re-detection', () => {
+  const a = { x: 60, y: 70, color: [200, 30, 30] },
+    b = { x: 145, y: 140, color: [230, 220, 230] };
+  const c = {
+    ...clip(),
+    corners: squareCorners,
+    seeds: { 'blue-1': robotSeed(a.x, a.y), 'yellow-1': robotSeed(b.x, b.y) },
+  };
+  const tracker = new LocalTracker(c, robotScene([a, b]), 10);
+  const resumed = tracker.resume(
+    robotScene([a]),
+    20,
+    { 'blue-1': c.seeds['blue-1'] },
+    squareCorners,
+  );
+  assert.equal(resumed.actors['yellow-1'], undefined);
+  const result = tracker.step(robotScene([a, { ...b, x: 140, y: 60 }]), 20.1);
+  assert.ok(result.frame.actors['yellow-1']);
+  assert.ok(result.reacquired.includes('yellow-1'));
+});
+test('reference time and accepted alignment survive corrections, trimming and portable roundtrip', () => {
+  const moved = corners.map((p) => ({ x: p.x + 0.02, y: p.y + 0.01 }));
+  const c = {
+    ...clip(),
+    start: 0,
+    end: 1800,
+    referenceTime: 400,
+    frames: [
+      { time: 100, actors: { ball: sample() }, corners: moved },
+      { time: 101, actors: { ball: sample() } },
+      { time: 102, actors: { ball: sample() } },
+    ],
+  };
+  assert.deepEqual(fieldCornersAt(c, 50), corners);
+  assert.deepEqual(fieldCornersAt(c, 101), moved);
+  const corrected = correctAt(
+    c,
+    101,
+    'ball',
+    manualSample(c, 'ball', moved[0], 0, 101),
+  );
+  assert.ok(
+    Math.abs(corrected.frames[1].actors.ball.x - FIELD_CORNERS[0].x) < 1e-7,
+  );
+  assert.deepEqual(corrected.frames[1].corners, moved);
+  const p = {
+    ...makeProject({ ...source, duration: 1800 }),
+    clips: [corrected],
+  };
+  const trimmed = trimClip(p, c.id, 101, 102);
+  const loaded = parseProject(serializeProject(trimmed));
+  assert.equal(loaded.clips[0].referenceTime, 400);
+  assert.deepEqual(loaded.clips[0].seeds, c.seeds);
+  fieldCornersAt(loaded.clips[0], 101).forEach((p, i) =>
+    assert.ok(Math.hypot(p.x - moved[i].x, p.y - moved[i].y) < 1e-5),
+  );
+  assert.throws(() =>
+    parseProject(
+      JSON.stringify({ ...p, clips: [{ ...c, referenceTime: 2000 }] }),
+    ),
+  );
+});
+function linedField(dx = 0, dy = 0, lines = true) {
+  const width = 640,
+    height = 360,
+    data = new Uint8ClampedArray(width * height * 4);
+  for (let y = 0; y < height; y++)
+    for (let x = 0; x < width; x++) {
+      const line =
+        lines &&
+        (((Math.abs(x - 100 - dx) <= 2 || Math.abs(x - 540 - dx) <= 2) &&
+          y >= 60 + dy &&
+          y <= 300 + dy) ||
+          ((Math.abs(y - 60 - dy) <= 2 || Math.abs(y - 300 - dy) <= 2) &&
+            x >= 100 + dx &&
+            x <= 540 + dx));
+      data.set(
+        line ? [235, 235, 225, 255] : [30, 115, 60, 255],
+        (y * width + x) * 4,
+      );
+    }
+  return { width, height, data };
+}
+test('white-line alignment follows small camera translations and rejects absent boundaries', () => {
+  const original = [
+    { x: 100, y: 60 },
+    { x: 540, y: 60 },
+    { x: 540, y: 300 },
+    { x: 100, y: 300 },
+  ];
+  for (const [dx, dy] of [
+    [0, 0],
+    [8, -5],
+    [-12, 9],
+  ]) {
+    const fit = fitFieldBoundary(linedField(dx, dy), original);
+    assert.equal(fit.valid, true);
+    fit.corners.forEach((p, i) =>
+      assert.ok(
+        Math.hypot(p.x - original[i].x - dx, p.y - original[i].y - dy) < 4,
+      ),
+    );
+  }
+  assert.equal(
+    fitFieldBoundary(linedField(0, 0, false), original).valid,
+    false,
+  );
+});
+
+test('dark ball detection uses contrast on a blue goal floor without adopting lines or robot hardware', () => {
+  const reference = image(100, 100, [25, 25, 25]);
+  const detector = DarkBallDetector.fromReference(reference, 102, 102, 7.68);
+  assert.ok(
+    detector,
+    'An off-centre reference must retain the requested ball size',
+  );
+  function goalFrame(radius) {
+    const frame = image(15, 15);
+    for (let y = 60; y < 160; y++)
+      for (let x = 120; x < 190; x++)
+        frame.data.set([25, 85, 200, 255], (y * 200 + x) * 4);
+    for (let y = -radius; y <= radius; y++)
+      for (let x = -radius; x <= radius; x++)
+        if (x * x + y * y <= radius * radius)
+          frame.data.set([25, 25, 25, 255], ((110 + y) * 200 + 150 + x) * 4);
+    return frame;
+  }
+  const visible = detector.detect(
+    goalFrame(5),
+    [],
+    (x, y) => x > 125 && x < 185 && y > 70 && y < 150,
+  );
+  assert.ok(visible.some((p) => Math.hypot(p.x - 150, p.y - 110) < 3));
+  for (const radius of [0, 2, 28])
+    assert.equal(
+      detector.detect(
+        goalFrame(radius),
+        [],
+        (x, y) => x > 125 && x < 185 && y > 70 && y < 150,
+      ).length,
+      0,
+    );
+  assert.equal(
+    DarkBallDetector.fromReference(image(100, 100), 100, 100, 7.68),
+    null,
+    'Orange references keep the generic detector',
+  );
 });

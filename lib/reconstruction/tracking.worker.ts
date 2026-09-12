@@ -3,8 +3,10 @@ import type { Clip } from './project';
 let tracker: LocalTracker | null = null;
 self.onmessage = (
   event: MessageEvent<{
-    type: 'init' | 'step';
+    type: 'init' | 'step' | 'resume';
     clip?: Clip;
+    seeds?: Clip['seeds'];
+    corners?: Clip['corners'];
     image: Pixels;
     time: number;
   }>,
@@ -15,6 +17,22 @@ self.onmessage = (
       tracker = new LocalTracker(clip, image, time);
       self.postMessage({
         frame: tracker.initial(image, time),
+        cut: false,
+        lost: [],
+      });
+    } else if (
+      type === 'resume' &&
+      tracker &&
+      event.data.seeds &&
+      event.data.corners
+    ) {
+      self.postMessage({
+        frame: tracker.resume(
+          image,
+          time,
+          event.data.seeds,
+          event.data.corners,
+        ),
         cut: false,
         lost: [],
       });

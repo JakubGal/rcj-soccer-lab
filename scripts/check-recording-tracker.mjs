@@ -9,8 +9,8 @@ if (!ffmpeg || !recording)
   throw new Error(
     'Usage: node scripts/check-recording-tracker.mjs <ffmpeg-path> <Finale_lightweight.mp4>',
   );
-const width = 640,
-  height = 360,
+const width = 960,
+  height = 540,
   stride = width * height * 4;
 const result = spawnSync(
   ffmpeg,
@@ -24,19 +24,19 @@ const result = spawnSync(
     '-t',
     '8',
     '-vf',
-    'fps=10,scale=640:360',
+    `fps=10,scale=${width}:${height}`,
     '-f',
     'rawvideo',
     '-pix_fmt',
     'rgba',
     'pipe:1',
   ],
-  { maxBuffer: 100 * 1024 * 1024 },
+  { maxBuffer: 180 * 1024 * 1024 },
 );
 if (result.status !== 0) throw new Error(result.stderr.toString());
 const seed = (x, y, radius) => ({
-  x: x / width,
-  y: y / height,
+  x: x / 640,
+  y: y / 360,
   radius,
   groundOffset: 0,
   yaw: 0,
@@ -66,7 +66,36 @@ const frame = (i) => ({
     result.stdout.subarray(i * stride, (i + 1) * stride),
   ),
 });
-const tracker = new LocalTracker(clip, frame(0), 400),
+// The browser seeks the exact reference timestamp; fps filtering chooses a later frame.
+// Use a separate raw seek for the appearance reference, consistently with the full benchmark.
+const reference = spawnSync(
+  ffmpeg,
+  [
+    '-v',
+    'error',
+    '-ss',
+    '400',
+    '-i',
+    recording,
+    '-frames:v',
+    '1',
+    '-vf',
+    `scale=${width}:${height}`,
+    '-f',
+    'rawvideo',
+    '-pix_fmt',
+    'rgba',
+    'pipe:1',
+  ],
+  { maxBuffer: stride * 2 },
+);
+if (reference.status !== 0 || reference.stdout.length !== stride)
+  throw new Error('Could not decode reference frame.');
+const tracker = new LocalTracker(
+    clip,
+    { width, height, data: reference.stdout },
+    400,
+  ),
   seen = {};
 const start = performance.now();
 const expected = {
@@ -103,11 +132,13 @@ for (let i = 1; i < count; i++) {
       const p = result.frame.actors[id];
       assert.ok(p, `${id} visible at frame ${i}`);
       assert.ok(
-        Math.hypot(p.imageX * width - x, p.imageY * height - y) < 14,
+        Math.hypot(p.imageX * 640 - x, p.imageY * 360 - y) < 14,
         `${id} stays on the same body at frame ${i}`,
       );
     }
-  if (i >= 39)
+  // Only these individually inspected frames have no confidently separable ball.
+  // 404.2 and 405.0 show the ball near the lower-left boundary; blanket absence was wrong.
+  if ([60, 65, 79].includes(i))
     assert.equal(
       result.frame.actors.ball,
       undefined,
@@ -124,8 +155,8 @@ for (let i = 1; i < count; i++) {
           Object.entries(result.frame.actors).map(([id, p]) => [
             id,
             [
-              Math.round(p.imageX * width),
-              Math.round(p.imageY * height),
+              Math.round(p.imageX * 640),
+              Math.round(p.imageY * 360),
               Number(p.confidence.toFixed(2)),
             ],
           ]),

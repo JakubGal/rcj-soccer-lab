@@ -3,6 +3,7 @@ import { readFileSync } from 'node:fs';
 import { registerHooks } from 'node:module';
 import { test } from 'node:test';
 import ts from 'typescript';
+import reconstructionTranslations from './reconstruction-translations.mjs';
 
 registerHooks({
   resolve(specifier, context, nextResolve) {
@@ -56,6 +57,32 @@ const { findSections } = await import('../lib/rulebook/catalog.ts');
 const generated = JSON.parse(
   readFileSync(new URL('../lib/i18n/catalog.generated.json', import.meta.url)),
 );
+
+test('reconstruction controls use reviewed frame terminology and retain live counter values', () => {
+  for (const locale of ['sk', 'de', 'ja']) {
+    for (const [source, translation] of Object.entries(
+      reconstructionTranslations[locale],
+    )) {
+      if (source.includes('{0}')) {
+        assert.equal(
+          translateText(
+            'Frames processed: 81 · Detected now: 4/5 · Re-detections: 12',
+            locale,
+          ),
+          translation
+            .replace('{0}', '81')
+            .replace('{1}', '4')
+            .replace('{2}', '12'),
+        );
+      } else
+        assert.equal(
+          translateText(source, locale),
+          translation,
+          `${locale}: ${source}`,
+        );
+    }
+  }
+});
 
 test('supports English, Slovak, German and Japanese in stable order', () => {
   assert.deepEqual([...SUPPORTED_LOCALES], ['en', 'sk', 'de', 'ja']);
