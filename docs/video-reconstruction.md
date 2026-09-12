@@ -15,6 +15,12 @@ This is an **experimental, assisted reconstruction tool**, not an exact video-to
 8. **Save replay** downloads a `.rcj-replay.json` file. **Load replay** plays it without the original video. Relink the original recording only when you want to check footage or track again. Save explicitly before closing: this workspace has no automatic cloud or browser backup.
 9. **Export 3D video** records the full edited timeline with score and confirmed events at 720p or 1080p. Keep the tab visible. Export takes approximately replay duration, has no audio, and uses the browser's supported WebM or MP4 encoder. Leaving the tab or stopping produces a clearly named partial video. Downloads stay local.
 
+### Live tracking and playback
+
+While tracking runs, **both panels now show the latest processed frame**: the original image, detection outlines, 3D positions and timeline advance together. The original image is painted from the exact decoded frame sent to the detector, rather than depending on the browser to visibly present every paused-video seek. A progress bar, recording timestamp and processed-frame count appear directly below the views. This is a processing preview, not real-time video playback; its speed depends on the computer.
+
+Use **Stop and review** to keep completed samples and inspect the last processed moment. Completion and cancellation no longer reset the view to the clip's beginning. **Continue tracking here** resumes from that position; **Start** returns to the beginning. Pressing **Play replay** at the replay's end starts it again. Seeking while playing pauses the replay and keeps the new destination instead of allowing the old playback clock to overwrite it.
+
 ## What is and is not recovered
 
 For precise inspection, use the **−500 ms / −100 ms / +100 ms / +500 ms** buttons below the original recording. Source and replay clocks show milliseconds. The slider navigates the whole recording, so a small mouse movement on a long recording can still jump several seconds; the buttons seek by exact time increments instead. Seeking alone does not create new tracking samples.

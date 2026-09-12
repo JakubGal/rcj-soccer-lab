@@ -21,6 +21,9 @@ const cut =
   'Large image change. Detection resumes when the calibrated view returns; use a separate calibration for a different view.';
 const reconstructionTranslations = {
   sk: {
+    'Live tracking preview': 'Živý náhľad sledovania',
+    'Stop and review': 'Zastaviť a skontrolovať',
+    'Processing: {0} · {1} frames': 'Spracovanie: {0} · {1} snímok',
     [choose]:
       'Vyberte zreteľnú snímku, na ktorej vidno ihrisko aj objekty, a použite ju ako referenčnú. Detekcia prehľadá celý vybraný úsek vrátane záberov pred touto snímkou.',
     [identify]:
@@ -47,6 +50,9 @@ const reconstructionTranslations = {
     'Use whole recording': 'Použiť celý záznam',
   },
   de: {
+    'Live tracking preview': 'Live-Vorschau der Erkennung',
+    'Stop and review': 'Anhalten und prüfen',
+    'Processing: {0} · {1} frames': 'Verarbeitung: {0} · {1} Bilder',
     [choose]:
       'Wähle ein deutliches Bild, auf dem das Spielfeld und die Objekte sichtbar sind, als Referenz. Die Erkennung untersucht den gesamten gewählten Abschnitt, auch die Aufnahmen vor diesem Bild.',
     [identify]:
@@ -73,6 +79,9 @@ const reconstructionTranslations = {
     'Use whole recording': 'Gesamte Aufnahme verwenden',
   },
   ja: {
+    'Live tracking preview': '追跡のライブプレビュー',
+    'Stop and review': '停止して確認',
+    'Processing: {0} · {1} frames': '処理中: {0} · {1}フレーム',
     [choose]:
       'フィールドと各物体がはっきり見えるフレームを選び、参照フレームに設定してください。このフレームより前の映像も含め、選択範囲全体を検出します。',
     [identify]:

@@ -122,6 +122,10 @@ export default function ReconstructionWorkspace({
   const [selected, setSelected] = useState<TrackId>('ball');
   const [cursor, setCursor] = useState({ x: 0.5, y: 0.5 });
   const [tracking, setTracking] = useState(false);
+  const [trackingPreview, setTrackingPreview] = useState<{
+    clipId: string;
+    frame: TrackFrame;
+  } | null>(null);
   const [progress, setProgress] = useState(0);
   const [trackingStats, setTrackingStats] = useState({
     frames: 0,
@@ -143,6 +147,7 @@ export default function ReconstructionWorkspace({
     name: string;
   } | null>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
+  const trackingCanvasRef = useRef<HTMLCanvasElement>(null);
   const fileRef = useRef<HTMLInputElement>(null);
   const replayFileRef = useRef<HTMLInputElement>(null);
   const pendingFile = useRef<{ file: File; relink: boolean } | null>(null);
@@ -162,19 +167,41 @@ export default function ReconstructionWorkspace({
   }, [project, at, clipId]);
   const exportInterrupted = useRef(false);
   const selectedClip = project?.clips.find((c) => c.id === clipId) ?? null;
+  const liveFrame =
+    tracking && trackingPreview?.clipId === selectedClip?.id
+      ? trackingPreview?.frame
+      : null;
   const displayCorners = selectedClip
     ? editMode === 'corners'
       ? selectedClip.corners
-      : fieldCornersAt(selectedClip, sourceAt)
+      : (liveFrame?.corners ?? fieldCornersAt(selectedClip, sourceAt))
     : [];
   const total = project ? duration(project) : 0;
   const location = useMemo(
-    () => (project ? locate(project, at) : null),
-    [project, at],
+    () =>
+      project
+        ? liveFrame && selectedClip
+          ? {
+              clip: selectedClip,
+              time: liveFrame.time,
+              offset: timelineTime(
+                project,
+                selectedClip.id,
+                selectedClip.start,
+              ),
+            }
+          : locate(project, at, playing ? undefined : selectedClip?.id)
+        : null,
+    [project, at, liveFrame, selectedClip, playing],
   );
   const samples = useMemo(
-    () => (location ? sampleClip(location.clip, location.time) : {}),
-    [location],
+    () =>
+      liveFrame
+        ? liveFrame.actors
+        : location
+          ? sampleClip(location.clip, location.time)
+          : {},
+    [location, liveFrame],
   );
   const poses = useMemo(() => renderPoses(samples), [samples]);
   const score = project ? scoreAt(project, at) : { blue: 0, yellow: 0 };
@@ -308,11 +335,13 @@ export default function ReconstructionWorkspace({
     const video = videoRef.current;
     if (
       !video ||
+      !active ||
       !ready ||
       video.readyState < 1 ||
       !Number.isFinite(video.duration) ||
       !location ||
       tracking ||
+      sourceSeekRef.current ||
       editMode !== 'none'
     )
       return;
@@ -438,6 +467,8 @@ export default function ReconstructionWorkspace({
     } catch (e) {
       if (controller.signal.aborted) return;
       setError(e instanceof Error ? e.message : 'Could not seek recording.');
+    } finally {
+      if (sourceSeekRef.current === controller) sourceSeekRef.current = null;
     }
   };
   const selectClip = (c: Clip) => {
@@ -717,8 +748,10 @@ export default function ReconstructionWorkspace({
     }
     setPlaying(false);
     sourceSeekRef.current?.abort();
+    sourceSeekRef.current = null;
     videoRef.current.pause();
     setTracking(true);
+    setTrackingPreview(null);
     setProgress(0);
     setTrackingStats({ frames: 0, visible: 0, recovered: 0 });
     setError('');
@@ -732,6 +765,8 @@ export default function ReconstructionWorkspace({
     let newSamples = 0;
     const cutTimes: number[] = [];
     let recovered = 0;
+    let lastPreview = -Infinity;
+    let previewCorners = fieldCornersAt(c, start);
     const send = (
       type: 'init' | 'step' | 'resume',
       time: number,
@@ -812,13 +847,33 @@ export default function ReconstructionWorkspace({
             : await send('step', time, readVideoFrame(video, canvas));
         frames.push(result.frame);
         newSamples++;
+        previewCorners = result.frame.corners ?? previewCorners;
         recovered += result.reacquired?.length ?? 0;
         if (result.cut && time - (cutTimes.at(-1) ?? -Infinity) > 2)
           cutTimes.push(time);
         if (
-          index % Math.max(1, Math.round(c.fps / 2)) === 0 ||
+          performance.now() - lastPreview >= 150 ||
           index === sampleTimes.length - 1
         ) {
+          lastPreview = performance.now();
+          // Paint the actual decoded frame used by the detector. Repeated
+          // paused-video seeks need not be presented by the video compositor.
+          const previewCanvas = trackingCanvasRef.current;
+          if (previewCanvas) {
+            if (
+              previewCanvas.width !== canvas.width ||
+              previewCanvas.height !== canvas.height
+            ) {
+              previewCanvas.width = canvas.width;
+              previewCanvas.height = canvas.height;
+            }
+            previewCanvas.getContext('2d')?.drawImage(canvas, 0, 0);
+          }
+          setTrackingPreview({
+            clipId: c.id,
+            frame: { ...result.frame, corners: previewCorners },
+          });
+          setAt(timelineTime(project, c.id, time));
           setProgress((time - start) / (c.end - start));
           setSourceAt(time);
           setTrackingStats({
@@ -870,12 +925,13 @@ export default function ReconstructionWorkspace({
             }
           : p,
       );
+      const finishedAt = newSamples ? frames[frames.length - 1].time : start;
       setTracking(false);
+      setTrackingPreview(null);
       setProgress(0);
-      setAt(timelineTime(project, c.id, start));
-      setSourceAt(start);
-      if (active && !controller.signal.aborted)
-        void seekVideo(video, start).catch(() => {});
+      setAt(timelineTime(project, c.id, finishedAt));
+      setSourceAt(finishedAt);
+      if (active) void seekVideo(video, finishedAt).catch(() => {});
     }
   };
 
@@ -1258,6 +1314,14 @@ export default function ReconstructionWorkspace({
                 </p>
               </div>
             )}
+            {tracking && (
+              <canvas
+                ref={trackingCanvasRef}
+                className="reconstruction-tracking-frame"
+                aria-label="Latest processed video frame"
+                style={{ visibility: liveFrame ? 'visible' : 'hidden' }}
+              />
+            )}
             {ready && selectedClip && (
               <svg
                 className="reconstruction-overlay"
@@ -1311,7 +1375,9 @@ export default function ReconstructionWorkspace({
                   const s =
                     editMode === 'seed'
                       ? selectedClip.seeds[id]
-                      : sampleClip(selectedClip, sourceAt)[id];
+                      : liveFrame
+                        ? liveFrame.actors[id]
+                        : sampleClip(selectedClip, sourceAt)[id];
                   if (!s) return null;
                   const p = 'imageX' in s ? { x: s.imageX, y: s.imageY } : s;
                   const radius =
@@ -1459,6 +1525,7 @@ export default function ReconstructionWorkspace({
             </div>
           </div>
           <div className="reconstruction-quality">
+            {tracking && <span>Live tracking preview</span>}
             <span>{Object.keys(samples).length} / 5 tracked</span>
             <span>Heading follows motion unless corrected</span>
             {Object.entries(samples).some(([, p]) => p.confidence < 0.7) && (
@@ -1488,11 +1555,27 @@ export default function ReconstructionWorkspace({
         className="reconstruction-transport"
         aria-label="Reconstruction timeline"
       >
+        {tracking && (
+          <div className="reconstruction-live-progress">
+            <progress max="1" value={progress} />
+            <span>{`Processing: ${formatTime(sourceAt, true)} · ${trackingStats.frames} frames`}</span>
+            <Button variant="outline" size="sm" onClick={stopWork}>
+              Stop and review
+            </Button>
+          </div>
+        )}
         <div className="reconstruction-actions">
           <Button
             disabled={!total || tracking || recording}
             onClick={() => {
+              sourceSeekRef.current?.abort();
+              sourceSeekRef.current = null;
               setEditMode('none');
+              if (!playing && at >= total - 0.001) {
+                atRef.current = 0;
+                setAt(0);
+                if (project?.clips[0]) setClipId(project.clips[0].id);
+              }
               setPlaying(!playing);
             }}
           >
@@ -1503,6 +1586,8 @@ export default function ReconstructionWorkspace({
             variant="outline"
             disabled={!total || tracking || recording}
             onClick={() => {
+              sourceSeekRef.current?.abort();
+              sourceSeekRef.current = null;
               setPlaying(false);
               setAt(0);
               setEditMode('none');
@@ -1536,6 +1621,8 @@ export default function ReconstructionWorkspace({
           value={at}
           disabled={!total || tracking || recording}
           onChange={(e) => {
+            sourceSeekRef.current?.abort();
+            sourceSeekRef.current = null;
             setPlaying(false);
             setEditMode('none');
             setAt(Number(e.target.value));

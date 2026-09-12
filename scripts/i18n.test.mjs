@@ -64,16 +64,12 @@ test('reconstruction controls use reviewed frame terminology and retain live cou
       reconstructionTranslations[locale],
     )) {
       if (source.includes('{0}')) {
-        assert.equal(
-          translateText(
-            'Frames processed: 81 · Detected now: 4/5 · Re-detections: 12',
-            locale,
-          ),
-          translation
-            .replace('{0}', '81')
-            .replace('{1}', '4')
-            .replace('{2}', '12'),
-        );
+        const values = source.startsWith('Processing:')
+          ? ['6:45.000', '51']
+          : ['81', '4', '12'];
+        const fill = (value) =>
+          value.replace(/\{(\d+)\}/g, (_, index) => values[Number(index)]);
+        assert.equal(translateText(fill(source), locale), fill(translation));
       } else
         assert.equal(
           translateText(source, locale),

@@ -53,6 +53,23 @@ The complete replay was then loaded through the app in an isolated Chrome sessio
 
 The automatic replay is explicitly marked **review required**. Team/robot assignments come from the selected reference labels. Suggested events and score must be checked against the recording before the replay is used for referee instruction or assessment.
 
+## Follow-up: frozen tracking preview and seek snap-back
+
+The reported freeze during tracking was reproduced in the browser. During a 400–420 second run, the decoded video and worker input advanced to 405 and 410 seconds, but the 3D clock remained at zero and no detection outlines appeared. The new frames were held in a local array until tracking ended, so a changing progress counter did not produce a changing reconstruction. Cancellation also reset the view to 400 seconds. This was a display/state-flow defect, not evidence of a stalled detector.
+
+The corrected view publishes the latest processed sample without repeatedly copying the growing frame array. It paints that sample's decoded source image into a preview canvas and uses the same sample for outlines, 3D poses and time. Cancellation/completion keep the last completed position; stopping and resuming preserve the earlier samples. At a paused clip endpoint, the selected clip remains visible rather than prematurely switching to the next clip.
+
+A separate playback seek race was also reproduced: while playing near 2.65 seconds, seeking to 900 seconds was overwritten about 54 ms later by the old replay clock. Playback synchronization now yields while a manual seek is pending. Media seek completion validates the requested timestamp and decoded-pixel readiness, ignores stale events, and cleans up listeners if the media setter fails.
+
+Browser verification on the supplied recording:
+
+- At processed times 405.2 and 410.1, preview pixels matched the detector's input exactly and every displayed outline matched its corresponding detection. The 3D clock advanced to 5.2 and 10.1 seconds into the clip.
+- **Stop and review** retained 102 samples through 410.1 seconds and stayed there. Continuing initialized appearance from the original 400-second reference, resumed at 410.1, preserved the prefix and finished all 201 samples through 420. Pressing Play at the end restarted the clip.
+- A fresh chronological **0–120 second run completed 1,201 samples**, using the 400-second appearance reference. All 24 periodic preview checks matched source pixels, outlines and live timestamps. There were no stalls or console exceptions. Browser wall time was 69.5 seconds on the test machine, not a speed guarantee.
+- Seeking during playback to 900 seconds and rapidly replacing a 700-second request with 1000 seconds kept the final requested target. Seeking outside a selected 400–420 second clip to inspect recording time 900 also remained possible.
+- A two-clip replay stayed on the first clip's 420-second endpoint while paused and crossed normally to the second clip at 900 seconds after Play. The full 17,258-sample saved replay also loaded, relinked and sought successfully to 900 and 1715.7 seconds, including seeking while playing.
+- Automated tests cover stale seek events, undecoded frames, cancellation, throwing media setters, and selected-clip endpoint handling. Detection algorithms and the accuracy limitations above are unchanged by this playback fix.
+
 ## Why this release does not simply add stock YOLO
 
 The standard pretrained YOLO11 detector targets COCO's 80 categories; the category list has no RCJ soccer robot class. A sports-ball category alone does not establish reliable tiny IR-ball detection. A custom-trained detector needs representative labelled RCJ footage and held-out evaluation. [YOLO11 documentation](https://docs.ultralytics.com/models/yolo11/), [official COCO category configuration](https://github.com/ultralytics/ultralytics/blob/main/ultralytics/cfg/datasets/coco.yaml).

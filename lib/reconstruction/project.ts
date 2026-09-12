@@ -271,11 +271,19 @@ export function makeClip(start: number, end: number): Clip {
 export function duration(p: ReconstructionProject) {
   return p.clips.reduce((n, c) => n + c.end - c.start, 0);
 }
-export function locate(p: ReconstructionProject, at: number) {
+export function locate(
+  p: ReconstructionProject,
+  at: number,
+  preferredClipId?: string,
+) {
   let offset = 0;
   for (const [index, c] of p.clips.entries()) {
     const length = c.end - c.start;
-    if (at < offset + length || index === p.clips.length - 1)
+    if (
+      at < offset + length ||
+      (c.id === preferredClipId && Math.abs(at - offset - length) < 1e-6) ||
+      index === p.clips.length - 1
+    )
       return {
         clip: c,
         time: c.start + Math.max(0, Math.min(length, at - offset)),

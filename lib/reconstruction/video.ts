@@ -22,10 +22,20 @@ export async function seekVideo(
     const cleanup = () => {
       clearTimeout(timer);
       video.removeEventListener('seeked', done);
+      video.removeEventListener('loadeddata', done);
+      video.removeEventListener('canplay', done);
       video.removeEventListener('error', failed);
       signal?.removeEventListener('abort', aborted);
     };
     const done = () => {
+      // A superseded seek can still dispatch its completion event. Only return
+      // decoded pixels for this request, never an old frame at another time.
+      if (
+        video.seeking ||
+        video.readyState < 2 ||
+        Math.abs(video.currentTime - target) > 0.01
+      )
+        return;
       cleanup();
       resolve();
     };
@@ -45,10 +55,17 @@ export async function seekVideo(
       cleanup();
       reject(new Error('Video seeking timed out. Try a shorter MP4 clip.'));
     }, 15000);
-    video.addEventListener('seeked', done, { once: true });
+    video.addEventListener('seeked', done);
+    video.addEventListener('loadeddata', done);
+    video.addEventListener('canplay', done);
     video.addEventListener('error', failed, { once: true });
     signal?.addEventListener('abort', aborted, { once: true });
-    video.currentTime = target;
+    try {
+      video.currentTime = target;
+    } catch (error) {
+      cleanup();
+      reject(error);
+    }
   });
 }
 

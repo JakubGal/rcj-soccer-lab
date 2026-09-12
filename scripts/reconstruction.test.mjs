@@ -91,6 +91,83 @@ test('seeking waits for decoded pixels even when currentTime already reports the
   video.duration = NaN;
   await assert.rejects(() => seekVideo(video, 6), /metadata/);
 });
+
+test('seeking ignores stale completion events and waits for decoded pixels at the requested time', async () => {
+  const video = new EventTarget();
+  Object.assign(video, {
+    duration: 1000,
+    currentTime: 2,
+    readyState: 4,
+    seeking: false,
+  });
+  let completed = false;
+  const promise = seekVideo(video, 900).then(() => {
+    completed = true;
+  });
+  video.currentTime = 2;
+  video.dispatchEvent(new Event('seeked'));
+  await Promise.resolve();
+  assert.equal(
+    completed,
+    false,
+    'an earlier playback seek must not resolve the new request',
+  );
+  video.currentTime = 900;
+  video.seeking = true;
+  video.dispatchEvent(new Event('seeked'));
+  await Promise.resolve();
+  assert.equal(completed, false);
+  video.seeking = false;
+  video.readyState = 1;
+  video.dispatchEvent(new Event('seeked'));
+  await Promise.resolve();
+  assert.equal(completed, false, 'metadata alone is not a decoded image');
+  video.readyState = 2;
+  video.dispatchEvent(new Event('loadeddata'));
+  await promise;
+  assert.equal(completed, true);
+});
+
+test('superseded seeks cancel cleanly and a throwing media setter releases its listeners', async () => {
+  const video = new EventTarget();
+  Object.assign(video, {
+    duration: 1000,
+    currentTime: 2,
+    readyState: 4,
+    seeking: false,
+  });
+  const first = new AbortController();
+  const waiting = seekVideo(video, 900, first.signal);
+  const cancelled = assert.rejects(waiting, /Cancelled/);
+  first.abort();
+  await cancelled;
+  const latest = seekVideo(video, 950);
+  video.currentTime = 900;
+  video.dispatchEvent(new Event('seeked'));
+  video.currentTime = 950;
+  video.dispatchEvent(new Event('seeked'));
+  await latest;
+
+  const listeners = new Map();
+  const add = video.addEventListener.bind(video);
+  const remove = video.removeEventListener.bind(video);
+  video.addEventListener = (type, fn, options) => {
+    listeners.set(type, fn);
+    add(type, fn, options);
+  };
+  video.removeEventListener = (type, fn) => {
+    listeners.delete(type);
+    remove(type, fn);
+  };
+  Object.defineProperty(video, 'currentTime', {
+    get: () => 2,
+    set: () => {
+      throw new Error('Media source unavailable');
+    },
+  });
+  await assert.rejects(seekVideo(video, 900), /Media source unavailable/);
+  assert.equal(listeners.size, 0);
+});
 const corners = [
   { x: 0.1, y: 0.15 },
   { x: 0.9, y: 0.12 },
@@ -179,6 +256,18 @@ test('clip timeline preserves source times, pauses, repeated source footage and 
   const p = { ...makeProject(source), clips: [a, b] };
   assert.equal(locate(p, 0).time, 10);
   assert.equal(locate(p, 2).clip.id, 'second');
+  assert.equal(
+    locate(p, 2, a.id).clip.id,
+    a.id,
+    'paused tracking retains the just-finished clip at its endpoint',
+  );
+  assert.equal(locate(p, 2, a.id).time, 12);
+  assert.equal(locate(p, 2, b.id).time, 400);
+  assert.equal(
+    locate(p, 2.1, a.id).clip.id,
+    b.id,
+    'playing past the boundary still advances normally',
+  );
   assert.equal(locate(p, 4).time, 402);
   assert.equal(timelineTime(p, 'second', 405), 7);
   assert.equal(locate(p, 99).time, 406);

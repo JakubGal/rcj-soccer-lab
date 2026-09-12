@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-09-12T09:20:48.663Z",
+  "generatedAt": "2026-09-12T10:18:25.375Z",
   "locales": {
     "sk": {
       "exact": {
@@ -571,6 +571,7 @@
         "Cancel": "Zrušiť",
         "Cancel tracking": "Zrušiť sledovanie",
         "Cancelled": "Zrušené",
+        "canplay": "canplay",
         "canvas": "plátno",
         "Canvas processing is unavailable.": "Spracovanie plátna nie je k dispozícii.",
         "capability": "schopnosti",
@@ -1412,6 +1413,7 @@
         "Large image change. Detection resumes when the calibrated view returns; use a separate calibration for a different view.": "Výrazná zmena obrazu. Detekcia sa obnoví po návrate kalibrovaného pohľadu; iný pohľad potrebuje samostatnú kalibráciu.",
         "Late-arrival interval": "Interval neskorého príchodu",
         "Later rebound": "Neskôr odraz",
+        "Latest processed video frame": "Najnovšie spracovaná snímka videa",
         "Latest referee action": "Posledná akcia rozhodcu",
         "LEAGUE REGULATIONS": "LIGOVÉ PREDPISY",
         "learn": "učiť sa",
@@ -1451,10 +1453,12 @@
         "Live match field and controls": "Živé pole zápasu a ovládacie prvky",
         "Live passage of play": "Živá pasáž hry",
         "Live referee console": "Živá rozhodcovská konzola",
+        "Live tracking preview": "Živý náhľad sledovania",
         "Livestream and task-list hero": "Hrdinka živých prenosov a zoznamov úloh",
         "Load more": "Načítať ďalšie",
         "Load RCJ replay file": "Načítajte súbor prehrávania RCJ",
         "Load replay": "Načítať opakovanie",
+        "loadeddata": "načítané údaje",
         "loading": "načítavanie",
         "Loading": "Načítava sa",
         "Loading account information": "Načítavajú sa informácie o účte",
@@ -2510,6 +2514,7 @@
         "STOP ALL ROBOTS": "STOP ALL ROBOTS",
         "Stop all robots and leave them untouched. Once the replacement is available, the referee can resume the positions or use a neutral kickoff.": "Zastavte všetkých robotov a nechajte ich nedotknuté. Keď je náhrada k dispozícii, rozhodca môže obnoviť pozície alebo použiť neutral kickoff.",
         "Stop and choose any convenient restart": "Zastavte a vyberte ľubovoľný pohodlný reštart",
+        "Stop and review": "Zastaviť a skontrolovať",
         "Stop export": "Zastaviť export",
         "Stop for official inspection": "Zastavte sa na úradnú kontrolu",
         "Stop recording all goals after the first goal": "Po prvom góle prestaňte zaznamenávať všetky góly",
@@ -3640,6 +3645,10 @@
           "translation": "prax-{0}-{1}"
         },
         {
+          "source": "Processing: {0} · {1} frames",
+          "translation": "Spracovanie: {0} · {1} snímok"
+        },
+        {
           "source": "question:{0}",
           "translation": "otázka:{0}"
         },
@@ -4299,6 +4308,7 @@
         "Cancel": "Abbrechen",
         "Cancel tracking": "Tracking abbrechen",
         "Cancelled": "Abgesagt",
+        "canplay": "kann spielen",
         "canvas": "Leinwand",
         "Canvas processing is unavailable.": "Die Canvas-Verarbeitung ist nicht verfügbar.",
         "capability": "Fähigkeit",
@@ -5140,6 +5150,7 @@
         "Large image change. Detection resumes when the calibrated view returns; use a separate calibration for a different view.": "Starke Bildänderung. Die Erkennung wird fortgesetzt, sobald die kalibrierte Ansicht zurückkehrt; eine andere Ansicht benötigt eine eigene Kalibrierung.",
         "Late-arrival interval": "Intervall für verspätete Ankunft",
         "Later rebound": "Späterer Rebound",
+        "Latest processed video frame": "Zuletzt verarbeitetes Videobild",
         "Latest referee action": "Neueste Schiedsrichteraktion",
         "LEAGUE REGULATIONS": "LIGA-BESTIMMUNGEN",
         "learn": "lernen",
@@ -5179,10 +5190,12 @@
         "Live match field and controls": "Live-Spielfeld und Kontrollen",
         "Live passage of play": "Live-Spieldurchgang",
         "Live referee console": "Live-Schiedsrichterkonsole",
+        "Live tracking preview": "Live-Vorschau der Erkennung",
         "Livestream and task-list hero": "Heldin für Livestream und Aufgabenliste",
         "Load more": "Mehr laden",
         "Load RCJ replay file": "Laden Sie die Wiedergabedatei RCJ",
         "Load replay": "Wiedergabe laden",
+        "loadeddata": "geladene Daten",
         "loading": "Laden",
         "Loading": "Laden",
         "Loading account information": "Kontoinformationen werden geladen",
@@ -6238,6 +6251,7 @@
         "STOP ALL ROBOTS": "STOP ALL ROBOTS",
         "Stop all robots and leave them untouched. Once the replacement is available, the referee can resume the positions or use a neutral kickoff.": "Stoppen Sie alle Roboter und lassen Sie sie unberührt. Sobald der Ersatz verfügbar ist, kann der Schiedsrichter die Positionen übernehmen oder einen neutral kickoff verwenden.",
         "Stop and choose any convenient restart": "Stoppen Sie und wählen Sie einen geeigneten Neustart",
+        "Stop and review": "Anhalten und prüfen",
         "Stop export": "Stoppen Sie den Export",
         "Stop for official inspection": "Halten Sie zur offiziellen Inspektion an",
         "Stop recording all goals after the first goal": "Stoppen Sie die Aufzeichnung aller Tore nach dem ersten Tor",
@@ -7368,6 +7382,10 @@
           "translation": "Praxis-{0}-{1}"
         },
         {
+          "source": "Processing: {0} · {1} frames",
+          "translation": "Verarbeitung: {0} · {1} Bilder"
+        },
+        {
           "source": "question:{0}",
           "translation": "Frage:{0}"
         },
@@ -8027,6 +8045,7 @@
         "Cancel": "キャンセル",
         "Cancel tracking": "追跡をキャンセルする",
         "Cancelled": "キャンセルされました",
+        "canplay": "遊べる",
         "canvas": "キャンバス",
         "Canvas processing is unavailable.": "キャンバス加工はできません。",
         "capability": "能力",
@@ -8868,6 +8887,7 @@
         "Large image change. Detection resumes when the calibrated view returns; use a separate calibration for a different view.": "映像が大きく変化しました。キャリブレーション済みの視点に戻ると検出を再開します。別の視点には個別のキャリブレーションが必要です。",
         "Late-arrival interval": "遅刻間隔",
         "Later rebound": "その後リバウンド",
+        "Latest processed video frame": "最新の処理済みビデオ フレーム",
         "Latest referee action": "最新の審判の行動",
         "LEAGUE REGULATIONS": "リーグ規定",
         "learn": "学ぶ",
@@ -8907,10 +8927,12 @@
         "Live match field and controls": "ライブマッチフィールドとコントロール",
         "Live passage of play": "劇のライブパッセージ",
         "Live referee console": "ライブ審判コンソール",
+        "Live tracking preview": "追跡のライブプレビュー",
         "Livestream and task-list hero": "配信とタスクリストのヒーロー",
         "Load more": "さらに読み込む",
         "Load RCJ replay file": "RCJ リプレイ ファイルをロードします",
         "Load replay": "リプレイをロードする",
+        "loadeddata": "ロードされたデータ",
         "loading": "読み込み中",
         "Loading": "読み込み中",
         "Loading account information": "アカウント情報を読み込んでいます",
@@ -9966,6 +9988,7 @@
         "STOP ALL ROBOTS": "STOP ALL ROBOTS",
         "Stop all robots and leave them untouched. Once the replacement is available, the referee can resume the positions or use a neutral kickoff.": "すべてのロボットを停止し、そのままにしておきます。後任が利用可能になると、主審はポジションを再開するか、neutral kickoff を使用できます。",
         "Stop and choose any convenient restart": "停止して任意の再起動を選択します",
+        "Stop and review": "停止して確認",
         "Stop export": "エクスポートを停止する",
         "Stop for official inspection": "公式検査のため停車",
         "Stop recording all goals after the first goal": "最初のゴールの後、すべてのゴールの記録を停止する",
@@ -11094,6 +11117,10 @@
         {
           "source": "practice-{0}-{1}",
           "translation": "練習-{0}-{1}"
+        },
+        {
+          "source": "Processing: {0} · {1} frames",
+          "translation": "処理中: {0} · {1}フレーム"
         },
         {
           "source": "question:{0}",
